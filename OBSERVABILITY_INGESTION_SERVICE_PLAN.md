@@ -1,6 +1,8 @@
 # Observability Ingestion Service — Design & Implementation Plan
 
 > A new standalone microservice that acts as the **single intake point** for all logs, events, and metrics produced by every repo on the platform. Every service POSTs structured JSON; this service validates, normalises, enriches, and pushes to PostgreSQL.
+>
+> This service is **additive**. It does not replace the current service loggers, Agent Executor `audit_table`, or orchestration/Kafka flow. Those existing mechanisms become telemetry producers that also send a normalised copy to OIS.
 
 ---
 
@@ -11,10 +13,11 @@ All eight platform services produce observability data today, but:
 - **No standard schema** — each service uses different field names (`appId` vs `application_id` vs `app_name`)
 - **Six of eight services emit no Kafka events** — their telemetry is trapped in local logs or PostgreSQL audit tables with no pipeline
 - **Critical fields absent** — `event_id`, `environment`, `service_name`, `latency_ms` (numeric), `estimated_cost`, `span_id` are missing almost everywhere
-- **No central store** — there is no single PostgreSQL table that aggregates events from all services in one uniform schema
+- **No central store** — there is no single PostgreSQL table that aggregates telemetry from all services in one uniform schema
+- **No log/event/metric envelope** — current telemetry is not tagged as `log`, `event`, or `metric`, so the platform cannot distinguish durable business events from transient log records or numeric measurements
 - **No uniformity** — the Observability Plane cannot query across services without per-service custom adapters
 
-**Solution:** Build one HTTP API — the **Observability Ingestion Service (OIS)** — that every service calls with a standardised JSON payload. OIS validates the schema, enriches fields, computes derived values (cost, latency), and writes to PostgreSQL. Services do not need Kafka to participate; they simply call an HTTP endpoint.
+**Solution:** Build one HTTP API — the **Observability Ingestion Service (OIS)** — that every service calls with a standardised JSON payload. OIS validates the schema, enriches fields, computes derived values (cost, latency), and writes to PostgreSQL. Services do not need Kafka to participate; they simply call an HTTP endpoint with `telemetry_type = "log" | "event" | "metric"`.
 
 ---
 
@@ -30,7 +33,7 @@ All eight platform services produce observability data today, but:
 │  Agent Executor ──────────┤                                         │
 │  GSSP GS ─────────────────┤                                         │
 │  GSSP QS ─────────────────┼──► POST /v1/ingest  ──► OIS API        │
-│  GSSP RS ─────────────────┤         (JSON)           │              │
+│  GSSP RS ─────────────────┤   (log/event/metric JSON) │             │
 │  Data Ingestion ──────────┤                           ▼             │
 │  Consumer Service ────────┤                    Validation &         │
 │  User Feedback ───────────┘                    Enrichment           │
@@ -38,8 +41,10 @@ All eight platform services produce observability data today, but:
 │                                              ┌─────┴──────┐        │
 │                                              │ PostgreSQL  │        │
 │                                              │ obs_events  │        │
+│                                              │ obs_logs    │        │
 │                                              │ obs_metrics │        │
-│                                              │ obs_errors  │        │
+│                                              │ obs_dead    │        │
+│                                              │ letter      │        │
 │                                              └────────────┘         │
 └─────────────────────────────────────────────────────────────────────┘
 ```
@@ -47,23 +52,29 @@ All eight platform services produce observability data today, but:
 ### 2.2 Core Principles
 
 1. **HTTP-first** — every service sends a single `POST /v1/ingest` call; no Kafka dependency required
-2. **One schema, all services** — a single JSON envelope that every event must conform to
+2. **One envelope, all services** — a single JSON envelope for every `log`, `event`, and `metric`
 3. **Fire-and-forget** — services do not wait for acknowledgement; OIS responds `202 Accepted` immediately and processes async
-4. **Fail-safe** — invalid events are stored in a `dead_letter` table rather than rejected, so no telemetry is silently dropped
+4. **Fail-safe** — invalid telemetry records are stored in a `dead_letter` table rather than rejected, so no telemetry is silently dropped
 5. **Enrichment at ingestion** — OIS adds `environment`, `service_name`, `estimated_cost`, `latency_ms` (if not supplied), normalises `user_hash`, and maps raw exceptions to error catalog codes
-6. **Write to PostgreSQL** — all events land in structured, queryable PostgreSQL tables; no additional infrastructure required at this stage
+6. **Write to PostgreSQL** — all telemetry lands in structured, queryable PostgreSQL tables; no additional infrastructure required at this stage
+7. **Producer-neutral** — existing loggers, audit tables, Kafka producers, middleware, and metric counters can all call the same emitter utility
 
 ---
 
-## 3. Standard JSON Event Schema
+## 3. Standard JSON Telemetry Envelope
 
-Every service must send this JSON structure to `POST /v1/ingest`.
+Every service must send this JSON structure to `POST /v1/ingest`. The same envelope is used for:
+
+- `telemetry_type = "log"` — normalized application log records
+- `telemetry_type = "event"` — durable business/platform lifecycle events
+- `telemetry_type = "metric"` — counters, gauges, histograms, queue depths, token/cost measurements
 
 ### 3.1 Full Schema
 
 ```json
 {
   "event_id": "evt_7f1b2c90-79ec-4ed2-aee4-8dca04b734f2",
+  "telemetry_type": "event",
   "event_type": "LLM_CALL_COMPLETED",
   "schema_version": "1.0",
   "timestamp": "2026-05-26T10:30:00.000Z",
@@ -98,6 +109,16 @@ Every service must send this JSON structure to `POST /v1/ingest`.
   "latency_ms": 1840,
   "error_code": null,
   "http_status": 200,
+
+  "severity": "INFO",
+  "logger_name": "query.core.generator.vertexai_generator",
+  "message": "LLM call completed",
+
+  "metric_name": null,
+  "metric_value": null,
+  "metric_unit": null,
+  "metric_type": null,
+  "metric_tags": {},
 
   "payload": {
     "input_tokens": 512,
@@ -149,6 +170,21 @@ Every service must send this JSON structure to `POST /v1/ingest`.
     "dlq_flag": null,
 
     "s3_payload_uri": null,
+    "has_attachment": false,
+    "file_count": 0,
+    "image_count": 0,
+    "doc_count": 0,
+    "total_file_size_bytes": null,
+    "largest_file_bytes": null,
+    "file_types": [],
+    "multimodal_flag": false,
+    "document_format": null,
+    "document_size_bytes": null,
+    "page_count": null,
+    "chunk_count": null,
+    "avg_chunk_size_tokens": null,
+    "extraction_status": null,
+    "parser_used": null,
     "extra": {}
   }
 }
@@ -156,12 +192,13 @@ Every service must send this JSON structure to `POST /v1/ingest`.
 
 ### 3.2 Mandatory Fields
 
-Every event **must** include these fields. OIS will reject events missing any mandatory field into the dead-letter table.
+Every telemetry record **must** include these fields. OIS will route records missing mandatory fields into the dead-letter table.
 
 | Field | Type | Description |
 |---|---|---|
-| `event_id` | `string` | UUID, unique per event. Generate with `uuid4()` if not supplied by the source. |
-| `event_type` | `string` | See Section 3.3 for controlled vocabulary |
+| `event_id` | `string` | UUID, unique per telemetry record. Generate with `uuid4()` if not supplied by the source. |
+| `telemetry_type` | `string` | `log` \| `event` \| `metric`; drives storage routing and validation rules |
+| `event_type` | `string` | See Section 3.3 for controlled vocabulary. For log records use `LOG_RECORD_EMITTED`; for metric records use a metric event type such as `METRIC_RECORDED` or `HTTP_LATENCY_RECORDED`. |
 | `schema_version` | `string` | Always `"1.0"` until schema changes |
 | `timestamp` | `string` | ISO 8601 UTC — `2026-05-26T10:30:00.000Z` |
 | `correlation_id` | `string` | End-to-end request identifier. `CORR_<uuid>` |
@@ -170,9 +207,25 @@ Every event **must** include these fields. OIS will reject events missing any ma
 | `application_id` | `string` | CSI / application ID |
 | `status` | `string` | `success` \| `failed` \| `partial` \| `timeout` \| `info` |
 
+**Telemetry-type specific requirements:**
+
+| `telemetry_type` | Additional required / expected fields | Destination tables |
+|---|---|---|
+| `log` | Required: `severity`, `message`. Expected: `logger_name`, `component`, `error_code` when applicable. | `obs_events`, `obs_logs` |
+| `event` | Required: domain-specific `event_type` and supporting fields in `payload`. Expected: `latency_ms`, `http_status`, IDs relevant to agent/LLM/tool/RAG/feedback. | `obs_events` plus typed event table |
+| `metric` | Required: `metric_name`, `metric_value`. Expected: `metric_unit`, `metric_type`, `metric_tags`. | `obs_events`, `obs_metrics` |
+
 ### 3.3 Controlled Event Type Vocabulary
 
 ```
+# Generic Logs / Metrics
+LOG_RECORD_EMITTED
+METRIC_RECORDED
+HTTP_LATENCY_RECORDED
+QUEUE_DEPTH_RECORDED
+TOKEN_USAGE_RECORDED
+COST_RECORDED
+
 # Platform / Request
 REQUEST_RECEIVED
 REQUEST_COMPLETED
@@ -225,6 +278,12 @@ RAG_RETRIEVAL_COMPLETED
 RAG_RETRIEVAL_FAILED
 RAG_NO_RESULT
 RAG_INDEX_HEALTH_CHECKED
+RETRIEVAL_CLIENT_COMPLETED
+CACHE_HIT
+CACHE_MISS
+EMBEDDING_CALL_STARTED
+EMBEDDING_CALL_COMPLETED
+EMBEDDING_CALL_FAILED
 
 # Document Ingestion
 INGESTION_JOB_STARTED
@@ -232,6 +291,10 @@ INGESTION_JOB_COMPLETED
 INGESTION_JOB_FAILED
 DOCUMENT_INDEXED
 DOCUMENT_EMBEDDING_CREATED
+DOCUMENT_PARSE_STARTED
+DOCUMENT_PARSE_COMPLETED
+DOCUMENT_PARSE_FAILED
+FILE_ATTACHMENT_RECEIVED
 DOCUMENT_EXTRACTION_FAILED
 
 # Guardrail
@@ -242,6 +305,7 @@ GUARDRAIL_ESCALATED
 
 # Feedback
 FEEDBACK_SUBMITTED
+FEEDBACK_SUBMIT_FAILED
 FEEDBACK_REVIEWED
 FEEDBACK_INCIDENT_TRIGGERED
 
@@ -259,7 +323,7 @@ HEALTH_CHECK
 | Agent Executor | `agent-executor` |
 | GSSP Generic Generation Service | `gssp-gs` |
 | GSSP Query Service | `gssp-qs` |
-| GSSP Response Service | `gssp-rs` |
+| GSSP Retrieval Service | `gssp-rs` |
 | Data Ingestion Service | `data-ingestion` |
 | Consumer Service (Scheduler) | `consumer-service` |
 | User Feedback | `user-feedback` |
@@ -278,7 +342,7 @@ Authorization: Bearer <COIN JWT>         (internal service-to-service M2M token)
 X-Source-Service: <service_name>
 ```
 
-**Request body:** JSON object conforming to schema in Section 3.
+**Request body:** JSON object conforming to the telemetry envelope in Section 3.
 
 **Response:**
 ```json
@@ -309,11 +373,11 @@ Content-Type: application/json
 **Request body:**
 ```json
 {
-  "events": [ { ... }, { ... }, { ... } ]
+  "records": [ { ... }, { ... }, { ... } ]
 }
 ```
 
-Maximum 500 events per batch. Response: `202 Accepted` with per-event status array.
+Maximum 500 telemetry records per batch. Response: `202 Accepted` with per-record status array.
 
 ### 4.3 Health Endpoint
 
@@ -329,7 +393,7 @@ GET /metrics
 → Prometheus text format
 ```
 
-Exposes: `ois_events_received_total`, `ois_events_written_total`, `ois_dead_letter_total`, `ois_ingestion_latency_seconds`.
+Exposes: `ois_records_received_total`, `ois_records_written_total`, `ois_dead_letter_total`, `ois_ingestion_latency_seconds`, plus per-`telemetry_type` counters.
 
 ---
 
@@ -340,8 +404,8 @@ POST /v1/ingest
        │
        ▼
  ┌─────────────┐
- │  Validation  │  ← Check mandatory fields, event_type whitelist, schema_version
- │  Layer       │    → invalid events → dead_letter table (still 202)
+ │  Validation  │  ← Check mandatory fields, telemetry_type, event_type whitelist, schema_version
+ │  Layer       │    → invalid telemetry → dead_letter table (still 202)
  └──────┬──────┘
         │ valid
         ▼
@@ -362,12 +426,12 @@ POST /v1/ingest
         │
         ▼
  ┌─────────────┐
- │  Router      │  ← Route to correct PostgreSQL table based on event_type
+ │  Router      │  ← Route to correct PostgreSQL table based on telemetry_type + event_type
  └──────┬──────┘
         │
         ▼
  ┌─────────────┐
- │  PostgreSQL  │  ← Write to obs_events + event-type specific table
+ │  PostgreSQL  │  ← Write to obs_events + log/metric/event-type specific table
  │  Writer      │
  └─────────────┘
 ```
@@ -378,12 +442,13 @@ POST /v1/ingest
 
 ### 6.1 Master Events Table
 
-All events land here, regardless of type. This is the single unified table.
+All telemetry records land here, regardless of type. This is the single unified table.
 
 ```sql
 CREATE TABLE obs_events (
     id                    BIGSERIAL PRIMARY KEY,
     event_id              VARCHAR(128) UNIQUE NOT NULL,
+    telemetry_type        VARCHAR(16)  NOT NULL CHECK (telemetry_type IN ('log', 'event', 'metric')),
     event_type            VARCHAR(64)  NOT NULL,
     schema_version        VARCHAR(16)  NOT NULL DEFAULT '1.0',
     timestamp             TIMESTAMPTZ  NOT NULL,
@@ -426,6 +491,18 @@ CREATE TABLE obs_events (
     error_code            VARCHAR(64),
     http_status           INTEGER,
 
+    -- Log fields
+    severity              VARCHAR(16),
+    logger_name           VARCHAR(256),
+    message               TEXT,
+
+    -- Metric fields
+    metric_name           VARCHAR(256),
+    metric_value          NUMERIC(20, 6),
+    metric_unit           VARCHAR(32),
+    metric_type           VARCHAR(32),
+    metric_tags           JSONB,
+
     -- Payload (full JSON for ad-hoc querying)
     payload               JSONB,
 
@@ -436,6 +513,7 @@ CREATE TABLE obs_events (
 
 -- Indexes for common query patterns
 CREATE INDEX idx_obs_events_correlation_id ON obs_events(correlation_id);
+CREATE INDEX idx_obs_events_telemetry_type ON obs_events(telemetry_type);
 CREATE INDEX idx_obs_events_event_type     ON obs_events(event_type);
 CREATE INDEX idx_obs_events_timestamp      ON obs_events(timestamp DESC);
 CREATE INDEX idx_obs_events_application_id ON obs_events(application_id);
@@ -443,6 +521,7 @@ CREATE INDEX idx_obs_events_service_name   ON obs_events(service_name);
 CREATE INDEX idx_obs_events_environment    ON obs_events(environment);
 CREATE INDEX idx_obs_events_agent_id       ON obs_events(agent_id);
 CREATE INDEX idx_obs_events_error_code     ON obs_events(error_code);
+CREATE INDEX idx_obs_events_metric_name    ON obs_events(metric_name);
 ```
 
 ### 6.2 LLM Events Table
@@ -556,7 +635,14 @@ CREATE TABLE obs_rag_events (
     job_id                   VARCHAR(128),
     document_id              VARCHAR(256),
     job_status               VARCHAR(32),
-    input_tokens_embed       INTEGER
+    input_tokens_embed       INTEGER,
+    document_format          VARCHAR(32),
+    document_size_bytes      BIGINT,
+    page_count               INTEGER,
+    chunk_count              INTEGER,
+    avg_chunk_size_tokens    NUMERIC(10, 2),
+    extraction_status        VARCHAR(32),
+    parser_used              VARCHAR(64)
 );
 
 CREATE INDEX idx_obs_rag_correlation   ON obs_rag_events(correlation_id);
@@ -588,7 +674,58 @@ CREATE INDEX idx_obs_feedback_correlation ON obs_feedback_events(correlation_id)
 CREATE INDEX idx_obs_feedback_application ON obs_feedback_events(application_id);
 ```
 
-### 6.7 Dead Letter Table
+### 6.7 Logs Table
+
+Structured application logs land here when `telemetry_type = 'log'`. OIS also writes the same record to `obs_events` so every signal has one canonical event row.
+
+```sql
+CREATE TABLE obs_logs (
+    id                    BIGSERIAL PRIMARY KEY,
+    event_id              VARCHAR(128) UNIQUE NOT NULL REFERENCES obs_events(event_id),
+    timestamp             TIMESTAMPTZ NOT NULL,
+    correlation_id        VARCHAR(256),
+    service_name          VARCHAR(64) NOT NULL,
+    environment           VARCHAR(32) NOT NULL,
+    component             VARCHAR(128),
+    severity              VARCHAR(16),
+    logger_name           VARCHAR(256),
+    message               TEXT,
+    error_code            VARCHAR(64),
+    http_status           INTEGER,
+    payload               JSONB
+);
+
+CREATE INDEX idx_obs_logs_service_time ON obs_logs(service_name, timestamp DESC);
+CREATE INDEX idx_obs_logs_correlation  ON obs_logs(correlation_id);
+CREATE INDEX idx_obs_logs_severity     ON obs_logs(severity);
+```
+
+### 6.8 Metrics Table
+
+Counters, gauges, histograms, queue depth readings, latency measurements, token usage, and cost measurements land here when `telemetry_type = 'metric'`.
+
+```sql
+CREATE TABLE obs_metrics (
+    id                    BIGSERIAL PRIMARY KEY,
+    event_id              VARCHAR(128) UNIQUE NOT NULL REFERENCES obs_events(event_id),
+    timestamp             TIMESTAMPTZ NOT NULL,
+    correlation_id        VARCHAR(256),
+    service_name          VARCHAR(64) NOT NULL,
+    environment           VARCHAR(32) NOT NULL,
+    metric_name           VARCHAR(256) NOT NULL,
+    metric_value          NUMERIC(20, 6) NOT NULL,
+    metric_unit           VARCHAR(32),
+    metric_type           VARCHAR(32), -- counter | gauge | histogram | summary
+    metric_tags           JSONB,
+    payload               JSONB
+);
+
+CREATE INDEX idx_obs_metrics_name_time ON obs_metrics(metric_name, timestamp DESC);
+CREATE INDEX idx_obs_metrics_service   ON obs_metrics(service_name);
+CREATE INDEX idx_obs_metrics_tags      ON obs_metrics USING GIN(metric_tags);
+```
+
+### 6.9 Dead Letter Table
 
 ```sql
 CREATE TABLE obs_dead_letter (
@@ -605,7 +742,7 @@ CREATE INDEX idx_dead_letter_received  ON obs_dead_letter(received_at DESC);
 CREATE INDEX idx_dead_letter_service   ON obs_dead_letter(source_service);
 ```
 
-### 6.8 Hourly Aggregates Table
+### 6.10 Hourly Aggregates Table
 
 OIS runs a scheduled job every hour to materialise aggregates.
 
@@ -614,7 +751,7 @@ CREATE TABLE obs_hourly_summary (
     hour_bucket           TIMESTAMPTZ NOT NULL,
     application_id        VARCHAR(64) NOT NULL,
     service_name          VARCHAR(64) NOT NULL,
-    event_type_group      VARCHAR(32) NOT NULL, -- 'llm' | 'tool' | 'agent' | 'rag' | 'request' | 'feedback'
+    event_type_group      VARCHAR(32) NOT NULL, -- 'log' | 'metric' | 'llm' | 'tool' | 'agent' | 'rag' | 'request' | 'feedback'
     event_count           BIGINT DEFAULT 0,
     success_count         BIGINT DEFAULT 0,
     failure_count         BIGINT DEFAULT 0,
@@ -654,14 +791,14 @@ obs-ingestion-service/
 │       ├── ingest.py                # POST /v1/ingest, POST /v1/ingest/batch
 │       └── health.py                # GET /health
 ├── models/
-│   ├── event_schema.py              # Pydantic model: ObsEvent (the standard schema)
+│   ├── event_schema.py              # Pydantic model: ObsEvent (the standard telemetry envelope)
 │   ├── event_types.py               # EventType enum (controlled vocabulary)
 │   └── service_names.py             # ServiceName enum
 ├── processing/
-│   ├── validator.py                 # Mandatory field check, event_type whitelist
+│   ├── validator.py                 # Mandatory field, telemetry_type, event_type whitelist
 │   ├── enricher.py                  # Fill environment, service_name, user_hash, cost
 │   ├── error_mapper.py              # Raw exception string → error_code_catalog
-│   └── router.py                    # Route event to correct DB table writer
+│   └── router.py                    # Route telemetry to correct DB table writer
 ├── writers/
 │   ├── base_writer.py               # Write to obs_events (always)
 │   ├── llm_writer.py                # Write to obs_llm_events
@@ -669,6 +806,8 @@ obs-ingestion-service/
 │   ├── tool_writer.py               # Write to obs_tool_events
 │   ├── rag_writer.py                # Write to obs_rag_events
 │   ├── feedback_writer.py           # Write to obs_feedback_events
+│   ├── log_writer.py                # Write to obs_logs
+│   ├── metric_writer.py             # Write to obs_metrics
 │   └── dead_letter_writer.py        # Write to obs_dead_letter
 ├── aggregation/
 │   └── hourly_rollup.py             # APScheduler job: obs_hourly_summary
@@ -685,8 +824,10 @@ obs-ingestion-service/
 │       ├── 004_obs_tool_events.sql
 │       ├── 005_obs_rag_events.sql
 │       ├── 006_obs_feedback_events.sql
-│       ├── 007_obs_dead_letter.sql
-│       └── 008_obs_hourly_summary.sql
+│       ├── 007_obs_logs.sql
+│       ├── 008_obs_metrics.sql
+│       ├── 009_obs_dead_letter.sql
+│       └── 010_obs_hourly_summary.sql
 ├── auth/
 │   └── coin_jwt.py                  # COIN JWT / M2M token validation
 ├── logconfig.yaml                   # Structured JSON logging config
@@ -701,7 +842,7 @@ obs-ingestion-service/
 
 ### 7.3 Core Code Snippets
 
-#### Pydantic Event Schema (models/event_schema.py)
+#### Pydantic Telemetry Schema (models/event_schema.py)
 
 ```python
 from pydantic import BaseModel, Field, field_validator
@@ -752,11 +893,27 @@ class EventPayload(BaseModel):
     kafka_lag: Optional[int] = None
     dlq_flag: Optional[bool] = None
     s3_payload_uri: Optional[str] = None
+    has_attachment: Optional[bool] = None
+    file_count: Optional[int] = None
+    image_count: Optional[int] = None
+    doc_count: Optional[int] = None
+    total_file_size_bytes: Optional[int] = None
+    largest_file_bytes: Optional[int] = None
+    file_types: Optional[list[str]] = None
+    multimodal_flag: Optional[bool] = None
+    document_format: Optional[str] = None
+    document_size_bytes: Optional[int] = None
+    page_count: Optional[int] = None
+    chunk_count: Optional[int] = None
+    avg_chunk_size_tokens: Optional[float] = None
+    extraction_status: Optional[str] = None
+    parser_used: Optional[str] = None
     extra: Optional[dict[str, Any]] = Field(default_factory=dict)
 
 class ObsEvent(BaseModel):
     # Required
     event_id: str = Field(default_factory=lambda: f"evt_{uuid.uuid4()}")
+    telemetry_type: str = "event"
     event_type: str
     schema_version: str = "1.0"
     timestamp: datetime
@@ -787,7 +944,23 @@ class ObsEvent(BaseModel):
     latency_ms: Optional[int] = None
     error_code: Optional[str] = None
     http_status: Optional[int] = None
+    severity: Optional[str] = None
+    logger_name: Optional[str] = None
+    message: Optional[str] = None
+    metric_name: Optional[str] = None
+    metric_value: Optional[float] = None
+    metric_unit: Optional[str] = None
+    metric_type: Optional[str] = None
+    metric_tags: Optional[dict[str, Any]] = Field(default_factory=dict)
     payload: Optional[EventPayload] = Field(default_factory=EventPayload)
+
+    @field_validator("telemetry_type")
+    @classmethod
+    def validate_telemetry_type(cls, v: str) -> str:
+        allowed = {"log", "event", "metric"}
+        if v not in allowed:
+            raise ValueError(f"telemetry_type must be one of {allowed}")
+        return v
 
     @field_validator("status")
     @classmethod
@@ -866,11 +1039,11 @@ async def ingest_event(event: ObsEvent, request: Request):
 
 @router.post("/ingest/batch", status_code=202)
 async def ingest_batch(payload: dict, request: Request):
-    events = payload.get("events", [])
-    if len(events) > 500:
-        raise HTTPException(status_code=400, detail="Maximum 500 events per batch")
+    records = payload.get("records", payload.get("events", []))
+    if len(records) > 500:
+        raise HTTPException(status_code=400, detail="Maximum 500 records per batch")
     results = []
-    for ev in events:
+    for ev in records:
         try:
             obs = ObsEvent(**ev)
             raw = obs.model_dump()
@@ -907,6 +1080,7 @@ from datetime import datetime, timezone
 OIS_URL = "http://obs-ingestion-service/v1/ingest"
 
 async def emit_event(
+    telemetry_type: str,
     event_type: str,
     correlation_id: str,
     service_name: str,
@@ -917,6 +1091,7 @@ async def emit_event(
 ):
     payload = {
         "event_id": f"evt_{uuid.uuid4()}",
+        "telemetry_type": telemetry_type,
         "event_type": event_type,
         "schema_version": "1.0",
         "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -929,7 +1104,10 @@ async def emit_event(
     }
     # Merge optional fields
     for field in ["span_id", "agent_id", "tool_id", "model_name", "latency_ms",
-                  "error_code", "http_status", "lob", "user_hash", "soe_id"]:
+                  "error_code", "http_status", "lob", "user_hash", "soe_id",
+                  "severity", "logger_name", "message",
+                  "metric_name", "metric_value", "metric_unit", "metric_type",
+                  "metric_tags"]:
         if field in kwargs:
             payload[field] = kwargs[field]
 
@@ -941,18 +1119,34 @@ async def emit_event(
             pass  # Fire-and-forget; never block the main request
 ```
 
+Recommended wrappers:
+
+```python
+async def emit_log(**kwargs):
+    await emit_event(telemetry_type="log", event_type="LOG_RECORD_EMITTED", **kwargs)
+
+async def emit_metric(metric_name: str, metric_value: float, **kwargs):
+    await emit_event(
+        telemetry_type="metric",
+        event_type="METRIC_RECORDED",
+        metric_name=metric_name,
+        metric_value=metric_value,
+        **kwargs,
+    )
+```
+
 ### 8.2 Per-Service Changes Required
 
 | Service | Change Required | Effort |
 |---|---|---|
-| **Agent Executor** | Add `emit_event()` calls in `AgentExecutionService` at start/step/complete/fail; emit LLM events with token counts already in `audit_table`; emit TOOL events from TOOL audit rows | Medium — data exists in audit_table; needs async emit calls wired in |
-| **Agentic Orchestration** | Add `emit_event()` calls in `MessageProcessingService` for AGENT_EXECUTION_REQUEST_PRODUCED, PLAN_CREATED, FINAL_RESPONSE_CONSUMED; add LLM emit in planner when VertexAI called | Medium — needs LLM token capture added to planner |
-| **GSSP GS** | Add `emit_event()` in HTTP interceptor (REQUEST_RECEIVED, RESPONSE_DELIVERED) and in each generator after LLM call (LLM_CALL_COMPLETED with token counts from `LLMUsageMetrics`) | Low — LLMUsageMetrics already has token counts; just emit them |
-| **GSSP QS** | Add `emit_event()` in retriever (RAG_RETRIEVAL_STARTED, RAG_RETRIEVAL_COMPLETED, RAG_NO_RESULT) with chunk count and relevance score | Medium — need to extract retrieval metrics from existing retriever |
-| **GSSP RS** | Add `emit_event()` for RESPONSE_DELIVERED with confidence_score, latency_ms | Low — small surface area |
-| **Data Ingestion** | Add `emit_event()` in pipeline (INGESTION_JOB_STARTED, INGESTION_JOB_COMPLETED, DOCUMENT_INDEXED, DOCUMENT_EMBEDDING_CREATED) | Low — job lifecycle already tracked; just emit each transition |
-| **Consumer Service** | Add `emit_event()` in `BaseTenant.ingest()` at each pipeline stage | Low — same as Data Ingestion; pipeline stages are well-defined |
-| **User Feedback** | Add `emit_event(event_type="FEEDBACK_SUBMITTED")` in feedback submission handler with rating, thumbs, correlation_id, category | Low — single endpoint |
+| **Agent Executor** | Add `emit_event()` calls in `AgentExecutionService` at start/step/complete/fail; map `audit_table` rows to OIS events; emit LLM/tool metrics from existing token and tool records | Medium — data exists in `audit_table`; needs async emit calls wired in |
+| **Agentic Orchestration** | Add OIS emits in HTTP middleware, planner, Kafka producer/consumer, HIL flow, and `MessageProcessingService`; add planner LLM token capture when VertexAI/Stellar is called | Medium — needs LLM token capture added to planner |
+| **GSSP GS** | Emit request/response logs, LLM events, token/cost metrics, and `FILE_ATTACHMENT_RECEIVED` from `PartHolder` metadata in `/generate` and `/generate-pass-through` | Low — token and part metadata already exists |
+| **GSSP QS** | Emit query pipeline, guardrail, semantic cache hit/miss, retrieval-client, generation-client, and latency metrics from `execute_pipeline.py` | Medium — success paths need instrumentation beyond existing error/cache logs |
+| **GSSP RS** | Emit retrieval request/response, embedding request/response, MMR re-rank, PGVector query, no-result, model/token/cost, and result-count metrics | Medium — retrieval service owns the data but most runtime signals are not logged today |
+| **Data Ingestion** | Emit bulk-change create/status events, ingestion job lifecycle, document parse, document index, embedding, auth failure, and HTTP latency metrics | Low — job lifecycle already tracked; route success events need explicit calls |
+| **Consumer Service** | Emit scheduler start/stop, queue-depth, job lifecycle, document parse, document index, embedding, and timeout metrics from scheduler and `BaseTenant.ingest()` | Low — pipeline stages are well-defined |
+| **User Feedback** | Emit `FEEDBACK_SUBMITTED`, `FEEDBACK_SUBMIT_FAILED`, auth failures, repository insert logs, HTTP status, and feedback counters with redacted comments | Low — single endpoint/repository path |
 
 ---
 
@@ -986,7 +1180,7 @@ MODEL_PRICING = {
 |---|---|---|
 | Create OIS FastAPI project skeleton | Platform Engineering | Repo with health + ingest endpoints |
 | Implement Pydantic schema (Section 3) | Platform Engineering | `ObsEvent` model with all fields |
-| Run DB migrations 001–008 | Data Engineering | PostgreSQL tables created |
+| Run DB migrations 001–010 | Data Engineering | PostgreSQL tables for events, logs, metrics, typed event tables, dead-letter, and rollups created |
 | Implement Validator + dead-letter writer | Platform Engineering | Invalid events stored, not dropped |
 | Deploy OIS to dev environment | DevOps | OIS reachable at internal URL |
 
@@ -996,7 +1190,7 @@ MODEL_PRICING = {
 |---|---|---|
 | Implement Enricher (environment, user_hash, cost) | Platform Engineering | Enriched events in DB |
 | Implement ErrorMapper (exception → error_code) | SRE | Standard error codes in obs_events |
-| Implement 6 typed writers (LLM, Agent, Tool, RAG, Feedback, Dead Letter) | Platform Engineering | Events in correct tables |
+| Implement 8 typed writers (LLM, Agent, Tool, RAG, Feedback, Log, Metric, Dead Letter) | Platform Engineering | Telemetry in correct tables |
 | Implement EventRouter | Platform Engineering | Event type → correct writer |
 | Add `/metrics` Prometheus endpoint | Platform Engineering | Grafana can scrape OIS |
 
@@ -1004,16 +1198,16 @@ MODEL_PRICING = {
 
 Integration order — lowest effort first:
 
-| Priority | Service | Emit Events Added |
+| Priority | Service | OIS Signals Added |
 |---|---|---|
-| P0 | **GSSP GS** | REQUEST_RECEIVED, LLM_CALL_COMPLETED, RESPONSE_DELIVERED |
-| P0 | **User Feedback** | FEEDBACK_SUBMITTED |
-| P1 | **Data Ingestion** | INGESTION_JOB_STARTED, INGESTION_JOB_COMPLETED, DOCUMENT_INDEXED |
-| P1 | **Consumer Service** | INGESTION_JOB_STARTED, INGESTION_JOB_COMPLETED, DOCUMENT_INDEXED |
-| P2 | **Agent Executor** | AGENT_STARTED, AGENT_STEP_COMPLETED, LLM_CALL_COMPLETED, TOOL_CALL_COMPLETED, AGENT_FAILED |
-| P2 | **Agentic Orchestration** | REQUEST_RECEIVED, PLAN_CREATED, AGENT_EXECUTION_REQUEST_PRODUCED, FINAL_RESPONSE_CONSUMED, HIL_REQUEST_SENT |
-| P3 | **GSSP QS** | RAG_RETRIEVAL_STARTED, RAG_RETRIEVAL_COMPLETED, RAG_NO_RESULT |
-| P3 | **GSSP RS** | RESPONSE_DELIVERED |
+| P0 | **GSSP GS** | REQUEST_RECEIVED, LLM_CALL_COMPLETED, TOKEN_USAGE_RECORDED, COST_RECORDED, FILE_ATTACHMENT_RECEIVED, RESPONSE_DELIVERED |
+| P0 | **User Feedback** | FEEDBACK_SUBMITTED, FEEDBACK_SUBMIT_FAILED, feedback submission counters |
+| P1 | **Data Ingestion** | INGESTION_JOB_STARTED, INGESTION_JOB_COMPLETED, DOCUMENT_PARSE_STARTED, DOCUMENT_PARSE_COMPLETED, DOCUMENT_INDEXED, DOCUMENT_EMBEDDING_CREATED |
+| P1 | **Consumer Service** | QUEUE_DEPTH_RECORDED, INGESTION_JOB_STARTED, INGESTION_JOB_COMPLETED, DOCUMENT_PARSE_COMPLETED, DOCUMENT_INDEXED |
+| P2 | **GSSP RS** | RAG_RETRIEVAL_STARTED, RAG_RETRIEVAL_COMPLETED, RAG_NO_RESULT, EMBEDDING_CALL_COMPLETED, retrieval result-count metrics |
+| P2 | **GSSP QS** | REQUEST_RECEIVED, GUARDRAIL_EVALUATED, CACHE_HIT, CACHE_MISS, RETRIEVAL_CLIENT_COMPLETED, RESPONSE_DELIVERED |
+| P3 | **Agent Executor** | AGENT_STARTED, AGENT_STEP_COMPLETED, LLM_CALL_COMPLETED, TOOL_CALL_COMPLETED, AGENT_FAILED |
+| P3 | **Agentic Orchestration** | REQUEST_RECEIVED, PLAN_CREATED, AGENT_EXECUTION_REQUEST_PRODUCED, FINAL_RESPONSE_CONSUMED, HIL_REQUEST_SENT |
 
 ### Phase 4 — Aggregation + Dashboards (Week 8–9)
 

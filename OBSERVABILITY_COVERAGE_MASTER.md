@@ -15,9 +15,26 @@
 | 3 | **Consumer Service** | Document ingestion scheduler; RAG pipeline (S3 → pgvector) | Python / FastAPI, APScheduler, PostgreSQL, pgvector | ❌ No |
 | 4 | **Data Ingestion Service** | REST-driven document ingest, embedding, vector storage | Python / FastAPI, PostgreSQL, pgvector, Sonic S3 | ❌ No |
 | 5 | **GSSP GS** | Generic Generation Service; LLM gateway to VertexAI/Claude/Llama via R2D2 proxy | Python / FastAPI, COIN JWT, multi-model | ❌ No |
-| 6 | **GSSP QS** | Query/Search Service; RAG retrieval and ranking layer | Python / FastAPI | ❌ No |
-| 7 | **GSSP RS** | Response Service; response assembly, scoring, confidence | Python / FastAPI | ❌ No |
-| 8 | **User Feedback** | Feedback capture UI / API; links ratings to trace/agent | Python / FastAPI | ❌ No |
+| 6 | **GSSP QS** | Query Service; RAG workflow orchestration, guardrails, semantic cache, retrieval/generation clients | Python / FastAPI, PGVector cache, COIN JWT | ❌ No |
+| 7 | **GSSP RS** | Retrieval Service; configurable document retrieval, embeddings, PGVector search, MMR re-ranking | Python / FastAPI, PostgreSQL/pgvector, R2D2 embeddings | ❌ No |
+| 8 | **User Feedback** | Feedback capture API; persists ratings/comments and partial trace links | Python / FastAPI, PostgreSQL/PGVector, COIN JWT | ❌ No |
+
+---
+
+## Telemetry Signal Coverage
+
+> Current capture is fragmented: services write local JSON logs, audit tables, or Kafka control events, but no repo currently emits a uniform log/event/metric payload to a shared ingestion API.
+
+| Service | Logs Captured Today | Events Captured Today | Metrics Captured Today | Missing for Observability Plane |
+|---|---|---|---|---|
+| **Agent Executor** | `ObservabilityLogger` JSON logs with correlation/application/SOE context | PostgreSQL `audit_table` rows for INVOCATION, AGENT, LLM_REQUEST, LLM_RESPONSE, TOOL, ERROR; optional Kafka lifecycle events | Token counts from VertexAI metadata; no Prometheus endpoint | Convert audit/log/Kafka records to standard OIS JSON; add numeric latency, cost, service/env, hash user |
+| **Agentic Orchestration** | `JSONFormatter` logs, HTTP request/response timing | Kafka orchestration/HIL events (`AGENT_EXECUTION_REQUEST`, `HIL_REQUEST`, final/rejected responses) | HTTP timing only; no `/metrics` | Emit planner, Kafka, HIL, auth, and response lifecycle events to OIS; add LLM token/cost capture |
+| **Consumer Service** | JSON logs with job/document context and HTTP body logs | Job lifecycle status is persisted/logged but not emitted as structured events | Function timing decorator; no queue-depth metric endpoint | Emit job, document parse, embedding, queue-depth, and scheduler events to OIS |
+| **Data Ingestion Service** | JSON logs with correlation/application/job context; raw request/response body logs | Error/status paths only; success path route events are mostly absent | HTTP timing string only; no `/metrics` | Emit bulk-change, status-query, document, embedding, and auth events to OIS |
+| **GSSP GS** | HTTP interceptor and generator logs with correlation/application; LLM usage in generator observability logs | Limited `observability_type` enum (`REQUEST`, `RESPONSE`, `ERROR`, `OTHER`, `CACHED_RESPONSE`) | Token counts captured; cost not calculated; no `/metrics` | Emit LLM call, request, response, file attachment, rate-limit/safety events to OIS |
+| **GSSP QS** | `ObservabilityLogger` request/response/error/cache-hit logs | Limited `observability_type`; retrieval/guardrail success paths are not consistently evented | Cache-hit token/cost-saved fields only; no cache-miss or live LLM cost metric | Emit query, guardrail, cache, retrieval-client, generation-client, and latency metrics to OIS |
+| **GSSP RS** | HTTP request/response logs, config/DB init logs, some error events | Retrieval runtime events are not emitted; MMR and embedding success paths mostly absent | Processing time in seconds; no retrieval, embedding, result-count, or token metrics | Emit retrieval, embedding, PGVector, MMR, config-load, and result-quality events to OIS |
+| **User Feedback** | Middleware logs and DB/repository behavior, but route/repository success events are sparse | Feedback record persisted; `FEEDBACK_SUBMITTED` event not emitted | No feedback counters, latency histogram, or `/metrics` | Emit feedback submission/review/auth-failure events and counters to OIS |
 
 ---
 
@@ -28,24 +45,24 @@
 | Field | Agent Executor | Agentic Orchestration | Consumer Service | Data Ingestion | GSSP GS | GSSP QS | GSSP RS | User Feedback |
 |---|---|---|---|---|---|---|---|---|
 | `event_id` | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
-| `event_type` | ✅ (audit_table) | ⚠️ Kafka only | ⚠️ error handler only | ⚠️ error handler only | ❌ | ❌ | ❌ | ❌ |
+| `event_type` | ✅ (audit_table) | ⚠️ Kafka only | ⚠️ error handler only | ⚠️ error handler only | ⚠️ (`observability_type`) | ⚠️ (`observability_type`) | ⚠️ (`observability_type`) | ❌ |
 | `schema_version` | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
-| `timestamp` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| `correlation_id` | ✅ | ✅ | ✅ | ✅ | ✅ | ⚠️ | ⚠️ | ⚠️ |
+| `timestamp` | ✅ | ✅ | ✅ | ⚠️ (not always UTC ISO) | ⚠️ (`time`, local) | ⚠️ (`time`, local) | ⚠️ (`time`, local) | ⚠️ |
+| `correlation_id` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ (`ObservabilityLogger`) | ⚠️ | ⚠️ |
 | `span_id` | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
 | `parent_span_id` | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
 | `request_id` | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
-| `application_id` | ✅ | ✅ | ✅ | ✅ | ✅ | ⚠️ | ⚠️ | ⚠️ |
+| `application_id` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ⚠️ (consumer app ID) | ⚠️ |
 | `environment` | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
 | `service_name` | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
-| `component` | ⚠️ (module path) | ⚠️ (module path) | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| `component` | ⚠️ (module path) | ⚠️ (module path) | ❌ | ❌ | ⚠️ (`name` logger field) | ❌ | ❌ | ❌ |
 | `lob` | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
 | `tenant_id` | ❌ | ❌ | ⚠️ (soeid) | ⚠️ (soeid) | ❌ | ❌ | ❌ | ❌ |
 | `user_hash` | 🔴 plain text | 🔴 plain text | 🔴 plain text | 🔴 plain text | 🔴 plain text | 🔴 | 🔴 | ❌ |
-| `status` | ✅ | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ❌ | ❌ | ❌ |
-| `latency_ms` | ⚠️ (derivable) | ⚠️ (HTTP only) | ⚠️ (string only) | ⚠️ (string only) | ⚠️ (string only) | ❌ | ❌ | ❌ |
-| `error_code` | ✅ | ✅ | ✅ | ✅ | ✅ | ⚠️ | ⚠️ | ❌ |
-| `http_status` | ✅ | ✅ | ✅ | ✅ | ✅ | ⚠️ | ⚠️ | ❌ |
+| `status` | ✅ | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ (errors only) | ⚠️ (HTTP/error only) | ❌ |
+| `latency_ms` | ⚠️ (derivable) | ⚠️ (HTTP only) | ⚠️ (string only) | ⚠️ (string only) | ⚠️ (seconds/string) | ⚠️ (seconds/string) | ⚠️ (seconds/string) | ⚠️ (seconds/string) |
+| `error_code` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ⚠️ (nested/partial) | ❌ |
+| `http_status` | ✅ | ✅ | ✅ | ✅ | ✅ | ⚠️ (errors only) | ⚠️ (errors/response) | ❌ |
 
 ---
 
@@ -55,18 +72,18 @@
 
 | Field | Agent Executor | Agentic Orchestration | GSSP GS | GSSP QS | GSSP RS |
 |---|---|---|---|---|---|
-| `model_name` | ❌ | ❌ | ⚠️ (config) | ❌ | ❌ |
-| `model_provider` | ❌ | ❌ | ⚠️ (config) | ❌ | ❌ |
+| `model_name` | ❌ | ❌ | ✅ (LLM call logs) | ⚠️ (cache/pricing only) | ❌ (embedding config not logged per call) |
+| `model_provider` | ❌ | ❌ | ⚠️ (config) | ⚠️ (client/config) | ❌ |
 | `prompt_template_id` | ❌ | ❌ | ✅ (DB-bound) | ❌ | ❌ |
-| `input_tokens` | ✅ (audit_table) | ❌ | ✅ (LLMUsageMetrics) | ❌ | ❌ |
-| `output_tokens` | ✅ (audit_table) | ❌ | ✅ (LLMUsageMetrics) | ❌ | ❌ |
+| `input_tokens` | ✅ (audit_table) | ❌ | ✅ (LLMUsageMetrics) | ⚠️ (cache hit only) | ❌ (embedding usage discarded) |
+| `output_tokens` | ✅ (audit_table) | ❌ | ✅ (LLMUsageMetrics) | ⚠️ (cache hit only) | ❌ (embedding usage discarded) |
 | `total_tokens` | ✅ (audit_table) | ❌ | ✅ (LLMUsageMetrics) | ❌ | ❌ |
-| `estimated_cost` | ❌ | ❌ | ❌ | ❌ | ❌ |
-| `llm_latency_ms` | ❌ | ❌ | ⚠️ (string) | ❌ | ❌ |
+| `estimated_cost` | ❌ | ❌ | ❌ | ⚠️ (`cost_saved` on cache hit only) | ❌ |
+| `llm_latency_ms` | ❌ | ❌ | ⚠️ (seconds/string) | ⚠️ (seconds/string) | ❌ |
 | `finish_reason` | ❌ | ❌ | ❌ | ❌ | ❌ |
 | `rate_limit_hit` | ❌ | ❌ | ❌ | ❌ | ❌ |
 | `safety_blocked` | ❌ | ❌ | ❌ | ❌ | ❌ |
-| `confidence_score` | ❌ | ❌ | ✅ (logprobs/Claude) | ❌ | ❌ |
+| `confidence_score` | ❌ | ❌ | ✅ (logprobs/Claude) | ❌ | N/A |
 
 ### Agent Telemetry Fields
 
@@ -106,26 +123,26 @@
 
 ### RAG / Ingestion Telemetry Fields
 
-| Field | Consumer Service | Data Ingestion | GSSP QS |
-|---|---|---|---|
-| `rag_id` | ❌ | ❌ | ❌ |
-| `knowledge_base` | ❌ | ❌ | ❌ |
-| `embedding_model` | ❌ | ❌ | ❌ |
-| `embedding_latency_ms` | ❌ | ❌ | ❌ |
-| `retrieved_chunk_count` | ❌ | ❌ | ❌ |
-| `avg_relevance_score` | ❌ | ❌ | ❌ |
-| `no_result_flag` | ❌ | ❌ | ❌ |
-| `citation_coverage_pct` | ❌ | ❌ | ❌ |
-| `context_truncation_flag` | ❌ | ❌ | ❌ |
-| `job_id` | ✅ | ✅ | N/A |
-| `document_id` | ✅ | ✅ | N/A |
-| `job_status` | ✅ (SUCCESS/FAILURE/ERROR) | ✅ | N/A |
-| `job_processing_time` | ⚠️ (string) | ⚠️ (string) | N/A |
-| `input_tokens (embed)` | ❌ | ❌ | ❌ |
-| `RAG_RETRIEVAL_STARTED` | ❌ | ❌ | ❌ |
-| `RAG_RETRIEVAL_COMPLETED` | ❌ | ❌ | ❌ |
-| `RAG_NO_RESULT` | ❌ | ❌ | ❌ |
-| `DOCUMENT_INDEXED` | ⚠️ (job completion log) | ⚠️ (job completion log) | ❌ |
+| Field | Consumer Service | Data Ingestion | GSSP QS | GSSP RS |
+|---|---|---|---|---|
+| `rag_id` | ❌ | ❌ | ❌ | ❌ |
+| `knowledge_base` | ❌ | ❌ | ❌ | ⚠️ (retrieval config only) |
+| `embedding_model` | ❌ | ❌ | ❌ | ❌ (configured, not logged per call) |
+| `embedding_latency_ms` | ❌ | ❌ | ❌ | ❌ |
+| `retrieved_chunk_count` | ❌ | ❌ | ❌ | ❌ (`result_count` missing at runtime) |
+| `avg_relevance_score` | ❌ | ❌ | ❌ | ❌ |
+| `no_result_flag` | ❌ | ❌ | ❌ | ❌ |
+| `citation_coverage_pct` | ❌ | ❌ | ❌ | ❌ |
+| `context_truncation_flag` | ❌ | ❌ | ❌ | N/A |
+| `job_id` | ✅ | ✅ | N/A | N/A |
+| `document_id` | ✅ | ✅ | N/A | N/A |
+| `job_status` | ✅ (SUCCESS/FAILURE/ERROR) | ✅ | N/A | N/A |
+| `job_processing_time` | ⚠️ (string) | ⚠️ (string) | N/A | N/A |
+| `input_tokens (embed)` | ❌ | ❌ | ❌ | ❌ |
+| `RAG_RETRIEVAL_STARTED` | ❌ | ❌ | ❌ | ❌ |
+| `RAG_RETRIEVAL_COMPLETED` | ❌ | ❌ | ❌ | ❌ |
+| `RAG_NO_RESULT` | ❌ | ❌ | ❌ | ❌ |
+| `DOCUMENT_INDEXED` | ⚠️ (job completion log) | ⚠️ (job completion log) | N/A | N/A |
 
 ### File / Attachment Telemetry Fields
 
@@ -317,6 +334,7 @@
 | Model name not in logs | Cannot track which embedding model used |
 | No Prometheus/OpenTelemetry | No real-time metrics |
 | No Kafka emission | Events cannot be consumed by Observability Ingestion API |
+| Job queue depth not captured on poll cycle | Cannot detect ingestion backlog or scheduler starvation |
 
 **Gaps — Medium Priority:**
 | Gap | Impact |
@@ -337,6 +355,7 @@
 | `avg_chunk_size_tokens` not tracked | Cannot detect token-limit violations during embedding |
 | `requests_without_files` not counted | S3 download failures / missing docs invisible at service level |
 | No `DOCUMENT_PARSE_STARTED` / `DOCUMENT_PARSE_COMPLETED` events | Document processing pipeline steps fully invisible |
+| No `QUEUE_DEPTH_RECORDED` metric/event | Backlog trend cannot be pushed to a central metrics table |
 
 > **Source:** `BaseTenant.ingest()` downloads the S3 blob (size knowable at download). Parsers in `ingestion/parsers/` produce chunks (count available post-split). Both metrics require only one `emit_event()` call each.
 
@@ -369,6 +388,8 @@
 | Model name absent from logs | Cannot track embedding model usage |
 | No Prometheus/OpenTelemetry | No real-time metrics |
 | No Kafka emission | Events cannot be streamed to Observability Ingestion API |
+| Success-path route events missing for bulk-change create/status query | Job creation volume and status-query behavior invisible |
+| Timestamps not consistently UTC ISO 8601 | Cross-region correlation may be unreliable |
 
 ---
 
@@ -422,40 +443,49 @@
 
 ---
 
-### 6. GSSP QS (Query/Search Service)
+### 6. GSSP QS (Query Service)
 
-**What It Does:** RAG retrieval service. Handles vector search queries, ranking, and context assembly for downstream generation.
+**What It Does:** Central RAG workflow orchestrator for consumer applications. Accepts `/query-data` and `/conversational-query-data`, runs guardrail checks, consults a semantic PGVector cache, calls GSSP Retrieval Service for chunks, and calls GSSP GS for generation.
 
 **Observability Strengths:**
-- Basic structured JSON logging
-- `correlation_id` partially propagated
-- Error handling with HTTP status
+- `ObservabilityLogger` emits structured request/response/error/cache-hit logs with `X-Correlation-ID` and `X-Application-ID`
+- `observability_type` enum exists for REQUEST, RESPONSE, CACHED_RESPONSE, ERROR, and OTHER
+- Error-code registry covers auth, LLM, retrieval, cache, and config errors
+- Cache-hit logger captures `input_tokens`, `output_tokens`, and `cost_saved`
+- HTTP middleware and timing decorator capture processing time, though not as standard `latency_ms`
 
 **Gaps — High Priority:**
 | Gap | Impact |
 |---|---|
-| All standard event fields absent (event_id, event_type, environment, service_name) | Cannot integrate with observability plane |
-| RAG-specific telemetry entirely absent (retrieved_chunk_count, avg_relevance_score, no_result_flag, citation_coverage_pct) | RAG quality dashboard impossible |
-| Embedding model and latency not captured | Cannot track retrieval cost |
-| No Kafka streaming | Events cannot be consumed by Observability Ingestion API |
-| No OpenTelemetry | Cannot correlate retrieval with generation spans |
+| `event_id`, `environment`, `service_name`, `component`, `request_id`, and `user_hash` absent | Cannot route/query telemetry safely in a central plane |
+| `observability_type` is limited and not mapped to standard `event_type` | Dashboards cannot distinguish query, guardrail, cache, retrieval, and generation stages |
+| Guardrail/retrieval/generation success paths are not consistently logged | Query pipeline can fail or degrade without stage-level visibility |
+| Cache misses are not logged with model/cost/latency details | Cannot measure cache effectiveness or live LLM cost |
+| RAG quality fields missing (`retrieved_chunk_count`, `avg_relevance_score`, `no_result_flag`, `citation_coverage_pct`) | RAG quality dashboard impossible |
+| No `/metrics` endpoint or OIS emitter | No central counters/histograms; events cannot reach the Observability Plane |
 
 ---
 
-### 7. GSSP RS (Response Service)
+### 7. GSSP RS (Retrieval Service)
 
-**What It Does:** Response assembly and scoring layer. Handles confidence scoring, response ranking, and final delivery.
+**What It Does:** Foundation retrieval microservice for RAG pipelines. Exposes `/api/gssp-retrieval-service/v1/retrieve`, `/retrieve_embedding`, and `/reload-configs`; loads consumer configs, generates embeddings through Stellar/VertexAI via R2D2, retrieves chunks from PostgreSQL/pgvector, and can apply MMR re-ranking.
 
 **Observability Strengths:**
-- Basic structured logging
+- HTTP middleware emits REQUEST/RESPONSE-style observability logs with URL path, processing time, `X-Correlation-ID`, `X-Application-ID`, and SOE context
+- Error handling uses an `ErrorCodes` enum and captures HTTP status/error descriptions on some paths
+- Startup/config/PGVector initialization emit partial logs
+- PGVector retriever logs init parameters such as schema, semantic-search config, and fusion strategy
 
 **Gaps — High Priority:**
 | Gap | Impact |
 |---|---|
-| All standard event fields absent | Cannot integrate with observability plane |
-| Confidence/ranking scores not structured as observability events | Quality analytics impossible |
-| Response latency not tracked as numeric field | SLA monitoring impossible |
-| No Kafka streaming | Events cannot reach Observability Ingestion API |
+| `event_id`, `environment`, `service_name`, `component`, `request_id`, and `user_hash` absent | Retrieval logs cannot be safely aggregated or deduplicated |
+| `latency_ms` is stored as seconds/string and only total HTTP time is measured | No per-stage latency for embed, DB query, MMR, or response assembly |
+| Embedding calls do not emit model, token usage, latency, or cost | Retrieval cost and model/provider impact invisible |
+| Retrieval runtime events missing (`RETRIEVAL_REQUEST`, `RETRIEVAL_RESPONSE`, `RAG_NO_RESULT`) | Cannot measure result count, top-k, relevance, strategy, or no-result rate |
+| MMR re-ranking has no structured logs | Re-ranking quality and latency cannot be analyzed |
+| SOE_ID and some request/error content may be logged raw | PII/compliance risk |
+| No `/metrics` endpoint or OIS emitter | No central retrieval metrics or uniform event pipeline |
 
 ---
 
@@ -466,17 +496,23 @@
 **Observability Strengths:**
 - Captures `feedback_id`, `rating`, `thumbs`
 - Partial `correlation_id` linkage to trace
+- FastAPI middleware has request/response logging and latency context
+- Repository persists feedback records through `UserFeedbackRepo.create()`
 
 **Gaps — High Priority:**
 | Gap | Impact |
 |---|---|
+| Route/repository success and failure events are not individually logged | Cannot derive feedback success/failure rates from telemetry |
+| `http_status` absent from logs | Feedback API SLA and error-rate dashboards incomplete |
 | Feedback not linked to `correlation_id` reliably | Cannot join feedback to request trace |
+| `feedback_id` / `trace_id` not emitted in log records | Logs cannot be joined back to feedback DB rows or upstream traces |
 | `feedback_category` absent | Cannot classify negative feedback |
 | Free text comment not redacted | PII/compliance risk |
 | `submitted_by_role` absent | Cannot distinguish user vs CSO vs SME feedback |
 | `FEEDBACK_SUBMITTED` event not emitted | Feedback invisible to observability stream |
 | No Kafka emission | Cannot trigger incident routing pipeline |
 | `resolution_status`, `linked_incident_id` absent | Feedback-to-fix loop broken |
+| No `/metrics` endpoint or feedback counters | Cannot alert on submission failures or volume spikes |
 
 ---
 
@@ -492,11 +528,15 @@
 | **Cost** | `estimated_cost` not calculated anywhere | All 8 services | P0 |
 | **Latency** | `latency_ms` not a numeric field (string only) | 6 of 8 services | P0 |
 | **Tracing** | No OpenTelemetry / distributed tracing | All 8 services | P0 |
-| **Streaming** | 6 of 8 services emit no Kafka events | Consumer, Data Ingest, GSSP GS/QS/RS, Feedback | P0 |
+| **Ingestion API** | No service emits logs/events/metrics to a shared Observability Ingestion API | All 8 services | P0 |
+| **Streaming** | 6 of 8 services emit no Kafka events | Consumer, Data Ingest, GSSP GS/QS/RS, Feedback | P1 |
 | **Metrics** | No `/metrics` endpoint on any service | All 8 services | P1 |
+| **Metrics** | No standard JSON metric envelope for counters/gauges/histograms | All 8 services | P0 |
 | **LLM** | Token counts not structured in 5 of 8 services | Orchestration, Consumer, Data Ingest, GSSP QS/RS | P1 |
 | **Agent** | Agent step structured events absent in Orchestration | Agentic Orchestration | P1 |
-| **RAG** | All RAG quality fields absent | Consumer, Data Ingest, GSSP QS | P1 |
+| **RAG** | RAG/retrieval quality fields absent | Consumer, Data Ingest, GSSP QS, GSSP RS | P1 |
+| **RAG** | Retrieval/embedding runtime metrics absent despite GSSP RS owning retrieval | GSSP RS | P1 |
 | **Feedback** | `FEEDBACK_SUBMITTED` event not emitted | User Feedback | P1 |
 | **Kafka** | Kafka lag/offset/partition not captured | Agent Executor, Orchestration | P1 |
 | **Schema** | No common JSON schema enforced across services | All 8 services | P0 |
+| **PII Safety** | Full request/response bodies and raw prompt/comment fields logged in several services | Consumer, Data Ingest, GSSP GS, User Feedback | P0 |
