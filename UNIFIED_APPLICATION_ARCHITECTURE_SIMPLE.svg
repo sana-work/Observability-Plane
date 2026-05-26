@@ -1,0 +1,160 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1120" viewBox="0 0 1600 1120" role="img" aria-labelledby="title desc">
+  <title id="title">AI Services Platform simplified architecture</title>
+  <desc id="desc">A simplified architecture diagram showing clients, authentication, core runtime services, data stores, and the Observability Ingestion Service.</desc>
+  <defs>
+    <style>
+      .bg { fill: #f7fafc; }
+      .title { font: 700 34px Arial, Helvetica, sans-serif; fill: #172033; }
+      .subtitle { font: 400 18px Arial, Helvetica, sans-serif; fill: #526071; }
+      .lane-title { font: 700 18px Arial, Helvetica, sans-serif; fill: #243047; }
+      .box-title { font: 700 18px Arial, Helvetica, sans-serif; fill: #172033; }
+      .box-text { font: 400 14px Arial, Helvetica, sans-serif; fill: #3f4d5f; }
+      .small { font: 400 12px Arial, Helvetica, sans-serif; fill: #516072; }
+      .badge { font: 700 12px Arial, Helvetica, sans-serif; fill: #ffffff; }
+      .runtime { fill: #e8f1ff; stroke: #3b73d9; }
+      .agent { fill: #edf5ff; stroke: #3178c6; }
+      .rag { fill: #eaf7f0; stroke: #2f8f5b; }
+      .ingest { fill: #fff5e8; stroke: #d9852c; }
+      .store { fill: #f2f4f8; stroke: #8592a3; }
+      .obs { fill: #f3edff; stroke: #7f56d9; }
+      .client { fill: #ffffff; stroke: #7d8b9d; }
+      .auth { fill: #fff8d6; stroke: #c9a227; }
+      .lane { fill: #ffffff; stroke: #dde4ee; }
+      .arrow { stroke: #2e5aac; stroke-width: 3; fill: none; marker-end: url(#arrow-blue); }
+      .data-arrow { stroke: #2f8f5b; stroke-width: 3; fill: none; marker-end: url(#arrow-green); }
+      .obs-arrow { stroke: #7f56d9; stroke-width: 3; stroke-dasharray: 8 8; fill: none; marker-end: url(#arrow-purple); }
+      .thin { stroke-width: 2.2; }
+      .rounded { rx: 16; ry: 16; }
+    </style>
+    <marker id="arrow-blue" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+      <path d="M2,2 L10,6 L2,10 Z" fill="#2e5aac"/>
+    </marker>
+    <marker id="arrow-green" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+      <path d="M2,2 L10,6 L2,10 Z" fill="#2f8f5b"/>
+    </marker>
+    <marker id="arrow-purple" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+      <path d="M2,2 L10,6 L2,10 Z" fill="#7f56d9"/>
+    </marker>
+  </defs>
+
+  <rect class="bg" width="1600" height="1120"/>
+
+  <text class="title" x="72" y="70">AI Services Platform - Simplified Architecture</text>
+  <text class="subtitle" x="72" y="102">A reader-friendly view of how application requests, RAG retrieval, document ingestion, feedback, and observability fit together.</text>
+
+  <g transform="translate(1045 54)">
+    <rect x="0" y="0" width="18" height="18" rx="4" fill="#2e5aac"/>
+    <text class="small" x="28" y="14">Runtime request flow</text>
+    <rect x="190" y="0" width="18" height="18" rx="4" fill="#2f8f5b"/>
+    <text class="small" x="218" y="14">Data read/write</text>
+    <rect x="350" y="0" width="18" height="18" rx="4" fill="#7f56d9"/>
+    <text class="small" x="378" y="14">Telemetry to OIS</text>
+  </g>
+
+  <rect class="lane rounded" x="64" y="138" width="1472" height="118"/>
+  <text class="lane-title" x="92" y="172">1. Entry and authentication</text>
+
+  <g id="clients">
+    <rect class="client rounded" x="96" y="188" width="300" height="44"/>
+    <text class="box-title" x="120" y="216">Client apps and UIs</text>
+    <text class="box-text" x="430" y="204">Consumer apps, web/chat UI, and feedback UI send requests with COIN identity headers.</text>
+  </g>
+  <g id="auth">
+    <rect class="auth rounded" x="960" y="178" width="260" height="62"/>
+    <text class="box-title" x="984" y="204">COIN JWT / M2M Auth</text>
+    <text class="box-text" x="984" y="225">Validates users and service calls</text>
+  </g>
+  <path class="arrow" d="M400 210 H940"/>
+
+  <rect class="lane rounded" x="64" y="292" width="1472" height="412"/>
+  <text class="lane-title" x="92" y="326">2. Core platform workflows</text>
+
+  <g id="agentic-lane">
+    <rect class="agent rounded" x="96" y="352" width="390" height="250"/>
+    <rect x="118" y="374" width="88" height="24" rx="12" fill="#3178c6"/>
+    <text class="badge" x="138" y="391">AGENTIC</text>
+    <text class="box-title" x="118" y="430">Agentic workflow</text>
+    <text class="box-text" x="118" y="456">Agentic Orchestration creates a plan,</text>
+    <text class="box-text" x="118" y="478">publishes work on Kafka, and the Agent</text>
+    <text class="box-text" x="118" y="500">Executor runs agent steps, LLM calls,</text>
+    <text class="box-text" x="118" y="522">tools, and HIL decisions.</text>
+    <rect class="store rounded" x="118" y="546" width="150" height="34"/>
+    <text class="small" x="137" y="568">Orchestration DB</text>
+    <rect class="store rounded" x="292" y="546" width="172" height="34"/>
+    <text class="small" x="316" y="568">Executor DB / Redis</text>
+  </g>
+
+  <g id="rag-lane">
+    <rect class="rag rounded" x="548" y="352" width="500" height="250"/>
+    <rect x="570" y="374" width="92" height="24" rx="12" fill="#2f8f5b"/>
+    <text class="badge" x="594" y="391">RAG</text>
+    <text class="box-title" x="570" y="430">Question answering workflow</text>
+    <text class="box-text" x="570" y="456">GSSP QS orchestrates guardrails,</text>
+    <text class="box-text" x="570" y="478">semantic cache, retrieval, and generation.</text>
+    <text class="box-text" x="570" y="500">GSSP RS retrieves chunks from pgvector.</text>
+    <text class="box-text" x="570" y="522">GSSP GS calls VertexAI / Claude / Llama.</text>
+    <rect class="store rounded" x="570" y="546" width="170" height="34"/>
+    <text class="small" x="601" y="568">QS cache DB</text>
+    <rect class="store rounded" x="760" y="546" width="250" height="34"/>
+    <text class="small" x="804" y="568">Retrieval PGVector DB</text>
+  </g>
+
+  <g id="content-lane">
+    <rect class="ingest rounded" x="1110" y="352" width="390" height="250"/>
+    <rect x="1132" y="374" width="114" height="24" rx="12" fill="#d9852c"/>
+    <text class="badge" x="1153" y="391">CONTENT</text>
+    <text class="box-title" x="1132" y="430">Documents and feedback</text>
+    <text class="box-text" x="1132" y="456">Data Ingestion and Consumer Scheduler</text>
+    <text class="box-text" x="1132" y="478">load documents from S3, chunk/embed,</text>
+    <text class="box-text" x="1132" y="500">and persist vectors. User Feedback stores</text>
+    <text class="box-text" x="1132" y="522">ratings, comments, and trace links.</text>
+    <rect class="store rounded" x="1132" y="546" width="142" height="34"/>
+    <text class="small" x="1171" y="568">Sonic S3</text>
+    <rect class="store rounded" x="1294" y="546" width="184" height="34"/>
+    <text class="small" x="1321" y="568">Ingestion / Feedback DB</text>
+  </g>
+
+  <path class="arrow thin" d="M1090 240 C1090 288 292 300 292 344"/>
+  <path class="arrow thin" d="M1090 240 C1090 286 800 300 800 344"/>
+  <path class="arrow thin" d="M1090 240 C1090 286 1305 300 1305 344"/>
+  <path class="data-arrow thin" d="M486 564 H540"/>
+  <path class="data-arrow thin" d="M1048 564 H1102"/>
+
+  <rect class="lane rounded" x="64" y="740" width="1472" height="286"/>
+  <text class="lane-title" x="92" y="774">3. Unified observability plane</text>
+
+  <g id="ois">
+    <rect class="obs rounded" x="220" y="820" width="360" height="116"/>
+    <text class="box-title" x="248" y="852">Observability Ingestion Service</text>
+    <text class="box-text" x="248" y="878">Single HTTP API: POST /v1/ingest</text>
+    <text class="box-text" x="248" y="900">Accepts standard JSON logs, events,</text>
+    <text class="box-text" x="248" y="922">and metrics from every repo.</text>
+  </g>
+
+  <g id="validation">
+    <rect class="obs rounded" x="650" y="820" width="300" height="116"/>
+    <text class="box-title" x="678" y="852">Validate and enrich</text>
+    <text class="box-text" x="678" y="878">Adds service, environment, cost,</text>
+    <text class="box-text" x="678" y="900">latency, user hash, error code,</text>
+    <text class="box-text" x="678" y="922">and dead-letter handling.</text>
+  </g>
+
+  <g id="obsdb">
+    <rect class="obs rounded" x="1020" y="804" width="300" height="148"/>
+    <text class="box-title" x="1048" y="836">Observability PostgreSQL</text>
+    <text class="box-text" x="1048" y="862">obs_events</text>
+    <text class="box-text" x="1048" y="884">obs_logs</text>
+    <text class="box-text" x="1048" y="906">obs_metrics</text>
+    <text class="box-text" x="1048" y="928">obs_dead_letter + rollups</text>
+  </g>
+
+  <path class="arrow" d="M580 878 H632"/>
+  <path class="arrow" d="M950 878 H1002"/>
+
+  <path class="obs-arrow" d="M292 602 C292 704 330 760 365 812"/>
+  <path class="obs-arrow" d="M800 602 C800 704 608 760 492 814"/>
+  <path class="obs-arrow" d="M1305 602 C1305 704 832 760 558 816"/>
+
+  <rect class="lane rounded" x="64" y="1042" width="1472" height="46"/>
+  <text class="small" x="92" y="1070">How to read this: blue arrows are application requests, green arrows are document/vector data, and purple dashed arrows are telemetry copied to OIS without replacing existing service logs or audit tables.</text>
+</svg>

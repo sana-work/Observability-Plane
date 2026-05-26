@@ -40,7 +40,7 @@
 
 ## Standard Event Field Coverage Matrix
 
-> These are the **mandatory fields** every service must emit in every observability event.
+> These are the **mandatory fields** every service must emit in every observability telemetry record.
 
 | Field | Agent Executor | Agentic Orchestration | Consumer Service | Data Ingestion | GSSP GS | GSSP QS | GSSP RS | User Feedback |
 |---|---|---|---|---|---|---|---|---|
@@ -480,7 +480,7 @@
 | Gap | Impact |
 |---|---|
 | `event_id`, `environment`, `service_name`, `component`, `request_id`, and `user_hash` absent | Retrieval logs cannot be safely aggregated or deduplicated |
-| `latency_ms` is stored as seconds/string and only total HTTP time is measured | No per-stage latency for embed, DB query, MMR, or response assembly |
+| `latency_ms` is stored as seconds/string and only total HTTP time is measured | No per-stage latency for embed, DB query, MMR, or result building |
 | Embedding calls do not emit model, token usage, latency, or cost | Retrieval cost and model/provider impact invisible |
 | Retrieval runtime events missing (`RETRIEVAL_REQUEST`, `RETRIEVAL_RESPONSE`, `RAG_NO_RESULT`) | Cannot measure result count, top-k, relevance, strategy, or no-result rate |
 | MMR re-ranking has no structured logs | Re-ranking quality and latency cannot be analyzed |

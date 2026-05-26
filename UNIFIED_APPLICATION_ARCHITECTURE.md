@@ -5,7 +5,18 @@
 
 ---
 
-## High-Level Architecture Diagram
+## Simplified Architecture Image
+
+![Simplified AI Services Platform architecture](UNIFIED_APPLICATION_ARCHITECTURE_SIMPLE.svg)
+
+This is the reader-friendly view. It groups the platform into four ideas:
+
+- **Entry/authentication:** client apps and UIs enter through COIN JWT / M2M authentication.
+- **Core workflows:** agentic orchestration, RAG question answering, document ingestion, and feedback each have a clear lane.
+- **Data stores:** service-owned PostgreSQL/PGVector, Redis, and Sonic S3 remain close to the services that own them.
+- **Observability plane:** every service sends normalized JSON logs, events, and metrics to OIS, which validates/enriches and writes to observability PostgreSQL.
+
+## Detailed Reference Diagram
 
 ```mermaid
 flowchart TB
@@ -161,7 +172,7 @@ flowchart TB
     EEXEC --> CLAUDE
 
     %% Query/RAG/generation flow
-    CA --> QSAPI
+    COIN --> QSAPI
     QSAPI --> QSPIPE
     QSPIPE --> QSGUARD
     QSPIPE --> QSCACHE
@@ -175,7 +186,7 @@ flowchart TB
     QSGENCLIENT --> GSAPI
 
     %% Direct GS flow
-    CA --> GSMID
+    COIN --> GSMID
     GSMID --> GSAPI
     GSAPI --> GSFACT
     GSAPI --> GSPART

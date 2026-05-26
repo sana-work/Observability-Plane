@@ -33,19 +33,18 @@ All eight platform services produce observability data today, but:
 │  Agent Executor ──────────┤                                         │
 │  GSSP GS ─────────────────┤                                         │
 │  GSSP QS ─────────────────┼──► POST /v1/ingest  ──► OIS API        │
-│  GSSP RS ─────────────────┤   (log/event/metric JSON) │             │
+│  GSSP RS ─────────────────┤      (log/event/metric JSON)           │
 │  Data Ingestion ──────────┤                           ▼             │
 │  Consumer Service ────────┤                    Validation &         │
 │  User Feedback ───────────┘                    Enrichment           │
 │                                                    │                │
-│                                              ┌─────┴──────┐        │
-│                                              │ PostgreSQL  │        │
-│                                              │ obs_events  │        │
-│                                              │ obs_logs    │        │
-│                                              │ obs_metrics │        │
-│                                              │ obs_dead    │        │
-│                                              │ letter      │        │
-│                                              └────────────┘         │
+│                                              ┌─────────────────┐     │
+│                                              │ PostgreSQL      │     │
+│                                              │ obs_events      │     │
+│                                              │ obs_logs        │     │
+│                                              │ obs_metrics     │     │
+│                                              │ obs_dead_letter │     │
+│                                              └─────────────────┘     │
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -278,6 +277,8 @@ RAG_RETRIEVAL_COMPLETED
 RAG_RETRIEVAL_FAILED
 RAG_NO_RESULT
 RAG_INDEX_HEALTH_CHECKED
+RETRIEVAL_REQUEST
+RETRIEVAL_RESPONSE
 RETRIEVAL_CLIENT_COMPLETED
 CACHE_HIT
 CACHE_MISS
@@ -913,7 +914,7 @@ class EventPayload(BaseModel):
 class ObsEvent(BaseModel):
     # Required
     event_id: str = Field(default_factory=lambda: f"evt_{uuid.uuid4()}")
-    telemetry_type: str = "event"
+    telemetry_type: str
     event_type: str
     schema_version: str = "1.0"
     timestamp: datetime
