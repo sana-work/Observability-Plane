@@ -127,6 +127,63 @@
 | `RAG_NO_RESULT` | ❌ | ❌ | ❌ |
 | `DOCUMENT_INDEXED` | ⚠️ (job completion log) | ⚠️ (job completion log) | ❌ |
 
+### File / Attachment Telemetry Fields
+
+> Covers every service that accepts inbound files (multimodal LLM requests, document uploads) or processes files from object storage (S3 ingestion pipelines).
+
+#### Inbound Request File Fields — GSSP GS (multimodal `/generate`) & Agentic Orchestration
+
+| Field | GSSP GS | Agentic Orchestration | Notes |
+|---|---|---|---|
+| `has_attachment` | ❌ | ❌ | Boolean: was any file/part included in the request? |
+| `file_count` | ❌ | ❌ | Total number of files/parts attached |
+| `image_count` | ❌ | ❌ | Number of image parts (PNG/JPG/WEBP/HEIC) |
+| `doc_count` | ❌ | ❌ | Number of document parts (PDF/DOCX/XLSX/HTML) |
+| `total_file_size_bytes` | ❌ | ❌ | Sum of all attachment sizes in the request |
+| `largest_file_bytes` | ❌ | ❌ | Size of the largest individual attachment |
+| `file_types` | ❌ | ❌ | Array of MIME types / extensions present e.g. `["image/png","application/pdf"]` |
+| `multimodal_flag` | ❌ | ❌ | True when request contains both text and at least one file |
+| `requests_without_files` | ❌ | ❌ | Counter metric: requests that had zero attachments |
+| `FILE_ATTACHMENT_RECEIVED event` | ❌ | ❌ | Structured event at intake capturing all above fields |
+
+> **Source note — GSSP GS:** The `PartHolder` model (`query/models/part_holder.py`) already carries `filename`, `mime_type`, and base64 `data`. All file metrics can be derived at request time from the `parts` list without any new upstream changes.
+
+#### Document Ingestion File Fields — Consumer Service & Data Ingestion Service
+
+| Field | Consumer Service | Data Ingestion | Notes |
+|---|---|---|---|
+| `document_format` | ❌ | ❌ | File extension / MIME type: `pdf`, `docx`, `xlsx`, `html`, `txt` |
+| `document_size_bytes` | ❌ | ❌ | Raw byte size of the S3 object downloaded |
+| `page_count` | ❌ | ❌ | Number of pages (PDF) or sheets (XLSX); `null` for HTML/text |
+| `chunk_count` | ❌ | ❌ | Number of chunks produced by the splitter after ingestion |
+| `avg_chunk_size_tokens` | ❌ | ❌ | Average token count per chunk |
+| `extraction_status` | ❌ | ❌ | `success` \| `partial` \| `failed` — whether text extraction succeeded |
+| `parser_used` | ❌ | ❌ | Which parser handled the file: `docx`, `xlsx`, `pdf`, `html`, `openparse` |
+| `s3_object_key` | ⚠️ (in some logs) | ⚠️ (in some logs) | S3 URI of the source document |
+| `requests_without_files` | ❌ | ❌ | Jobs where no document could be downloaded (S3 missing / access error) |
+| `DOCUMENT_PARSE_STARTED event` | ❌ | ❌ | Structured event at parse start with format + size |
+| `DOCUMENT_PARSE_COMPLETED event` | ❌ | ❌ | Event with chunk_count, page_count, extraction_status |
+| `DOCUMENT_PARSE_FAILED event` | ❌ | ❌ | Event with parser_used, error_code, document_format |
+
+> **Source note — Consumer Service:** `ingestion/parsers/parse_docx.py`, `parse_xlsx.py`, `parse_store.py` handle per-format extraction. `BaseTenant.ingest()` knows document size (S3 download) and chunk count (after split). Both are computable today, just not emitted.
+
+#### Cross-Service File Telemetry Gaps Summary
+
+| Gap | Affects | Priority | Impact |
+|---|---|---|---|
+| `has_attachment` / `file_count` not captured on any inbound request | GSSP GS, Agentic Orchestration | P0 | Cannot measure multimodal adoption or file-upload volume |
+| `file_types` array absent | GSSP GS | P0 | Cannot detect unsupported formats reaching LLM; no type-distribution analytics |
+| `image_count` / `doc_count` breakdown missing | GSSP GS | P1 | Cannot separate image vs document traffic for cost/capacity planning |
+| `total_file_size_bytes` not tracked | GSSP GS, Data Ingestion, Consumer | P1 | No payload size governance; oversized requests invisible |
+| `document_format` absent from ingestion events | Consumer, Data Ingestion | P1 | Cannot detect format-specific failure rates (e.g. PDF parser breakage) |
+| `chunk_count` and `page_count` not in events | Consumer, Data Ingestion | P1 | Cannot correlate ingestion cost with document complexity |
+| `extraction_status` not a structured field | Consumer, Data Ingestion | P0 | Silent extraction failures produce empty embeddings — undetectable |
+| `requests_without_files` not counted | All inbound services | P1 | Cannot distinguish multimodal vs text-only request patterns |
+| No `FILE_ATTACHMENT_RECEIVED` event | GSSP GS, Agentic Orchestration | P1 | File receipt invisible to observability pipeline |
+| `parser_used` absent | Consumer, Data Ingestion | P2 | Cannot identify which parser caused extraction failures |
+
+---
+
 ### Feedback Telemetry Fields
 
 | Field | User Feedback |
@@ -268,6 +325,21 @@
 | Full HTTP bodies logged | PII risk |
 | No cost tracking for embedding calls | Budget governance impossible |
 
+**Gaps — File / Document Telemetry (High Priority):**
+| Gap | Impact |
+|---|---|
+| `document_format` (pdf/docx/xlsx/html) not in any event | Cannot detect format-specific parser failure rates |
+| `document_size_bytes` absent | No payload size governance; large documents cause silent timeouts |
+| `chunk_count` not emitted after splitting | Cannot correlate ingestion cost with document complexity |
+| `page_count` absent | No document complexity analytics |
+| `extraction_status` not a structured field | Silent parse failures produce empty embeddings undetected |
+| `parser_used` (docx/xlsx/pdf/html/openparse) absent | Cannot identify which parser is responsible for failures |
+| `avg_chunk_size_tokens` not tracked | Cannot detect token-limit violations during embedding |
+| `requests_without_files` not counted | S3 download failures / missing docs invisible at service level |
+| No `DOCUMENT_PARSE_STARTED` / `DOCUMENT_PARSE_COMPLETED` events | Document processing pipeline steps fully invisible |
+
+> **Source:** `BaseTenant.ingest()` downloads the S3 blob (size knowable at download). Parsers in `ingestion/parsers/` produce chunks (count available post-split). Both metrics require only one `emit_event()` call each.
+
 ---
 
 ### 4. Data Ingestion Service
@@ -335,6 +407,18 @@
 | `finish_reason`, `rate_limit_hit`, `safety_blocked` absent | LLM quality monitoring incomplete |
 | Full response body logged (HTTP middleware) | May expose sensitive generated content |
 | Per-request model name not in log line | Cannot filter by model in dashboards |
+
+**Gaps — File / Attachment Telemetry (High Priority):**
+| Gap | Impact |
+|---|---|
+| `has_attachment`, `file_count`, `image_count`, `doc_count` not captured | Multimodal request volume and file-upload patterns invisible |
+| `total_file_size_bytes`, `largest_file_bytes` absent | Oversized multimodal payloads undetected; no size governance |
+| `file_types` array not emitted | Cannot detect unsupported/unexpected MIME types hitting the LLM |
+| `multimodal_flag` absent | Cannot split multimodal vs text-only traffic in dashboards |
+| `requests_without_files` counter missing | Cannot measure what proportion of requests are text-only |
+| No `FILE_ATTACHMENT_RECEIVED` structured event | File intake completely invisible to observability pipeline |
+
+> **Note:** GSSP GS already has `PartHolder` (filename, mime_type, base64 data) in `query/models/part_holder.py`. All file metrics are derivable from the `parts` list at request intake — zero upstream changes required.
 
 ---
 
