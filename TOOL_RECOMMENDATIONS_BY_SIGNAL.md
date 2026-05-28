@@ -16,17 +16,16 @@
 | 4 | Structured application logs | **structlog + Fluent Bit + Elasticsearch** | Low | No — enhance existing |
 | 5 | Distributed traces (cross-service) | **OpenTelemetry + Grafana Tempo** | Medium | Yes — 4–6 weeks |
 | 6 | HTTP latency / error rate metrics | **prometheus-fastapi-instrumentator** | Very Low | Yes — 2–3 weeks |
-| 7 | Kafka consumer lag & health | **kminion → Prometheus → Grafana** | Low | Yes — 2 weeks |
+| 7 | Kafka consumer lag & health | **kminion → Prometheus → Custom Dashboard Service** | Low | Yes — 2 weeks |
 | 8 | PII detection and redaction | **Microsoft Presidio** | Low | Yes — 3–4 weeks |
 | 9 | Error aggregation and grouping | **Sentry (self-hosted)** | Low | Yes — 4 weeks |
-| 10 | SLO / error budget burn rate | **Pyrra → Prometheus → Grafana** | Low | Yes — 3–4 weeks |
-| 11 | Cost and budget governance | **Langfuse + Redis + PostgreSQL** | Low | Yes — 4 weeks |
-| 12 | Kubernetes / infra metrics | **kube-state-metrics + Prometheus** | Very Low | Yes — 1 week |
-| 13 | Document ingestion pipeline events | **OpenTelemetry custom spans → OIS** | Low | No — new signals |
-| 14 | Guardrail decisions | **OIS custom events** | Low | No — new signals |
-| 15 | Vector / embedding health | **pgvector health queries → Prometheus** | Medium | No — new signals |
-| 16 | Alert routing | **Grafana Alerting + PagerDuty** | Low | Partial |
-| 17 | Anomaly detection | **Grafana ML plugin** | Medium | Partial |
+| 10 | Cost and budget governance | **Langfuse + Redis + PostgreSQL + Custom Dashboard** | Low | Yes — 4 weeks |
+| 11 | Kubernetes / infra metrics | **kube-state-metrics + Prometheus** | Very Low | Yes — 1 week |
+| 12 | Document ingestion pipeline events | **OpenTelemetry custom spans → OIS** | Low | No — new signals |
+| 13 | Guardrail decisions | **OIS custom events** | Low | No — new signals |
+| 14 | Vector / embedding health | **pgvector health queries → Prometheus Pushgateway** | Medium | No — new signals |
+| 15 | Platform dashboards & visualization | **Custom Dashboard Service (FastAPI + React + Tremor)** | Medium | Yes — replaces Grafana |
+| 16 | Anomaly detection | **Custom Isolation Forest (Kibana ML for log anomalies)** | Medium | Partial |
 
 ---
 
@@ -372,7 +371,7 @@ Instrumentator(
 ).instrument(app).expose(app)
 ```
 
-**That is all.** Every FastAPI service now has `/metrics` with full latency histograms. Prometheus scrapes it. Grafana plots it.
+**That is all.** Every FastAPI service now has `/metrics` with full latency histograms. Prometheus scrapes it. The Custom Dashboard Service proxies the data and plots it.
 
 ### Prometheus scrape config
 
@@ -389,7 +388,7 @@ scrape_configs:
       - targets: ["gssp-qs.internal:8000"]
 ```
 
-### Grafana dashboard query (p95 latency per endpoint)
+### Custom Dashboard Service — PromQL query for p95 latency per endpoint
 
 ```promql
 histogram_quantile(0.95,
@@ -436,7 +435,7 @@ LLM_TOKENS_TOTAL.labels(
 
 **Problem today:** `kafka_lag`, `kafka_partition`, `kafka_offset`, `consumer_group` all ❌ Missing. No visibility into whether the Agent Executor or Orchestration consumer is falling behind.
 
-**Tool: kminion → Prometheus → Grafana**
+**Tool: kminion → Prometheus → Custom Dashboard Service (Kafka Health page)**
 
 ### Why kminion over alternatives?
 
@@ -476,16 +475,25 @@ kminion_consumer_group_topic_partition_lag /
   rate(kminion_consumer_group_topic_partition_messages_fetched_total[5m])
 ```
 
-### Grafana alert — lag threshold breach
+### Custom Dashboard Kafka Health page
 
-```yaml
-# Alert: AGENT_EXECUTION_REQUEST topic consumer lag > 1000
-- alert: KafkaConsumerLagHigh
-  expr: kminion_consumer_group_topic_partition_lag{topic="AGENT_EXECUTION_REQUEST"} > 1000
-  for: 5m
-  annotations:
-    summary: "Agent Executor consumer is falling behind — {{ $value }} messages behind"
+The Custom Dashboard Service Kafka Health page reads Prometheus metrics via a FastAPI backend query:
+
+```python
+# dashboard-service/api/v1/kafka_health.py
+@router.get("/kafka-health")
+async def kafka_health(conn=Depends(get_pg_conn), user=Depends(require_coin_token)):
+    # Prometheus remote-read or kminion Prometheus endpoint proxy
+    rows = await conn.fetch("""
+        SELECT metric_name, metric_value, metric_tags, timestamp
+        FROM obs_metrics
+        WHERE metric_name = 'kafka_consumer_lag'
+        ORDER BY timestamp DESC LIMIT 100
+    """)
+    return [dict(r) for r in rows]
 ```
+
+The React + Tremor Kafka Health page shows consumer lag per topic/partition as a `BarChart` with a red threshold line at 1000 messages.
 
 ### Emit lag into OIS (for correlation with agent latency)
 
@@ -704,82 +712,9 @@ with sentry_sdk.configure_scope() as scope:
 
 ---
 
-## 10. SLO / Error Budget Burn Rate
+## 10. Cost and Budget Governance
 
-**Problem today:** SLO calculation is planned as a custom `SloEvaluator` class using Redis counters. This works but requires maintaining custom burn-rate logic.
-
-**Tool: Pyrra → Prometheus → Grafana**
-
-### Why Pyrra?
-
-Pyrra is an open-source SLO management tool. You define SLOs as Kubernetes custom resources. Pyrra automatically generates the Prometheus recording rules, alerting rules, and Grafana dashboards — no custom Python code.
-
-| | Custom SloEvaluator (current plan) | Pyrra |
-|---|---|---|
-| Burn rate formula | Custom Python | ✅ Auto-generated Prometheus rules |
-| Multi-window alerts (1h + 6h) | Custom code | ✅ Automatic (Google SRE standard) |
-| Error budget remaining | Custom Redis counter | ✅ Prometheus metric |
-| Grafana dashboard | Custom build | ✅ Auto-generated |
-| SLO definition format | PostgreSQL table | ✅ Kubernetes CRD (YAML, version-controlled) |
-
-### Install Pyrra
-
-```bash
-helm repo add pyrra https://pyrra-dev.github.io/pyrra
-helm install pyrra pyrra/pyrra -n monitoring
-```
-
-### Define SLOs as Kubernetes CRDs (version-controlled in `observability-iac/`)
-
-```yaml
-# observability-iac/slos/gssp-qs-availability.yaml
-apiVersion: pyrra.dev/v1alpha1
-kind: ServiceLevelObjective
-metadata:
-  name: gssp-qs-availability
-  namespace: monitoring
-spec:
-  target: "99.9"                              # 99.9% availability SLO
-  window: 30d                                 # 30-day rolling window
-  description: "GSSP Query Service availability"
-  indicator:
-    ratio:
-      errors:
-        metric: http_requests_total{job="gssp-qs", status=~"5.."}
-      total:
-        metric: http_requests_total{job="gssp-qs"}
-```
-
-```yaml
-# observability-iac/slos/gssp-qs-latency.yaml
-apiVersion: pyrra.dev/v1alpha1
-kind: ServiceLevelObjective
-metadata:
-  name: gssp-qs-p95-latency
-  namespace: monitoring
-spec:
-  target: "99"                               # 99% of requests under 2s
-  window: 30d
-  indicator:
-    latency:
-      success:
-        metric: http_request_duration_seconds_bucket{job="gssp-qs", le="2"}
-      total:
-        metric: http_request_duration_seconds_count{job="gssp-qs"}
-```
-
-**Pyrra auto-generates from these CRDs:**
-- Prometheus recording rules for error budget consumption at 1h, 6h, 24h, 3d windows
-- Multi-window burn-rate alert rules (Google SRE standard)
-- Grafana SLO dashboard with error budget remaining gauge
-
-**This replaces the entire custom `SloEvaluator` class, Redis counters, and `daily_slo_compliance` write logic.** The data flows: FastAPI `/metrics` → Prometheus → Pyrra rules → Grafana SLO dashboard.
-
----
-
-## 11. Cost and Budget Governance
-
-**Tool: Langfuse (per-call) + Redis (real-time accumulator) + PostgreSQL (budget caps)**
+**Tool: Langfuse (per-call) + Redis (real-time accumulator) + PostgreSQL (budget caps) + Custom Dashboard Service**
 > This combination is already detailed in `Developer_Implementation_Guide.md` Section 3a and the `OBSERVABILITY_INGESTION_SERVICE_PLAN.md`. Summary here:
 
 | Layer | Tool | What it does |
@@ -787,32 +722,59 @@ spec:
 | Per-call cost | Langfuse | `estimated_cost_usd` auto-calculated per LLM call from built-in pricing table |
 | Real-time daily accumulator | Redis `INCRBYFLOAT` | Running total per `application_id:model:date` key; sub-millisecond |
 | Budget caps | PostgreSQL `budget_limits` table | Threshold checked on each accumulator update |
-| Alert on breach | OIS → Kafka `ai-obs-events` `BUDGET_THRESHOLD_EXCEEDED` | Routed to Grafana alert + PagerDuty |
-| Aggregate dashboard | Grafana | Queries PostgreSQL `agg_hourly_llm_metrics` + `budget_limits` |
+| Budget breach event | OIS → Kafka `ai-obs-events` `BUDGET_THRESHOLD_EXCEEDED` | Visible on Custom Dashboard Cost Governance page |
+| Aggregate dashboard | **Custom Dashboard Service** — Cost Governance page | Queries PostgreSQL `agg_hourly_llm_metrics` + `budget_limits`; AreaChart actual vs cap |
+
+```tsx
+// src/pages/CostGovernance.tsx — React + Tremor
+import { Card, Title, AreaChart, Table, Badge } from "@tremor/react";
+
+// AreaChart: actual_spend vs budget_cap over 30 days
+// Table with utilisation_pct Badge (red if > 80%)
+```
 
 ---
 
-## 12. Kubernetes / Infrastructure Metrics
+## 11. Kubernetes / Infrastructure Metrics
 
 **Problem today:** No pod CPU/memory, no DB connection pool health, no K8s event monitoring.
 
-**Tool: kube-state-metrics + Prometheus Node Exporter → Prometheus → Grafana**
+**Tool: kube-state-metrics + Prometheus Node Exporter → Prometheus → Custom Dashboard Service**
 
-### Install (standard K8s observability stack)
+### Install (standard K8s observability stack — Grafana disabled)
 
 ```bash
 helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
 helm install kube-prometheus-stack prometheus-community/kube-prometheus-stack \
   --namespace monitoring \
-  --set grafana.enabled=true \
+  --set grafana.enabled=false \   # ← Grafana disabled; Custom Dashboard Service replaces it
   --set prometheus.enabled=true
 ```
 
-This single Helm chart deploys:
+This installs:
 - **kube-state-metrics** — K8s object metrics (pod restarts, deployment replicas, job status)
 - **node-exporter** — Node CPU, memory, disk, network
 - **Prometheus** — Scrapes everything
-- **Grafana** — Pre-built K8s dashboards (Kubernetes / Compute Resources / Workload)
+
+The Custom Dashboard Service Platform Overview page exposes K8s health via a `/api/v1/infra-health` endpoint that proxies Prometheus queries:
+
+```python
+# dashboard-service/api/v1/infra_health.py
+import httpx
+
+PROMETHEUS_URL = "http://prometheus.monitoring.svc:9090"
+
+@router.get("/infra-health")
+async def infra_health(user=Depends(require_coin_token)):
+    async with httpx.AsyncClient() as client:
+        pod_restarts = await client.get(f"{PROMETHEUS_URL}/api/v1/query", params={
+            "query": "sum by (pod) (kube_pod_container_status_restarts_total)"
+        })
+        cpu_usage = await client.get(f"{PROMETHEUS_URL}/api/v1/query", params={
+            "query": "sum by (container) (rate(container_cpu_usage_seconds_total[5m]))"
+        })
+    return {"pod_restarts": pod_restarts.json(), "cpu_usage": cpu_usage.json()}
+```
 
 **What you get immediately without any code:**
 - Pod restart count per service (detects crash loops)
@@ -838,7 +800,7 @@ async def update_pool_metrics(pool, service_name: str):
 
 ---
 
-## 13. Document Ingestion Pipeline Events
+## 12. Document Ingestion Pipeline Events
 
 **Problem today:** `DOCUMENT_PARSE_STARTED`, `DOCUMENT_PARSE_COMPLETED`, `DOCUMENT_PARSE_FAILED`, `chunk_count`, `page_count`, `extraction_status`, `parser_used` — all ❌ Missing.
 
@@ -912,13 +874,13 @@ async def ingest(self, job: IngestionJob):
 ```
 
 This produces:
-1. A Grafana Tempo trace showing the full ingestion pipeline with timing per stage
-2. OIS events (`DOCUMENT_PARSE_STARTED/COMPLETED/FAILED`) written to `obs_events` for aggregate dashboards
+1. A **Grafana Tempo** trace showing the full ingestion pipeline with timing per stage (Tempo = trace backend, not dashboard tool)
+2. OIS events (`DOCUMENT_PARSE_STARTED/COMPLETED/FAILED`) written to `obs_events` for Custom Dashboard aggregate panels
 3. Prometheus metrics (via `prometheus_client`) for queue depth and job duration
 
 ---
 
-## 14. Guardrail Decisions
+## 13. Guardrail Decisions
 
 **Problem today:** `GUARDRAIL_EVALUATED`, `GUARDRAIL_BLOCKED`, `risk_score`, `violation_type`, `policy_version` — all ❌ Missing.
 
@@ -955,20 +917,27 @@ async def evaluate(self, query: str, ctx: ObsContext) -> GuardrailResult:
     return result
 ```
 
-**Grafana alert on guardrail spike:**
-```promql
-# Alert when guardrail block rate exceeds 5x baseline
-increase(obs_events_total{event_type="GUARDRAIL_BLOCKED"}[1h]) /
-increase(obs_events_total{event_type="GUARDRAIL_EVALUATED"}[1h]) > 0.15
+**Custom Dashboard indicator on guardrail spike:**
+
+The Custom Dashboard Platform Overview page shows a guardrail block rate KPI card. When `block_rate > 15%` over 1h the card turns red. Query:
+```python
+# dashboard-service/api/v1/overview.py — guardrail section
+SELECT
+    COUNT(*) FILTER (WHERE event_type = 'GUARDRAIL_BLOCKED') AS blocked,
+    COUNT(*) FILTER (WHERE event_type = 'GUARDRAIL_EVALUATED') AS total,
+    COUNT(*) FILTER (WHERE event_type = 'GUARDRAIL_BLOCKED')::float /
+        NULLIF(COUNT(*) FILTER (WHERE event_type = 'GUARDRAIL_EVALUATED'), 0) AS block_rate
+FROM obs_events
+WHERE timestamp >= NOW() - INTERVAL '1 hour'
 ```
 
 ---
 
-## 15. Vector / Embedding Health
+## 14. Vector / Embedding Health
 
 **Problem today:** Embedding drift, index freshness, retrieval recall@k — ❌ not monitored anywhere. Silent RAG quality degradation is undetectable.
 
-**Tool: Custom pgvector health queries → Prometheus Pushgateway → Grafana**
+**Tool: Custom pgvector health queries → Prometheus Pushgateway → Custom Dashboard RAG Quality page**
 
 There is no off-the-shelf tool for pgvector health. This is a custom monitoring job that runs on a schedule and pushes metrics to Prometheus.
 
@@ -1043,137 +1012,111 @@ async def check_vector_health():
     ])
 ```
 
-**Grafana alert on stale index:**
-```promql
-pgvector_index_freshness_hours{rag_id=~".*"} > 24
+**Custom Dashboard RAG Quality page shows stale index indicator:**
+
+Snapshot rows from `vector_health_snapshots` (written by the CronJob) are displayed in the Custom Dashboard RAG Quality page. Any `hours_since_indexed > 24` row renders with a red `Badge` in the Tremor `Table`:
+```tsx
+<Badge color={row.hours_since_indexed > 24 ? "red" : "green"}>
+  {row.hours_since_indexed > 24 ? "STALE" : "FRESH"}
+</Badge>
 ```
 
 **Embedding drift proxy:** If `avg_embedding_norm` shifts significantly over time (rolling std > 2×), it indicates the embedding model may have changed or the document distribution has shifted — a signal to re-embed the knowledge base.
 
 ---
 
-## 16. Alert Routing
+## 15. Platform Dashboards and Visualization
 
-**Tool: Grafana Alerting + Alertmanager + PagerDuty**
+**Tool: Custom Dashboard Service (FastAPI + React + Tremor)**
 
-### Why this combination?
+This is Option 4 — the platform's own dashboard service instead of Grafana.
 
-- **Grafana Alerting** evaluates rules on any data source (Prometheus, PostgreSQL, Elasticsearch, Loki)
-- **Alertmanager** handles grouping, silencing, routing, and deduplication
-- **PagerDuty** provides on-call scheduling, escalation, and mobile push
+### Architecture
 
-### Alertmanager routing config
-
-```yaml
-# alertmanager.yml
-global:
-  pagerduty_url: "https://events.pagerduty.com/v2/enqueue"
-
-route:
-  receiver: "default"
-  group_by: ["alertname", "service_name", "application_id"]
-  group_wait: 30s
-  group_interval: 5m
-  repeat_interval: 4h
-
-  routes:
-    # Critical LLM / agent failures → immediate page
-    - match:
-        severity: critical
-      receiver: pagerduty-critical
-      continue: false
-
-    # SLO burn rate alerts → high-priority page
-    - match_re:
-        alertname: "SLO.*BurnRate.*"
-      receiver: pagerduty-slo
-      continue: false
-
-    # Budget threshold → Slack notification
-    - match:
-        alertname: BudgetThresholdExceeded
-      receiver: slack-finance
-      continue: false
-
-receivers:
-  - name: pagerduty-critical
-    pagerduty_configs:
-      - routing_key: "${PAGERDUTY_INTEGRATION_KEY}"
-        severity: critical
-        description: "{{ .GroupLabels.alertname }}: {{ .Annotations.summary }}"
-
-  - name: slack-finance
-    slack_configs:
-      - api_url: "${SLACK_WEBHOOK_URL}"
-        channel: "#platform-costs"
-        text: "💰 Budget alert: {{ .Annotations.summary }}"
+```
+PostgreSQL agg_* tables ──┐
+Elasticsearch anomalies ──┤──► FastAPI /api/v1/* ──► React + Tremor UI
+Langfuse SDK              ──┘                         COIN JWT auth
 ```
 
-### Key alert rules (Prometheus)
+### Backend (FastAPI)
 
-```yaml
-# observability-iac/grafana/alert-rules/platform.yml
-groups:
-  - name: platform-availability
-    rules:
-      - alert: ServiceErrorRateHigh
-        expr: |
-          rate(http_requests_total{status=~"5.."}[5m]) /
-          rate(http_requests_total[5m]) > 0.05
-        for: 2m
-        labels: { severity: critical }
-        annotations:
-          summary: "{{ $labels.job }} error rate > 5% for 2 minutes"
+```python
+# dashboard-service/api/v1/overview.py
+from fastapi import APIRouter, Depends
+from auth.coin_jwt import require_coin_token
+from db.connection import get_pg_conn
 
-      - alert: LLMCostBudgetWarning
-        expr: |
-          (SELECT budget_utilization_pct FROM obs_events
-           WHERE event_type = 'BUDGET_THRESHOLD_EXCEEDED'
-           ORDER BY timestamp DESC LIMIT 1) > 80
-        for: 0m
-        labels: { severity: warning }
+router = APIRouter()
 
-      - alert: KafkaLagCritical
-        expr: kminion_consumer_group_topic_partition_lag > 5000
-        for: 3m
-        labels: { severity: critical }
-        annotations:
-          summary: "Kafka consumer {{ $labels.consumer_group }} is {{ $value }} messages behind on {{ $labels.topic }}"
-
-      - alert: RAGNoResultRateHigh
-        expr: |
-          increase(obs_events_total{event_type="RAG_NO_RESULT"}[1h]) /
-          increase(obs_events_total{event_type="RAG_RETRIEVAL_COMPLETED"}[1h]) > 0.2
-        for: 10m
-        labels: { severity: warning }
-        annotations:
-          summary: "RAG returning no results on >20% of queries in the last hour"
+@router.get("/overview")
+async def platform_overview(
+    hours: int = 24,
+    application_id: str = None,
+    conn=Depends(get_pg_conn),
+    user=Depends(require_coin_token),
+):
+    query = """
+        SELECT service_name,
+               SUM(request_count) AS total_requests,
+               SUM(success_count)::float / NULLIF(SUM(request_count), 0) AS success_rate,
+               SUM(error_count)::float   / NULLIF(SUM(request_count), 0) AS error_rate,
+               AVG(avg_latency_ms) AS avg_latency,
+               MAX(p95_latency_ms) AS p95_latency,
+               SUM(total_tokens) AS total_tokens,
+               SUM(estimated_cost) AS total_cost
+        FROM agg_hourly_application_metrics
+        WHERE hour_timestamp >= NOW() - ($1 || ' hours')::INTERVAL
+          AND ($2::text IS NULL OR application_id = $2)
+        GROUP BY service_name
+    """
+    rows = await conn.fetch(query, hours, application_id)
+    return [dict(r) for r in rows]
 ```
+
+### Frontend (React + Tremor)
+
+```tsx
+// src/pages/PlatformOverview.tsx
+import { Card, Title, AreaChart, BarChart, Grid } from "@tremor/react";
+
+// KPI cards: total requests, error rate, total LLM cost
+// BarChart: error rate by service
+// BarChart: P95 latency by service
+// AreaChart: request volume over 24h
+```
+
+### Dashboard Pages
+
+| Page | Data Source | Key Components |
+|---|---|---|
+| Platform Overview | `agg_hourly_application_metrics` | KPI cards, BarChart (errors/latency), AreaChart (volume) |
+| Cost Governance | `budget_limits` + `agg_hourly_llm_metrics` | AreaChart (actual vs cap), Table with utilisation Badge |
+| Business KPIs | `agg_daily_kpi_metrics` | Table + Trend sparklines |
+| Kafka Health | `obs_metrics` (kafka_consumer_lag) | BarChart (lag by topic) |
+| RAG Quality | `daily_rag_quality` + `vector_health_snapshots` | Table with freshness Badge, faithfulness score KPIs |
+| Anomaly View | Elasticsearch `ai-obs-anomalies-*` | Timeline, anomaly score sparklines |
+| Feedback Trends | `agg_daily_feedback_metrics` + `feedback_case` | BarChart (pos/neg ratio), categories Table |
 
 ---
 
-## 17. Anomaly Detection
+## 16. Anomaly Detection
 
-**Tool: Grafana Machine Learning plugin (Phase 1) → Custom Isolation Forest (Phase 2)**
+**Tool: Custom Isolation Forest (already designed in `Developer_Implementation_Guide.md` Section 7)**
 
-### Phase 1 — Grafana ML Plugin (zero code, ships in Grafana Enterprise / OSS with plugin)
-
-Grafana's ML plugin runs forecasting and anomaly detection directly on any Prometheus or Elasticsearch metric — no separate service needed.
+The Custom Anomaly Detection Service uses scikit-learn Isolation Forest + LSTM for temporal anomalies. Results flow:
 
 ```
-Grafana ML Plugin setup:
-1. Select metric: http_request_duration_seconds{job="gssp-qs", quantile="0.95"}
-2. Select algorithm: "Outlier Detection (DBSCAN)"
-3. Set sensitivity: 0.7
-4. Enable: "Alert when anomaly detected"
-→ Grafana automatically alerts when p95 latency deviates from its learned baseline
+Anomaly Detection Service → ai-obs-anomalies (Kafka) → Elasticsearch → Custom Dashboard Anomaly View
 ```
 
-This requires zero infrastructure and gives you anomaly detection on any Prometheus metric in minutes.
+For log-level anomaly detection (unusual error patterns in free-text logs), **Kibana Machine Learning** is used — it is already included in the Elasticsearch cluster and requires no additional infrastructure:
 
-### Phase 2 — Custom Isolation Forest (for LLM/agent-specific signals)
-
-When Grafana ML is insufficient (e.g., detecting correlated anomalies across `latency_ms + error_rate + token_cost` for the same `application_id`), use the custom Anomaly Detection Service already designed in `Developer_Implementation_Guide.md` Section 7.
+```
+Kibana → Machine Learning → Anomaly Explorer
+→ Detects unusual error frequency patterns per service
+→ No separate Grafana plugin needed
+```
 
 ---
 
@@ -1188,25 +1131,32 @@ When Grafana ML is insufficient (e.g., detecting correlated anomalies across `la
 │  Evaluations             ──► Langfuse LLM-as-judge                     │
 │                                                                         │
 │  Structured app logs     ──► structlog → Fluent Bit → Elasticsearch    │
-│  Distributed traces      ──► OpenTelemetry SDK → Grafana Tempo          │
+│  Distributed traces      ──► OpenTelemetry SDK → Grafana Tempo         │
+│                               (Tempo = trace backend only, no UI)      │
 │  HTTP latency metrics    ──► prometheus-fastapi-instrumentator          │
-│                               → Prometheus → Grafana                   │
+│                               → Prometheus → Custom Dashboard Service  │
 │                                                                         │
-│  Kafka consumer lag      ──► kminion → Prometheus → Grafana             │
-│  K8s / infra metrics     ──► kube-prometheus-stack (1 Helm install)    │
-│  Vector / embed health   ──► Custom CronJob → Pushgateway → Grafana    │
+│  Kafka consumer lag      ──► kminion → Prometheus                      │
+│                               → Custom Dashboard Kafka Health page     │
+│  K8s / infra metrics     ──► kube-prometheus-stack                     │
+│                               (grafana.enabled=false; metrics scraped  │
+│                                by Custom Dashboard Service)            │
+│  Vector / embed health   ──► Custom CronJob → Pushgateway              │
+│                               → Custom Dashboard RAG Quality page      │
 │                                                                         │
 │  PII redaction           ──► Microsoft Presidio (self-hosted)          │
 │  Error aggregation       ──► Sentry (self-hosted)                      │
-│  SLO / error budgets     ──► Pyrra → Prometheus → Grafana              │
 │  Cost / budget caps      ──► Langfuse + Redis + PostgreSQL             │
+│                               → Custom Dashboard Cost Governance page  │
 │                                                                         │
 │  Guardrail events        ──► OIS custom events                         │
 │  Document ingestion      ──► OpenTelemetry custom spans → OIS          │
-│  Alert routing           ──► Grafana Alerting → Alertmanager           │
-│                               → PagerDuty                              │
-│  Anomaly detection       ──► Grafana ML plugin (Phase 1)               │
-│                               Custom Isolation Forest (Phase 2)        │
+│  Anomaly detection       ──► Custom Isolation Forest → Elasticsearch   │
+│                               → Custom Dashboard Anomaly View          │
+│  Log anomaly detection   ──► Kibana ML (built into Elasticsearch)      │
+│                                                                         │
+│  Platform dashboards     ──► Custom Dashboard Service                  │
+│                               (FastAPI + React + Tremor, COIN JWT)     │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -1219,14 +1169,13 @@ When Grafana ML is insufficient (e.g., detecting correlated anomalies across `la
 | Custom `JSONFormatter` + `AppInfoFilter` | `structlog` shared config | 2 weeks |
 | Custom `PiiRedactor` (regex) | Microsoft Presidio | 3–4 weeks |
 | Custom `FaithfulnessScorer` | Langfuse LLM-as-judge | 3–4 weeks |
-| Custom `SloEvaluator` + Redis burn rate | Pyrra → Prometheus | 3–4 weeks |
-| Custom Anomaly Detection (Phase 1) | Grafana ML plugin | 6–8 weeks |
-| Custom distributed trace correlation | OpenTelemetry → Tempo | 4–6 weeks |
+| Custom Anomaly Detection service (Phase 1) | Kibana ML (built into Elasticsearch) | 6–8 weeks |
+| Custom distributed trace correlation | OpenTelemetry → Grafana Tempo | 4–6 weeks |
 | Custom `/metrics` endpoint per service | prometheus-fastapi-instrumentator | 2–3 weeks per service |
 | Custom Kafka lag monitoring | kminion | 2 weeks |
 | Custom K8s metrics | kube-prometheus-stack | 1 week |
 | Error grouping in Elasticsearch | Sentry | 4 weeks |
-| **Total custom engineering replaced** | | **~35–50 weeks** |
+| **Total custom engineering replaced** | | **~30–45 weeks** |
 
 ---
 
@@ -1236,13 +1185,15 @@ When Grafana ML is insufficient (e.g., detecting correlated anomalies across `la
 |---|---|---|---|
 | **Week 1** | Langfuse deploy + GSSP GS `@observe` | 2 days | LLM traces visible immediately |
 | **Week 1** | `prometheus-fastapi-instrumentator` on all 8 services | 1 day | HTTP p95 latency for all services |
-| **Week 1** | kminion deploy | 0.5 day | Kafka lag dashboard live |
-| **Week 2** | kube-prometheus-stack Helm install | 0.5 day | K8s + infra dashboards live |
+| **Week 1** | kminion deploy | 0.5 day | Kafka lag metrics collecting |
+| **Week 2** | kube-prometheus-stack Helm install (`grafana.enabled=false`) | 0.5 day | K8s + infra metrics collecting |
 | **Week 2** | `structlog` migration (start with 1 service) | 3 days | Consistent log schema |
-| **Week 3** | OpenTelemetry + Grafana Tempo | 3 days | Cross-service trace tree |
+| **Week 3** | OpenTelemetry + Grafana Tempo (trace backend) | 3 days | Cross-service trace tree in Tempo |
 | **Week 3** | Langfuse on GSSP QS + Agent Executor | 3 days | RAG + agent traces |
 | **Week 4** | Presidio deploy + wire into OIS redactor | 2 days | PII redaction for all events |
 | **Week 4** | Sentry self-hosted + SDK in all services | 2 days | Error grouping and trends |
-| **Week 5** | Pyrra SLO definitions | 1 day | SLO dashboards + burn alerts |
-| **Week 6** | Grafana ML anomaly detection | 1 day | Anomaly alerts with no code |
-| **Week 8** | Vector health CronJob + Pushgateway | 2 days | Embedding freshness monitoring |
+| **Week 5** | Custom Dashboard Service — backend FastAPI endpoints | 3 days | Platform Overview + Kafka Health live |
+| **Week 5** | Custom Dashboard Service — React + Tremor frontend | 2 days | Cost Governance + RAG Quality pages |
+| **Week 6** | Kibana ML anomaly detection jobs | 1 day | Log anomaly detection with no code |
+| **Week 7** | Custom Isolation Forest service | 3 days | Metric-level anomaly detection |
+| **Week 8** | Vector health CronJob + Pushgateway | 2 days | Embedding freshness on RAG Quality page |

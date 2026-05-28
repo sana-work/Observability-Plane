@@ -160,7 +160,17 @@ It recreates the exact problem the Observability Plane is trying to solve: no st
   │  obs_events      │                  │  agg_hourly_llm     │
   │  Elasticsearch   │                  └─────────────────────┘
   │  S3              │
-  └──────────────────┘
+  └────────┬─────────┘
+           │
+           ▼
+  ┌──────────────────────────────────────┐
+  │  Custom Dashboard Service            │
+  │  FastAPI backend + React + Tremor UI │
+  │  Platform Overview / Cost / KPIs /   │
+  │  Kafka Health / RAG Quality /        │
+  │  Anomaly View / Feedback Trends      │
+  │  COIN JWT auth — internal only       │
+  └──────────────────────────────────────┘
 ```
 
 **What each layer handles:**
@@ -175,8 +185,8 @@ It recreates the exact problem the Observability Plane is trying to solve: no st
 | Kafka lag, consumer offsets | OIS → PostgreSQL | Infrastructure metric |
 | Document ingestion pipeline events | OIS → PostgreSQL | Non-LLM pipeline |
 | Service health, auth events | OIS → PostgreSQL | Platform-level signals |
-| SLO compliance, error budgets | OIS → PostgreSQL → Grafana | SRE operational concern |
-| Business KPIs, budget governance | OIS → PostgreSQL → Grafana | Domain aggregates |
+| Business KPIs, budget governance | OIS → PostgreSQL → Custom Dashboard Service | Domain aggregates (FastAPI + React + Tremor) |
+| Cost governance, model spend | OIS → PostgreSQL → Custom Dashboard Service | Per-application budget tracking |
 
 **Why this is correct:**
 

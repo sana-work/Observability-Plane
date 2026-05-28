@@ -45,11 +45,11 @@ The updated architecture assumes:
 - **Elasticsearch / Kibana** will continue to be used for logs, event search, trace search, and operational dashboards.
 - **PostgreSQL** will be used for metadata, registry, KPI definitions, aggregate metric tables, and chatbot-ready summary data.
 - **Amazon S3** will be used as the object store for redacted prompts, responses, traces, RAG contexts, audit files, and long payloads.
-- **Grafana** will be used for infrastructure/platform monitoring, alerting, and service health dashboards.
+- **Custom Dashboard Service** (FastAPI + React + Tremor) will be used for infrastructure/platform monitoring and service health dashboards — COIN JWT auth, no external tools required.
 - **Apache Kafka** will continue to support async agent execution and observability event streaming.
 - **OpenTelemetry / Observability SDK** will standardize trace, metric, log, and event capture across the platform.
 
-> Note: Grafana is primarily a visualization and alerting layer. It should connect to available data sources such as Elasticsearch, PostgreSQL, Kafka/JMX metrics, CloudWatch, or other enterprise monitoring sources.
+> Note: The Custom Dashboard Service is the platform's own visualization layer (FastAPI backend + React + Tremor UI). It connects to PostgreSQL aggregate tables, Elasticsearch, and Langfuse API. No Grafana dependency.
 
 ---
 
@@ -116,13 +116,13 @@ flowchart LR
         ES["Elasticsearch<br/><br/>Operational event store<br/>Logs, errors, traces, LLM/tool/RAG events, feedback search"]
         PG["PostgreSQL<br/><br/>Metadata + aggregates<br/>Registries, KPI definitions, error catalog, feedback cases, rollups"]
         S3["Amazon S3<br/><br/>Object store<br/>Redacted prompts, responses, full trace payloads, RAG contexts, uploaded docs, audit evidence"]
-        GRAF["Grafana<br/><br/>Monitoring & alerting layer<br/>Infra dashboards, service health, Kafka lag, latency, alerts"]
+        CUSTOMDASH["Custom Dashboard Service<br/><br/>FastAPI + React + Tremor<br/>Platform Overview, Cost, KPIs,<br/>Kafka Health, RAG Quality,<br/>Anomaly View, Feedback Trends<br/>COIN JWT auth"]
     end
 
     subgraph PRESENT["6. Observability Presentation"]
         KIBANA["Kibana Dashboards<br/>Operational search and event analytics"]
-        GFDASH["Grafana Dashboards<br/>Infrastructure, service health, alerting"]
-        APPDASH["Application Overview<br/>SLA, usage, errors, latency"]
+        GFDASH["Custom Dashboard Pages<br/>Platform health, Cost Governance, KPIs"]
+        APPDASH["Application Overview<br/>Usage, errors, latency"]
         AGENTDASH["Agent Observability<br/>success rate, steps, tool usage, cost"]
         RAGDASH["RAG Observability<br/>hit rate, no-result rate, relevance, citations"]
         TOOLDASH["Tool Health<br/>failures, retries, timeout, dependency health"]
@@ -187,7 +187,7 @@ flowchart LR
     PROCESSOR --> ES
     PROCESSOR --> PG
     PROCESSOR --> S3
-    PROCESSOR --> GRAF
+    PROCESSOR --> CUSTOMDASH
 
     ES --> KIBANA
     ES --> APPDASH
@@ -205,8 +205,8 @@ flowchart LR
     PG --> LLMVIEW
     PG --> FEEDVIEW
 
-    GRAF --> GFDASH
-    GRAF --> APPDASH
+    CUSTOMDASH --> GFDASH
+    CUSTOMDASH --> APPDASH
 
     S3 --> TRACEVIEW
 
@@ -217,11 +217,11 @@ flowchart LR
     QP --> PG
     QP --> ES
     QP --> S3
-    QP --> GRAF
+    QP --> CUSTOMDASH
     PG --> ANSWER
     ES --> ANSWER
     S3 --> ANSWER
-    GRAF --> ANSWER
+    CUSTOMDASH --> ANSWER
     ANSWER --> BOT
 ```
 
@@ -245,7 +245,7 @@ sequenceDiagram
     participant ES as Elasticsearch
     participant PG as PostgreSQL
     participant S3 as Amazon S3
-    participant Grafana as Grafana
+    participant Dash as Custom Dashboard Service
     participant Bot as Observability Chatbot
 
     User->>Orch: Submit request
@@ -281,11 +281,12 @@ sequenceDiagram
     Pipe->>ES: Store searchable events and traces
     Pipe->>PG: Store metadata and aggregate KPIs
     Pipe->>S3: Store redacted raw payloads and long traces
-    Pipe->>Grafana: Publish monitoring/alerting metrics
+    Pipe->>Dash: Write agg metrics for platform health pages
 
     Bot->>PG: Ask aggregate metric question
     Bot->>ES: Drill into trace or error events
     Bot->>S3: Fetch payload artifact if authorized
+    Bot->>Dash: Fetch KPI / cost / kafka health summaries
     Bot-->>User: Answer with metric, filters, explanation, dashboard link
 ```
 
@@ -300,8 +301,8 @@ Since ClickHouse is not available, the recommended architecture is:
 | Operational event store | **Elasticsearch** | Logs, traces, error search, recent analytics, Kibana dashboards |
 | Metadata and aggregate store | **PostgreSQL** | Registries, KPI definitions, feedback cases, aggregate metrics, chatbot summary layer |
 | Object store | **Amazon S3** | Redacted prompts, responses, long traces, RAG contexts, uploaded documents, audit evidence |
-| Monitoring and alerting | **Grafana** | Infrastructure/service monitoring, Kafka lag, alerts, SLA/SLO health views |
-| Dashboard layer | **Kibana + Grafana** | Kibana for event/log analytics; Grafana for service health and alerting |
+| Platform dashboard | **Custom Dashboard Service** | FastAPI + React + Tremor; Platform Overview, Cost Governance, Kafka Health, RAG Quality, Anomaly View, Feedback Trends — COIN JWT auth |
+| Operational dashboard layer | **Kibana** | Event/log analytics, trace drill-down, error exploration |
 | Chatbot data layer | **PostgreSQL + Elasticsearch + Amazon S3** | Aggregate answers, drill-down search, secure artifact retrieval |
 
 ### Recommended Data Flow
@@ -315,9 +316,9 @@ Kafka Observability Topics
     ↓
 Telemetry Processor / Enrichment Layer
     ↓
-Elasticsearch + PostgreSQL + Amazon S3 + Grafana
+Elasticsearch + PostgreSQL + Amazon S3 + Custom Dashboard Service
     ↓
-Kibana Dashboards + Grafana Dashboards + Observability Chatbot
+Kibana Dashboards + Custom Dashboard Service + Observability Chatbot
 ```
 
 ---
@@ -476,41 +477,46 @@ Recommended S3 controls:
 
 ---
 
-### 5.4 Grafana
+### 5.4 Custom Dashboard Service
 
-Use Grafana for infrastructure, platform health, and alerting dashboards.
+Use the Custom Dashboard Service (FastAPI + React + Tremor) for platform health and visualization. This is the platform's own internal dashboard — COIN JWT auth, no external visualization tool required.
 
-Grafana should cover:
+The Custom Dashboard Service covers:
 
-- Service availability
-- Pod/container health
-- CPU / memory
-- API latency
-- Kafka lag
-- Kafka throughput
-- Executor queue backlog
-- Error-rate alerts
-- SLA/SLO burn-rate alerts
-- LLM latency alerts
-- Tool failure alerts
-- RAG no-result spike alerts
-- Negative feedback spike alerts
+- Service availability (Platform Overview page)
+- API latency — p95 per service (Platform Overview page)
+- Kafka consumer lag by topic (Kafka Health page)
+- Kafka throughput and DLQ counts (Kafka Health page)
+- LLM cost by application and model (Cost Governance page)
+- Budget utilisation vs. cap (Cost Governance page)
+- RAG quality metrics — no-result rate, faithfulness, citation coverage (RAG Quality page)
+- Vector index freshness (RAG Quality page)
+- Business KPIs — zero-touch rate, resolution time, SLA adherence (Business KPI page)
+- Anomaly detection results (Anomaly View page)
+- Feedback sentiment trends (Feedback Trends page)
 
-Recommended Grafana data sources:
+Data sources for the Custom Dashboard Service:
 
-- Elasticsearch
-- PostgreSQL
-- CloudWatch or enterprise infra metrics source
-- Kafka/JMX metrics exporter
-- Kubernetes metrics source, if available
-- Alertmanager or enterprise notification system, if available
+- **PostgreSQL** `agg_*` tables — pre-computed hourly/daily rollups
+- **Elasticsearch** `ai-obs-anomalies-*` — anomaly detection results
+- **Langfuse API** — LLM quality scores, faithfulness, RAG evals
+- **Prometheus** — infrastructure metrics proxied through FastAPI endpoints
+
+**Architecture:**
+
+```
+PostgreSQL agg_* tables ──┐
+Elasticsearch anomalies ──┤──► FastAPI /api/v1/* ──► React + Tremor UI
+Langfuse SDK              ──┤                         COIN JWT auth
+Prometheus metrics        ──┘
+```
 
 
 ---
 
 ### 5.5 End-to-End Storage Component Mapping
 
-This table maps every major observability data category to the correct storage component. The intent is to keep each storage layer focused: **Elasticsearch for searchable operational events**, **PostgreSQL for governed metadata and aggregates**, **Amazon S3 for large payloads/artifacts**, and **Grafana for monitoring and alerting views**.
+This table maps every major observability data category to the correct storage component. The intent is to keep each storage layer focused: **Elasticsearch for searchable operational events**, **PostgreSQL for governed metadata and aggregates**, **Amazon S3 for large payloads/artifacts**, and the **Custom Dashboard Service for platform health visualization**.
 
 | Storage Component | Data / Information Stored | Physical Object | Grain / Level | Purpose | Typical Consumers |
 |---|---|---|---|---|---|
@@ -531,7 +537,7 @@ This table maps every major observability data category to the correct storage c
 | **PostgreSQL** | KPI definitions | `kpi_definition` | One row per KPI | Business KPI formulas, thresholds, ownership, reportability | KPI dashboard, business reporting, chatbot |
 | **PostgreSQL** | Feedback cases | `feedback_case` | One row per user/SME feedback item | Feedback workflow, sentiment, category, resolution status | Feedback dashboard, quality improvement, chatbot |
 | **PostgreSQL** | Dashboard configurations | `dashboard_config` | One row per dashboard/widget configuration | Dashboard metadata, filters, ownership, visibility | Dashboard service, admin UI |
-| **PostgreSQL** | Alert thresholds | `alert_threshold` | One row per alert rule/threshold | Alert configuration, threshold, window, severity, routing | Grafana alerts, incident routing |
+| **PostgreSQL** | Alert thresholds | `alert_threshold` | One row per alert rule/threshold | Threshold conditions surfaced as KPI card colours in Custom Dashboard Service | Custom Dashboard Service KPI cards, incident routing |
 | **PostgreSQL** | Chatbot semantic metric catalog | `metric_catalog` | One row per governed metric | Metric names, aliases, formulas, dimensions, approved sources | Observability chatbot, dashboard consistency |
 | **PostgreSQL** | Hourly application metrics | `agg_hourly_application_metrics` | One row per application per hour | Fast application-level rollups | Executive dashboard, chatbot, SLA reporting |
 | **PostgreSQL** | Hourly agent metrics | `agg_hourly_agent_metrics` | One row per agent per hour | Fast agent-level rollups | Agent dashboard, chatbot |
@@ -545,8 +551,7 @@ This table maps every major observability data category to the correct storage c
 | **Amazon S3** | RAG contexts and retrieved chunks | `s3://ai-observability-*/rag-contexts/` | One object per RAG request/trace | Store retrieved context without bloating Elasticsearch/PostgreSQL | RAG quality review, audit, chatbot with access checks |
 | **Amazon S3** | Uploaded documents and evidence artifacts | `s3://ai-observability-*/uploaded-documents/`, `s3://ai-observability-*/audit-evidence/` | One object per file/artifact | Long-term artifact storage with retention controls | Audit review, compliance, RCA |
 | **Amazon S3** | Debug bundles and offline RCA exports | `s3://ai-observability-*/debug-bundles/` | One object per incident/trace bundle | Exportable investigation package | Support teams, incident review |
-| **Grafana** | Infrastructure and service health metrics | Dashboards backed by infra data sources | Time-series metric | Visualize CPU, memory, pod health, API latency, Kafka lag, availability | Platform SRE, operations, leadership |
-| **Grafana** | Alert rules and notifications | Grafana alert rules using `alert_threshold` definitions where applicable | One alert rule per metric/condition | Alerting, incident notification, SLO/SLA monitoring | SRE, support teams, app owners |
+| **Custom Dashboard Service** | Platform health pages — Overview, Cost Governance, Kafka Health, RAG Quality, Anomaly View, Feedback Trends, Business KPIs | FastAPI backend reading PostgreSQL `agg_*` tables, Elasticsearch anomalies, Langfuse, and Prometheus | Aggregate / dashboard page | Pre-computed rollups pulled on demand via REST; COIN JWT auth | Long-lived config | SRE, platform operations, leadership, app owners |
 | **Kibana** | Operational dashboards over Elasticsearch | Kibana data views and dashboards | Event/log analytics view | Event search, error analysis, trace drill-down | App teams, support teams, platform team |
 
 ### 5.6 Detailed Data Store Responsibility Map
@@ -575,8 +580,8 @@ The following map expands the storage responsibility model across **all data sto
 | **PostgreSQL** | `kpi_definition` | Business and operational KPI formulas, thresholds, and ownership | One row per KPI definition | KPI admin/product owners | Long-lived | KPI dashboard, business reporting, chatbot |
 | **PostgreSQL** | `feedback_case` | Governed feedback workflow and resolution tracking | One row per feedback case | Feedback UI / review workflow | 1–3 years | Feedback dashboard, improvement backlog |
 | **PostgreSQL** | `metric_catalog` | Semantic metric catalog used by dashboards and chatbot | One row per approved metric | Platform analytics team | Long-lived | Chatbot semantic layer, dashboards |
-| **PostgreSQL** | `dashboard_config` | Dashboard/page/widget/filter configuration | One row per dashboard or widget config | Dashboard admin UI/config pipeline | Long-lived | Kibana/Grafana/custom UI config |
-| **PostgreSQL** | `alert_threshold` | Thresholds, conditions, windows, owners, notification routing | One row per alert rule/threshold | SRE/app owner configuration | Long-lived | Grafana alerting, incident routing |
+| **PostgreSQL** | `dashboard_config` | Dashboard/page/widget/filter configuration | One row per dashboard or widget config | Dashboard admin UI/config pipeline | Long-lived | Custom Dashboard Service + Kibana config |
+| **PostgreSQL** | `alert_threshold` | Thresholds and conditions surfaced in Custom Dashboard KPI cards | One row per threshold/condition | SRE/app owner configuration | Long-lived | Custom Dashboard Service KPI cards, incident routing |
 | **PostgreSQL** | `agg_hourly_application_metrics` | Hourly application-level rollups | One row per application/hour | Stream or scheduled aggregation | 1–2 years | Executive/app dashboard, chatbot |
 | **PostgreSQL** | `agg_hourly_agent_metrics` | Hourly agent execution rollups | One row per agent/hour | Stream or scheduled aggregation | 1–2 years | Agent dashboard, chatbot |
 | **PostgreSQL** | `agg_hourly_tool_metrics` | Hourly tool reliability rollups | One row per tool/hour | Stream or scheduled aggregation | 1–2 years | Tool dashboard, RCA, chatbot, alerts |
@@ -591,8 +596,7 @@ The following map expands the storage responsibility model across **all data sto
 | **Amazon S3** | `s3://ai-observability-<env>/uploaded-documents/` | Uploaded files, source documents, supporting evidence | One object per uploaded file | Document ingestion pipeline | Compliance-defined | Audit, document intelligence, RCA |
 | **Amazon S3** | `s3://ai-observability-<env>/audit-evidence/` | Audit artifacts, evidence bundles, approval/review records | One object per evidence artifact | Audit/export workflow | Compliance-defined | Compliance, audit review |
 | **Amazon S3** | `s3://ai-observability-<env>/debug-bundles/` | Exported incident bundles containing logs, trace links, payload references | One object per incident/export bundle | Incident/RCA workflow | 90 days–1 year | Support teams, post-incident review |
-| **Grafana** | Grafana dashboards backed by infra metric data sources | Service, infrastructure, Kafka, and platform health visualization | Time-series panels | Pulled from configured metrics sources | According to metric backend | SRE, platform operations, leadership |
-| **Grafana** | Grafana alert rules | Alert evaluation and notification execution | One alert rule per condition | Configured from UI/IaC, optionally aligned with `alert_threshold` | Long-lived config | SRE, app owners, incident responders |
+| **Custom Dashboard Service** | Platform Overview, Cost Governance, Kafka Health, RAG Quality, Anomaly View, Feedback Trends, Business KPI pages | Platform health and KPI visualization — FastAPI + React + Tremor | Dashboard page | React + Tremor UI reads FastAPI `/api/v1/*` endpoints; COIN JWT auth | Long-lived config | SRE, platform operations, leadership, app owners |
 | **Kibana** | Kibana data views over `ai-observability-*` indices | Operational event exploration and troubleshooting dashboards | Dashboard/data view configuration | Configured from UI/IaC | Long-lived config | App teams, support, platform engineering |
 | **Kibana** | Kibana dashboards and saved searches | Search, error analysis, trace drill-down, log exploration | Dashboard/search object | Configured from UI/IaC | Long-lived config | App teams, support, platform engineering |
 
@@ -627,8 +631,8 @@ PostgreSQL is the **governed control-plane and aggregate store**. It owns applic
 | KPI definitions | `kpi_definition` | Business and operational KPI definitions | `kpi_id`, `application_id`, `agent_id`, `kpi_name`, `kpi_category`, `formula`, `data_source`, `threshold_green`, `threshold_yellow`, `threshold_red`, `owner`, `active_flag` | KPI admin / product owners | KPI dashboard, business scorecards, chatbot |
 | Feedback cases | `feedback_case` | User/SME feedback linked to traces and responses | `feedback_id`, `correlation_id`, `application_id`, `agent_id`, `rating`, `thumbs`, `sentiment`, `category`, `comment_redacted`, `status`, `linked_incident_id` | Feedback UI / chatbot / review workflow | Feedback dashboard, RCA, model improvement workflow |
 | Metric catalog | `metric_catalog` | Governed metric dictionary and chatbot semantic layer | `metric_id`, `metric_name`, `metric_aliases`, `metric_category`, `formula`, `source_table`, `time_grain`, `dimensions`, `owner`, `active_flag` | Platform analytics team | Observability chatbot, dashboards, metric consistency |
-| Dashboard configurations | `dashboard_config` | Dashboard and widget metadata/configuration | `dashboard_id`, `dashboard_name`, `dashboard_type`, `owner_team`, `filters_json`, `widgets_json`, `visibility`, `active_flag` | Dashboard admin/config UI | Kibana/Grafana/custom dashboard layer |
-| Alert thresholds | `alert_threshold` | Alert conditions for applications, agents, tools, LLMs, RAG, feedback, and infra | `alert_id`, `metric_id`, `application_id`, `agent_id`, `tool_id`, `threshold_value`, `comparison_operator`, `window_minutes`, `severity`, `notification_channel`, `active_flag` | SRE / app owners | Grafana alerts, incident routing, SLA/SLO monitoring |
+| Dashboard configurations | `dashboard_config` | Dashboard and widget metadata/configuration | `dashboard_id`, `dashboard_name`, `dashboard_type`, `owner_team`, `filters_json`, `widgets_json`, `visibility`, `active_flag` | Dashboard admin/config UI | Custom Dashboard Service + Kibana |
+| Alert thresholds | `alert_threshold` | Threshold conditions surfaced as KPI card colours in the Custom Dashboard Service | `alert_id`, `metric_id`, `application_id`, `agent_id`, `tool_id`, `threshold_value`, `comparison_operator`, `window_minutes`, `severity`, `notification_channel`, `active_flag` | SRE / app owners | Custom Dashboard Service KPI cards, incident routing |
 | Hourly application metrics | `agg_hourly_application_metrics` | Hourly app-level metrics | `hour_timestamp`, `application_id`, `request_count`, `success_count`, `error_count`, `avg_latency_ms`, `p95_latency_ms`, `total_tokens`, `estimated_cost` | Aggregation job / stream processor | Executive dashboard, app dashboard, chatbot |
 | Hourly agent metrics | `agg_hourly_agent_metrics` | Hourly agent-level execution metrics | `hour_timestamp`, `application_id`, `agent_id`, `request_count`, `success_count`, `error_count`, `avg_latency_ms`, `p95_latency_ms`, `avg_step_count`, `loop_count`, `handoff_count` | Aggregation job / stream processor | Agent dashboard, chatbot |
 | Hourly tool metrics | `agg_hourly_tool_metrics` | Hourly tool/connecter reliability metrics | `hour_timestamp`, `application_id`, `agent_id`, `tool_id`, `tool_call_count`, `tool_success_count`, `tool_failure_count`, `timeout_count`, `retry_count`, `p95_latency_ms`, `top_error_code` | Aggregation job / stream processor | Tool dashboard, RCA, chatbot, alerts |
@@ -651,17 +655,19 @@ Amazon S3 is the **large-object, archive, and evidence store**. Store only redac
 | `audit-evidence/` | Store audit records, review exports, approval evidence | `yyyy/mm/dd/{application_id}/{audit_case_id}/evidence.*` | `audit_case_id`, `application_id`, `s3_evidence_uri`, `retention_class` | Immutable retention if required | Compliance, audit review |
 | `debug-bundles/` | Export RCA package for incidents | `yyyy/mm/dd/{incident_id}/debug_bundle.zip` | `incident_id`, `correlation_ids`, `s3_debug_bundle_uri`, `created_by`, `created_at` | Time-bound access, audit downloads | Support, incident review |
 
-#### 5.6.5 Grafana Responsibility Map
+#### 5.6.5 Custom Dashboard Service Responsibility Map
 
-Grafana is the **monitoring, SLO/SLA, and alerting presentation layer**. It should visualize infrastructure and service metrics from the enterprise-approved metric backends. Alert rules can be manually configured in Grafana or generated from PostgreSQL `alert_threshold` definitions through automation.
+The Custom Dashboard Service is the **platform's own visualization layer** (FastAPI + React + Tremor, COIN JWT auth). It reads from PostgreSQL aggregate tables, Elasticsearch, Langfuse, and Prometheus — no external dashboard tool required.
 
-| Grafana Asset | Responsibility | Backing Data Source | Example Panels / Alerts | Ownership | Used By |
+| Dashboard Page | Responsibility | Backing Data Source | Key Components | Ownership | Used By |
 |---|---|---|---|---|---|
-| Platform health dashboard | Overall service health and availability | Infra metrics source, Kubernetes metrics, API metrics, Kafka/JMX metrics | Service uptime, request throughput, API latency, pod restarts, CPU/memory | Platform SRE | Operations, leadership |
-| Kafka health dashboard | Messaging health for async architecture | Kafka/JMX metrics exporter or enterprise Kafka metrics | Topic lag, consumer lag, produce/consume latency, DLQ count | Platform/SRE | Executor/orchestration owners |
-| Service-level dashboard | Health by orchestration, executor, guardrail, memory, RAG, LLM wrapper services | Infra/APM metrics | Error rate, latency, saturation, restart count, dependency health | Service owners | Support, SRE |
-| SLO/SLA dashboard | Availability and latency objectives | Aggregates from metrics backend and/or PostgreSQL rollups | Availability %, p95 latency, error budget burn | SRE/app owners | Leadership, app owners |
-| Alert rule set | Alert evaluation and notifications | Grafana-connected metric sources; optional thresholds from PostgreSQL | High error rate, Kafka lag, service down, latency spike, cost anomaly | SRE/app owners | Incident responders |
+| Platform Overview | Overall service health and request/error/latency metrics | `agg_hourly_application_metrics` (PostgreSQL) | KPI cards (requests, error rate, latency), BarChart (errors by service), AreaChart (volume over 24h) | Platform SRE | Operations, leadership |
+| Cost Governance | LLM cost vs. budget caps per application/model | `budget_limits` + `agg_hourly_llm_metrics` (PostgreSQL) | AreaChart (actual vs cap), Table with utilisation Badge (green/red) | Platform / app owners | Finance, leadership, app owners |
+| Kafka Health | Messaging health for async architecture | `obs_metrics` (kafka_consumer_lag) via Prometheus | BarChart (consumer lag by topic), Table (DLQ counts, produce/consume latency) | Platform / SRE | Executor/orchestration owners |
+| RAG Quality | Retrieval quality, faithfulness, vector freshness | `daily_rag_quality` + `vector_health_snapshots` (PostgreSQL) + Langfuse | Table (faithfulness, no-result rate per KB), freshness Badge (STALE/FRESH) | Knowledge owners | AI quality team, app owners |
+| Business KPI | Business KPI outcome tracking | `agg_daily_kpi_metrics` + `kpi_definition` (PostgreSQL) | Table + trend sparklines, threshold Badge colours | Product owners | Leadership, business stakeholders |
+| Anomaly View | Metric-level anomaly detection results | Elasticsearch `ai-obs-anomalies-*` | Timeline, anomaly score sparklines, service filter | Platform SRE | Operations, on-call teams |
+| Feedback Trends | User feedback sentiment and category trends | `agg_daily_feedback_metrics` + `feedback_case` (PostgreSQL) | BarChart (pos/neg ratio over time), categories Table | Quality / product teams | Product owners, leadership |
 
 #### 5.6.6 Kibana Responsibility Map
 
@@ -692,7 +698,7 @@ The Observability Chatbot should query curated and governed sources first, then 
 | Tool reliability question | PostgreSQL `agg_hourly_tool_metrics` | Elasticsearch `ai-observability-tool-calls-*` | “Which tool has the highest timeout rate?” |
 | RAG quality question | PostgreSQL `agg_hourly_rag_metrics` | Elasticsearch RAG events + S3 RAG contexts | “Which KB has the highest no-result rate?” |
 | Feedback question | PostgreSQL `feedback_case` and `agg_daily_feedback_metrics` | Elasticsearch feedback events | “What are the top negative feedback reasons?” |
-| Infra/SLO question | Grafana/metric backend | PostgreSQL alert thresholds and SLO config | “Is Kafka lag breaching threshold?” |
+| Infra/platform health question | PostgreSQL `agg_hourly_application_metrics` + Custom Dashboard Service `/api/v1/kafka-health` | Elasticsearch for recent raw events | “Is Kafka lag breaching threshold?” |
 
 ### 5.7 Storage Responsibility Diagram
 
@@ -705,15 +711,14 @@ flowchart LR
     D --> ES[(Elasticsearch<br/>raw searchable events<br/>logs, traces, errors, tool/LLM/RAG events)]
     D --> PG[(PostgreSQL<br/>registries, catalogs, KPI definitions,<br/>feedback cases, hourly/daily aggregates)]
     D --> S3[(Amazon S3<br/>redacted prompts/responses,<br/>full trace JSON, RAG context, evidence files)]
-    D --> GF[Grafana<br/>infra health, alerts, SLO/SLA monitoring]
 
     ES --> KIB[Kibana Dashboards<br/>event search and trace drill-down]
-    PG --> DASH[Business & KPI Dashboards<br/>governed metrics and aggregates]
-    GF --> OPS[Operations Dashboard<br/>service health and alerts]
-
-    ES --> BOT[Observability Chatbot]
-    PG --> BOT
+    PG --> CUSTOMDASH[Custom Dashboard Service<br/>FastAPI + React + Tremor<br/>Platform Overview / Cost / Kafka Health /<br/>RAG Quality / Anomaly View / Feedback / KPIs<br/>COIN JWT auth]
+    ES --> CUSTOMDASH
+    PG --> BOT[Observability Chatbot]
+    ES --> BOT
     S3 --> BOT
+    CUSTOMDASH --> BOT
     BOT --> USER[Answers with metrics,<br/>drill-downs, and trace links]
 ```
 
@@ -1496,12 +1501,12 @@ flowchart LR
     PLAN --> PG["PostgreSQL Aggregates<br/>fast KPI answers"]
     PLAN --> ES["Elasticsearch<br/>trace and event drill-down"]
     PLAN --> S3["Amazon S3<br/>artifact retrieval if authorized"]
-    PLAN --> GRAF["Grafana<br/>service health and alert context"]
+    PLAN --> CUSTOMDASH["Custom Dashboard Service<br/>platform health and cost context"]
 
     PG --> ANSWER["Answer Generator"]
     ES --> ANSWER
     S3 --> ANSWER
-    GRAF --> ANSWER
+    CUSTOMDASH --> ANSWER
 
     ANSWER --> USER
 ```
@@ -1686,7 +1691,7 @@ Instead capture:
 | PostgreSQL daily aggregates | 2–3 years |
 | Amazon S3 redacted payloads | Compliance-based |
 | Feedback and KPI data | 1–3 years |
-| Grafana alert history | 90–180 days or enterprise standard |
+| Custom Dashboard Service config | Long-lived (version-controlled in Git) |
 
 ---
 
@@ -1739,7 +1744,7 @@ OpenTelemetry SDK
 → Kafka Observability Topics
 → Telemetry Processor
 → Redaction and enrichment
-→ Elasticsearch + PostgreSQL + Amazon S3 + Grafana
+→ Elasticsearch + PostgreSQL + Amazon S3 + Custom Dashboard Service
 ```
 
 Processor responsibilities:
@@ -1770,7 +1775,7 @@ Build the dashboards in this order:
 7. RAG Observability
 8. Feedback Analytics
 9. Business KPI Dashboard
-10. Grafana Service Health and Alerting Dashboard
+10. Custom Dashboard Service — Kafka Health, Cost Governance, Anomaly View
 
 ---
 
@@ -1782,7 +1787,7 @@ Steps:
 2. Build semantic layer over PostgreSQL aggregates.
 3. Add Elasticsearch drill-down capability.
 4. Add S3 artifact retrieval with RBAC.
-5. Add Grafana service health lookup.
+5. Add Custom Dashboard Service platform health lookup via `/api/v1/overview` and `/api/v1/kafka-health`.
 6. Add SQL/DSL query validation.
 7. Return dashboard links and trace links.
 8. Add chatbot feedback capture.
@@ -1841,11 +1846,11 @@ PostgreSQL aggregate tables
 Object Store:
 Amazon S3
 
-Monitoring and Alerting:
-Grafana
+Platform Dashboards:
+Custom Dashboard Service (FastAPI + React + Tremor, COIN JWT auth)
 
 Chatbot:
-Observability Assistant using Metric Semantic Layer over PostgreSQL, Elasticsearch, Amazon S3, and Grafana
+Observability Assistant using Metric Semantic Layer over PostgreSQL, Elasticsearch, Amazon S3, and Custom Dashboard Service
 ```
 
 The key design principle is:
@@ -1888,7 +1893,7 @@ For an initial MVP, implement the following first:
 - Elasticsearch for raw/searchable events
 - PostgreSQL for metadata and aggregates
 - Amazon S3 for redacted payloads and traces
-- Grafana for service health and alerts
+- Custom Dashboard Service for platform health, cost, and KPI visualization
 
 ### Must-Have Dashboards
 
@@ -1917,7 +1922,7 @@ For an initial MVP, implement the following first:
 
 # Optional Runtime Cache / Memory Layer
 
-The observability plane can operate without a cache/memory layer because durable telemetry is stored in Elasticsearch, PostgreSQL, Amazon S3, and Grafana-compatible metric stores. However, for a production agentic runtime, an optional cache/memory layer is recommended.
+The observability plane can operate without a cache/memory layer because durable telemetry is stored in Elasticsearch, PostgreSQL, Amazon S3, and the Custom Dashboard Service's backing PostgreSQL aggregate tables. However, for a production agentic runtime, an optional cache/memory layer is recommended.
 
 Recommended option:
 
@@ -1937,7 +1942,7 @@ Use this layer for temporary runtime state only. It should not be treated as the
 | Tool/RAG result cache | Cache safe repeatable results for short TTL windows | `rag:kb_policy:query_hash` → top retrieved chunks | `CACHE_HIT`, `CACHE_MISS`, `CACHE_WRITE` |
 | Chatbot query cache | Cache frequent observability chatbot answers for 1–15 minutes | `chatbot:q_hash` → summarized answer / result set | `CHATBOT_CACHE_HIT`, `CHATBOT_CACHE_MISS` |
 
-Cache/memory metrics should be visible in Grafana and searchable through Elasticsearch:
+Cache/memory metrics should be visible in the Custom Dashboard Service (Platform Overview page) and searchable through Elasticsearch:
 
 ```text
 cache_hit_rate
@@ -1959,19 +1964,19 @@ correlation_context_missing_count
 
 The observability plane must also capture Intent IQ KPIs so product, operations, risk, and business teams can measure output quality, adoption, guardrails, platform stability, productivity impact, and compliance posture.
 
-These KPIs should be stored in the KPI registry and calculated through the aggregate metric layer. Raw supporting events should be available in Elasticsearch, structured KPI definitions and calculated values should be available in PostgreSQL, large supporting artifacts should be archived in Amazon S3, and trend/threshold monitoring should be surfaced in Grafana/Kibana.
+These KPIs should be stored in the KPI registry and calculated through the aggregate metric layer. Raw supporting events should be available in Elasticsearch, structured KPI definitions and calculated values should be available in PostgreSQL, large supporting artifacts should be archived in Amazon S3, and trend/threshold monitoring should be surfaced in the Custom Dashboard Service Business KPI and Feedback Trends pages / Kibana.
 
 ## Intent IQ KPI Mapping
 
 | # | Category | KPI | Description / Measurement Need | Source | Type | Required Event / Data Capture | Recommended Storage | Example Chatbot Questions |
 |---:|---|---|---|---|---|---|---|---|
 | 1 | Output Success Metrics | API Success Rates | Measures success rates for case classification, summarization, entity extraction, sentiment analysis, review time, and SSoT/entity extraction volumes. | PACT CS Mart + AI observability events | Derived | `CLASSIFICATION_COMPLETED`, `SENTIMENT_ANALYSIS_COMPLETED`, `SUMMARY_VIEWED`, `ENTITY_EXTRACTION_COMPLETED`, `SSOT_SEARCH_COMPLETED`, status, latency, user action, case ID, country, LOB, department | Elasticsearch for raw events; PostgreSQL `kpi_definition`, `agg_daily_kpi_metrics`, `agg_hourly_application_metrics`; S3 for large evidence | “How many users in FI Tampa changed sentiment in May 2026?” “Which Hong Kong users clicked Summary in May 2026?” “How are Cards users using Intent IQ?” |
-| 2 | User & Adoption Metrics | Commercialization | Tracks total users with access vs active users, Intent IQ link clicks, enabled listeners, active countries, accidental access from non-enabled countries, and usage by country, department, LOB, and case. | PACT CS Mart | Derived | `USER_ACCESS_GRANTED`, `USER_ACTIVE_SESSION`, `INTENT_IQ_LINK_CLICKED`, `COUNTRY_ENABLED`, `COUNTRY_ACCESS_DENIED`, user hash, country, department, LOB, case ID | PostgreSQL user/adoption aggregates; Elasticsearch click/access events; Grafana adoption trend | “Who is using Intent IQ in my department?” “Which countries have active usage?” “Are non-enabled countries accessing Intent IQ?” |
-| 3 | Sentiment Highlight | Proactive Notifications | Proactively highlights where potential complaints and negative sentiments start piling up. | PACT CS Mart + sentiment events | Derived / Event-driven | `NEGATIVE_SENTIMENT_DETECTED`, `POTENTIAL_COMPLAINT_DETECTED`, `PROACTIVE_NOTIFICATION_TRIGGERED`, sentiment score, complaint category, case ID, team, queue, country | Elasticsearch for event drill-down; PostgreSQL daily sentiment aggregates; Grafana alert thresholds | “How many potential complaints is my team dealing with?” “Which queue has the highest negative sentiment trend?” |
-| 4 | Guardrails Score | Guardrails Effectiveness | Tracks queries attempting bias, queries blocked due to bias, outputs containing bias language, and guardrail decision quality. | GSSP layer / Guardrail module | Derived | `GUARDRAIL_EVALUATED`, `GUARDRAIL_BLOCKED`, `BIAS_DETECTED`, `OUTPUT_POLICY_VIOLATION`, policy ID, policy version, decision, violation type, risk score | Elasticsearch guardrail events; PostgreSQL `agg_hourly_guardrail_metrics` or KPI aggregate; Grafana guardrail alerts | “How many outputs contained prohibited bias in the past 6 months?” “How many queries were blocked due to bias?” |
-| 5 | Platform Performance Metrics | Production Stability Temperature | Tracks API performance, success rates, errors, API rate limits, service health, latency, throughput, and token usage. | AI observability layer / GSSP layer | Derived | `REQUEST_RECEIVED`, `REQUEST_COMPLETED`, `REQUEST_FAILED`, `RATE_LIMIT_HIT`, `LLM_CALL_COMPLETED`, `TOKEN_USAGE_RECORDED`, status, latency, tokens, cost, error code | Elasticsearch request/error events; PostgreSQL hourly aggregates; Grafana service health and SLO/SLA | “Is Intent IQ stable today?” “How many tokens were used?” “Did API rate limits impact users?” |
+| 2 | User & Adoption Metrics | Commercialization | Tracks total users with access vs active users, Intent IQ link clicks, enabled listeners, active countries, accidental access from non-enabled countries, and usage by country, department, LOB, and case. | PACT CS Mart | Derived | `USER_ACCESS_GRANTED`, `USER_ACTIVE_SESSION`, `INTENT_IQ_LINK_CLICKED`, `COUNTRY_ENABLED`, `COUNTRY_ACCESS_DENIED`, user hash, country, department, LOB, case ID | PostgreSQL user/adoption aggregates; Elasticsearch click/access events; Custom Dashboard Service Business KPI page | “Who is using Intent IQ in my department?” “Which countries have active usage?” “Are non-enabled countries accessing Intent IQ?” |
+| 3 | Sentiment Highlight | Proactive Notifications | Proactively highlights where potential complaints and negative sentiments start piling up. | PACT CS Mart + sentiment events | Derived / Event-driven | `NEGATIVE_SENTIMENT_DETECTED`, `POTENTIAL_COMPLAINT_DETECTED`, `PROACTIVE_NOTIFICATION_TRIGGERED`, sentiment score, complaint category, case ID, team, queue, country | Elasticsearch for event drill-down; PostgreSQL daily sentiment aggregates; Custom Dashboard Service Feedback Trends page | “How many potential complaints is my team dealing with?” “Which queue has the highest negative sentiment trend?” |
+| 4 | Guardrails Score | Guardrails Effectiveness | Tracks queries attempting bias, queries blocked due to bias, outputs containing bias language, and guardrail decision quality. | GSSP layer / Guardrail module | Derived | `GUARDRAIL_EVALUATED`, `GUARDRAIL_BLOCKED`, `BIAS_DETECTED`, `OUTPUT_POLICY_VIOLATION`, policy ID, policy version, decision, violation type, risk score | Elasticsearch guardrail events; PostgreSQL `agg_hourly_guardrail_metrics` or KPI aggregate; Custom Dashboard Service Platform Overview guardrail block rate card | “How many outputs contained prohibited bias in the past 6 months?” “How many queries were blocked due to bias?” |
+| 5 | Platform Performance Metrics | Production Stability Temperature | Tracks API performance, success rates, errors, API rate limits, service health, latency, throughput, and token usage. | AI observability layer / GSSP layer | Derived | `REQUEST_RECEIVED`, `REQUEST_COMPLETED`, `REQUEST_FAILED`, `RATE_LIMIT_HIT`, `LLM_CALL_COMPLETED`, `TOKEN_USAGE_RECORDED`, status, latency, tokens, cost, error code | Elasticsearch request/error events; PostgreSQL hourly aggregates; Custom Dashboard Service Platform Overview and Cost Governance pages | “Is Intent IQ stable today?” “How many tokens were used?” “Did API rate limits impact users?” |
 | 6 | Productivity Metrics | FTE Saved | Measures time saved in minutes/hours by LOB/country, productivity gains converted to FTE, query throughput reduction by region/country/department/user, and VOC score impact. | Celonis + VoC Data + observability events | Derived & Calculated | `CASE_HANDLED_WITH_INTENT_IQ`, `CASE_HANDLED_WITHOUT_INTENT_IQ`, `QUERY_STARTED`, `QUERY_RESOLVED`, `SUMMARY_VIEWED`, `TIME_SAVED_ESTIMATED`, baseline AHT, actual AHT, LOB, country, department, user hash | PostgreSQL KPI aggregates; Celonis integration; Elasticsearch supporting events; S3 evidence exports if needed | “How many FTEs were saved for India since Intent IQ enablement?” “Is Intent IQ saving time for FI Payments in Tampa?” “Who uses it most and is it saving employee time?” |
-| 7 | Risk & Compliance Adherence Status | Risk & Compliance Temperature Score | Tracks user feedback, MRM monitoring thresholds, hallucination rate, fair lending monitoring, agent flow integration, prompt/model version changes, approved vs non-approved countries, and upcoming reviews. | User feedback capture, PACT CS Mart, MRM/compliance sources | Derived & Governed | `FEEDBACK_SUBMITTED`, `HALLUCINATION_FLAGGED`, `MODEL_VERSION_CHANGED`, `PROMPT_TEMPLATE_CHANGED`, `COUNTRY_APPROVAL_CHECK`, `COMPLIANCE_REVIEW_DUE`, `FAIR_LENDING_CHECK_COMPLETED`, threshold status | PostgreSQL feedback/compliance/KPI tables; Elasticsearch audit events; S3 audit evidence; Grafana compliance alerts | “Is the model performing within defined thresholds?” “How many prompts changed since the last periodic monitoring?” “What monitoring reviews are due in the next 3 months?” |
+| 7 | Risk & Compliance Adherence Status | Risk & Compliance Temperature Score | Tracks user feedback, MRM monitoring thresholds, hallucination rate, fair lending monitoring, agent flow integration, prompt/model version changes, approved vs non-approved countries, and upcoming reviews. | User feedback capture, PACT CS Mart, MRM/compliance sources | Derived & Governed | `FEEDBACK_SUBMITTED`, `HALLUCINATION_FLAGGED`, `MODEL_VERSION_CHANGED`, `PROMPT_TEMPLATE_CHANGED`, `COUNTRY_APPROVAL_CHECK`, `COMPLIANCE_REVIEW_DUE`, `FAIR_LENDING_CHECK_COMPLETED`, threshold status | PostgreSQL feedback/compliance/KPI tables; Elasticsearch audit events; S3 audit evidence; Custom Dashboard Service Business KPI page compliance thresholds | “Is the model performing within defined thresholds?” “How many prompts changed since the last periodic monitoring?” “What monitoring reviews are due in the next 3 months?” |
 
 ## Additional Tables / Aggregates Recommended for Intent IQ
 
@@ -2051,7 +2056,7 @@ Kafka enriched stream
   → Anomaly Detection Service (ML scoring + baseline comparison + correlation)
   → Kafka topic: ai-obs-anomalies
   → Elasticsearch: ai-obs-anomalies-*
-  → Grafana: Anomaly Dashboard
+  → Custom Dashboard Service: Anomaly View page
 ```
 
 **New Elasticsearch index:** `ai-obs-anomalies-*`
@@ -2130,9 +2135,9 @@ CREATE TABLE daily_rag_quality (
 
 **New capabilities:**
 
-- **Budget cap enforcement:** A `budget_limits` table defines `max_spend_usd` per `(application_id, environment, model_id, period)`. The stream processor's cost calculator writes running spend counters to Redis. When the accumulator crosses `alert_at_pct`, a cost alert fires via Grafana. When it reaches 100%, an optional throttle webhook is triggered.
-- **Model cost comparison:** Each hourly LLM aggregate row includes `alternative_model_estimated_cost_usd` — the same token counts priced with the next cheaper model. A "Cost Optimization" Grafana panel surfaces this comparison.
-- **Spend trend alert:** A Grafana alert fires when daily spend is more than 2× the trailing 7-day average.
+- **Budget cap enforcement:** A `budget_limits` table defines `max_spend_usd` per `(application_id, environment, model_id, period)`. The stream processor's cost calculator writes running spend counters to Redis. When the accumulator crosses `alert_at_pct`, the Custom Dashboard Service Cost Governance page renders the KPI card in amber/red. When it reaches 100%, an optional throttle webhook is triggered.
+- **Model cost comparison:** Each hourly LLM aggregate row includes `alternative_model_estimated_cost_usd` — the same token counts priced with the next cheaper model. The Custom Dashboard Service Cost Governance page surfaces this comparison in a table.
+- **Spend trend visibility:** The Custom Dashboard Service Cost Governance AreaChart shows daily spend vs the trailing 7-day average — a 2× deviation is visually apparent.
 
 **New PostgreSQL table:**
 
@@ -2194,7 +2199,7 @@ CREATE TABLE daily_slo_compliance (
 );
 ```
 
-**New Grafana panel:** `SLO Error Budget` — gauge per application/SLO type showing remaining budget, burn rate trend, and projected exhaustion date.
+**Custom Dashboard Service Business KPI page:** Shows SLO compliance per application/SLO type — remaining budget, burn rate trend, and projected exhaustion date as a KPI card with threshold Badge colours.
 
 ---
 
@@ -2278,26 +2283,28 @@ CREATE TABLE vector_health_snapshots (
 );
 ```
 
-**New Grafana/Kibana panel:** `RAG + Vector Health Dashboard` — shows freshness gauge per knowledge base, embedding drift trend, and recall@k over time.
+**Custom Dashboard Service RAG Quality page + Kibana:** Shows freshness Badge per knowledge base, embedding drift trend, and recall@k over time.
 
 ---
 
 ### 17.7 Observability-as-Code
 
-**Gap closed:** Dashboards and alert rules are defined in documents but not version-controlled. New cluster deployments diverge from documented intent. Alert rule changes in Grafana UI are lost on re-provisioning.
+**Gap closed:** Dashboards and threshold configs are defined in documents but not version-controlled. New cluster deployments diverge from documented intent. Dashboard changes made outside Git are lost on re-provisioning.
 
 **Three IaC artifacts:**
 
-**1. Grafana dashboards as JSON:** All 9 dashboard definitions stored in `observability-iac/grafana/dashboards/`. CI pipeline deploys via Grafana API on merge. Includes: `platform-overview.json`, `slo-error-budget.json`, `cost-governance.json`, `anomaly-detection.json`, `rag-quality.json`.
+**1. Custom Dashboard Service React pages + FastAPI endpoints:** All dashboard page components and API endpoints are version-controlled in `custom-dashboard/`. CI pipeline builds the Docker image and rolls out via `kubectl rollout restart` on merge. Includes pages for: Platform Overview, Cost Governance, Kafka Health, RAG Quality, Anomaly View, Feedback Trends, Business KPIs.
 
 **2. Elasticsearch index templates as JSON:** Stored in `observability-iac/elasticsearch/index-templates/`. Applied via CI on cluster provisioning. Ensures all new indices inherit correct field mappings, ILM policies, and shard counts.
 
-**3. Alert rule syncer:** A Python service (`alert-rule-syncer`) reads the `alert_threshold` PostgreSQL table and pushes alert rules to Grafana via API. This makes `alert_threshold` the single source of truth — no manual Grafana UI changes required.
+**3. PostgreSQL threshold table as config source:** The `alert_threshold` table is the single source of truth for KPI card colours in the Custom Dashboard Service. The FastAPI endpoints read thresholds at query time — no manual UI changes required.
 
 ```text
 observability-iac/
-├── grafana/dashboards/          ← 9 dashboard JSON files
-├── grafana/alert-rules/sync.py  ← reads PostgreSQL → Grafana API
+├── custom-dashboard/
+│   ├── pages/                   ← React + Tremor page components
+│   ├── api/                     ← FastAPI endpoint modules
+│   └── Dockerfile
 ├── elasticsearch/index-templates/
 ├── elasticsearch/ilm-policies/
 ├── postgres/migrations/         ← new tables (budget_limits, slo_compliance, etc.)
@@ -2353,7 +2360,7 @@ Examples:
 | Kibana access | Field-level filtering in one org | Per-LOB Kibana organization |
 | ILM | One policy | LOB-specific hot/warm/cold lifecycle |
 
-**Grafana:** Each LOB gets its own Grafana organization with pre-provisioned dashboards. Cross-LOB views are available only in the platform-admin organization.
+**Custom Dashboard Service:** The COIN JWT token carries `lob` and `application_id` claims. The FastAPI `require_coin_token` dependency filters all queries to the requesting LOB's data. Platform-admin tokens receive cross-LOB views.
 
 **Kafka consumer groups:** Per-LOB consumer groups for each observability topic allow independent offset management and replay without cross-LOB interference.
 
@@ -2425,12 +2432,13 @@ The following diagram shows the complete enhanced architecture with all 10 new c
 └──────┬─────────────┬──────────────┬──────────────┬───────────────────┬─────────────┘
        │             │              │               │                   │
        ▼             ▼              ▼               ▼                   ▼
-  Elasticsearch  PostgreSQL    Amazon S3       Grafana          Anomaly Detection
-  per-LOB       budget_limits  debug-bundles   SLO Error Budget  Service (NEW)
-  namespaced    slo_compliance rca-reports/    Cost Governance       │
-  indices (NEW) daily_rag_qual iac-dashboards/ Anomaly Dashboard     │
-  +anomalies-*  vector_health  ───────────────────────────►  ai-obs-anomalies topic
-  +quality-*    (all NEW)
+  Elasticsearch  PostgreSQL    Amazon S3  Custom Dashboard     Anomaly Detection
+  per-LOB       budget_limits  debug-     Service (NEW)         Service (NEW)
+  namespaced    slo_compliance bundles/   Platform Overview         │
+  indices (NEW) daily_rag_qual rca-rpts/  Cost Governance           │
+  +anomalies-*  vector_health  ─────────► Kafka Health         ai-obs-anomalies
+  +quality-*    (all NEW)                 RAG Quality / KPIs     topic (NEW)
+  +vector-*
   +vector-*
        │
        ▼
@@ -2442,16 +2450,16 @@ The following diagram shows the complete enhanced architecture with all 10 new c
        ▼
 ┌─────────────────────────────────────────────────────────────────────────────────────┐
 │  Observability Presentation                                                         │
-│  Kibana (per-LOB org) │ Trace Explorer │ RAG + Vector Health Dashboard (NEW)       │
-│  LLM / Token / Cost + Cost Governance (NEW) │ SLO Error Budget (NEW)               │
-│  Feedback + Incident Dashboard (NEW) │ Anomaly Dashboard (NEW)                     │
-│  Business KPI Dashboard │ Observability Chatbot                                     │
+│  Kibana (per-LOB org) │ Trace Explorer │ RAG Quality + Vector Health page (NEW)    │
+│  Custom Dashboard: Platform Overview │ Cost Governance (NEW) │ Kafka Health (NEW)  │
+│  Custom Dashboard: Anomaly View (NEW) │ Feedback Trends │ Business KPI (NEW)       │
+│  Observability Chatbot                                                              │
 └─────────────────────────────────────────────────────────────────────────────────────┘
 
 Observability-as-Code Pipeline (NEW):
-  grafana/dashboards/*.json → Grafana API (CI)
+  custom-dashboard/pages/ + api/ → Docker build → kubectl rollout (CI)
   elasticsearch/index-templates/*.json → Elasticsearch API (CI)
-  PostgreSQL alert_threshold → Alert Rule Syncer → Grafana alert rules
+  PostgreSQL alert_threshold → Custom Dashboard Service KPI card thresholds (at query time)
 ```
 
 ---
@@ -2464,9 +2472,9 @@ The original 6-phase roadmap is extended with two new phases:
 |---|---|---|
 | Phase 1 | Define Standards | Event schema, error catalog, trace rules, metric catalog, KPI catalog, S3 policy |
 | Phase 2 | Instrument Core Platform | SDK on all components + **W3C traceparent on Kafka** |
-| Phase 3 | Build Ingestion and Storage | Processor + ES + PG + S3 + Grafana + **budget_limits, slo_compliance, daily_rag_quality, vector_health tables** + **Faithfulness Scorer** + **SLO Evaluator** + **Budget Accumulator** |
-| Phase 4 | Build Dashboards | 9 dashboards + **SLO Error Budget panel** + **Cost Governance panel** + **RAG + Vector Health dashboard** + **per-LOB Kibana orgs** |
-| Phase 5 | Build Observability Chatbot | Semantic layer + RBAC + query planner + **Feedback-to-Incident Auto-Routing** |
-| Phase 6 | Anomaly Detection and RCA | **ML Anomaly Detection Service** + **Offline Batch RCA Engine** + weekly digest |
-| Phase 7 | Observability-as-Code | IaC repo + Grafana dashboard JSON + ES index templates + **Alert Rule Syncer** |
-| Phase 8 | Multi-Tenant Isolation | Per-LOB index namespacing + per-LOB Grafana orgs + per-LOB Kafka consumer groups |
+| Phase 3 | Build Ingestion and Storage | Processor + ES + PG + S3 + **budget_limits, slo_compliance, daily_rag_quality, vector_health tables** + **Faithfulness Scorer** + **SLO Evaluator** + **Budget Accumulator** |
+| Phase 4 | Build Dashboards | Custom Dashboard Service (FastAPI + React + Tremor) — Platform Overview, Cost Governance, Kafka Health, RAG Quality, Business KPI pages + **per-LOB Kibana orgs** |
+| Phase 5 | Build Observability Chatbot | Semantic layer + RBAC + query planner + **Custom Dashboard Service API integration** + **Feedback-to-Incident Auto-Routing** |
+| Phase 6 | Anomaly Detection and RCA | **ML Anomaly Detection Service** + Custom Dashboard Anomaly View page + **Offline Batch RCA Engine** + weekly digest |
+| Phase 7 | Observability-as-Code | IaC repo + Custom Dashboard Docker deploy (CI) + ES index templates |
+| Phase 8 | Multi-Tenant Isolation | Per-LOB index namespacing + per-LOB COIN JWT scoping in Custom Dashboard + per-LOB Kafka consumer groups |

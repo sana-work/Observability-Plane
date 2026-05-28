@@ -87,9 +87,8 @@ flowchart TB
     end
 
     subgraph IACPIPE["Observability-as-Code Pipeline"]
-        DASHCODE["Grafana Dashboard JSON\n(version-controlled)"]
+        DASHCODE["Custom Dashboard Config\n(version-controlled)"]
         IDXTMPL["Elasticsearch Index Templates\n(version-controlled)"]
-        ALERTSYNC["Alert Rule Syncer\n(reads PostgreSQL alert_threshold → Grafana API)"]
     end
 
     subgraph STORE["Storage Layer"]
@@ -116,28 +115,28 @@ flowchart TB
             PG_SLO["daily_slo_compliance\n(error budget tracking)"]
             PG_RAGQ["daily_rag_quality\n(faithfulness, precision, recall)"]
             PG_VECH["vector_health_snapshots\n(drift score, freshness)"]
-            PG_ALERT["alert_threshold\n(source of truth for Grafana rules)"]
-            PG_DASH["dashboard_config"]
+            PG_ALERT["alert_threshold\n(threshold definitions)"]
+            PG_DASH["dashboard_config\n(Custom Dashboard pages/widgets)"]
         end
 
         S3["Amazon S3\nredacted-prompts/ redacted-responses/\nraw-traces/ rag-contexts/\naudit-evidence/ debug-bundles/\nrca-reports/ iac-dashboards/"]
 
-        subgraph GRAF["Grafana"]
-            GFDASH["Platform + Infra Dashboards"]
-            SLOBURN["SLO Error Budget\n(burn-rate: 1h + 6h)"]
-            COSTGOV["Cost Governance Panel\n(spend vs budget, model comparison)"]
-            ANOMDASH["Anomaly Dashboard"]
-            ALERTRULES["Alert Rules\n(synced from PostgreSQL)"]
+        subgraph CUSTOMDASH["Custom Dashboard Service\n(FastAPI + React + Tremor)"]
+            GFDASH["Platform Overview\n(request counts, error rate, latency)"]
+            COSTGOV["Cost Governance\n(spend vs budget, model comparison)"]
+            ANOMDASH["Anomaly View\n(ML-detected deviations)"]
+            KAFKAHEALTHDASH["Kafka Health\n(consumer lag, offset, partition health)"]
+            RAGQUALITYDASH["RAG Quality\n(faithfulness, no-result rate, freshness)"]
+            KPIDASH["Business KPI Dashboard\n(agent success rates, business metrics)"]
         end
     end
 
     subgraph PRESENT["Observability Presentation"]
-        KIBANA["Kibana — Operational Dashboards\n(per-LOB Grafana org)"]
+        KIBANA["Kibana — Operational Dashboards\n(event search, error drill-down)"]
         TRACEVIEW["Trace Explorer"]
         RAGDASH["RAG + Vector Health Dashboard\n(faithfulness, drift, freshness)"]
         LLMDASH["LLM / Token / Cost Dashboard"]
         FEEDDASH["Feedback + Incident Dashboard"]
-        KPIDASH["Business KPI Dashboard"]
     end
 
     subgraph BATCHRCA["Offline Batch RCA Engine (Nightly)"]
@@ -196,10 +195,9 @@ flowchart TB
     COSTCALC --> PG_BUDGET
     SLOEVAL --> PG_SLO
     ARCHIVER --> S3
-    SLOEVAL --> SLOBURN
     COSTCALC --> COSTGOV
 
-    %% Anomaly → Grafana
+    %% Anomaly → Custom Dashboard
     T_ANOMALY --> ANOMDASH
 
     %% Vector health monitoring
@@ -214,11 +212,12 @@ flowchart TB
 
     %% IaC pipeline
     DASHCODE & IDXTMPL --> S3
-    PG_ALERT --> ALERTSYNC --> ALERTRULES
 
-    %% Grafana
-    PG_AGG & PG_SLO & PG_BUDGET --> GRAF
+    %% Custom Dashboard Service
+    PG_AGG & PG_BUDGET --> COSTGOV
+    PG_AGG --> GFDASH
     ES_ANOMALY --> ANOMDASH
+    PG_RAGQ & PG_VECH --> RAGQUALITYDASH
 
     %% Presentation
     ES_REQ & ES_AGENT & ES_LLM & ES_TOOL --> KIBANA
@@ -226,15 +225,14 @@ flowchart TB
     ES_RAG & PG_RAGQ & PG_VECH --> RAGDASH
     ES_LLM & PG_AGG & PG_BUDGET --> LLMDASH
     ES_FEED & PG_KPI --> FEEDDASH
-    PG_KPI & PG_AGG --> KPIDASH
 
     %% Batch RCA
     ES_ERR & ES_TRACE & PG_AGG --> RCAJOIN --> RCARANK --> RCAREPORT --> S3 & ES_ANOMALY
 
     %% Chatbot
     CHATBOT --> INTENT --> SEM --> RBAC --> QP
-    QP --> PG_AGG & PG_KPI & ES_TRACE & S3 & GRAF
-    PG_AGG & ES_TRACE & S3 & GRAF --> ANSWER --> CHATBOT
+    QP --> PG_AGG & PG_KPI & ES_TRACE & S3 & CUSTOMDASH
+    PG_AGG & ES_TRACE & S3 & CUSTOMDASH --> ANSWER --> CHATBOT
 ```
 
 ---
@@ -244,13 +242,11 @@ flowchart TB
 | New Component | Role | Connects To |
 |---|---|---|
 | **Langfuse (self-hosted)** | LLM + RAG + agent trace store; prompt management; LLM-as-judge evaluations; user feedback linking | GSSP GS, GSSP QS, GSSP RS, Agent Executor, Agentic Orchestration, User Feedback → Langfuse DB (PostgreSQL) |
-| **Anomaly Detection Service** | ML-based anomaly scoring per app/model with sliding P50/P95/P99 baselines | Kafka `ai-obs-anomalies` → Elasticsearch, Grafana |
+| **Anomaly Detection Service** | ML-based anomaly scoring per app/model with sliding P50/P95/P99 baselines | Kafka `ai-obs-anomalies` → Elasticsearch → Custom Dashboard Service Anomaly View |
 | **Faithfulness Scorer** | Computes RAG faithfulness (context overlap), entropy, retrieval precision at stream time — **delegate to Langfuse evaluators** | Langfuse scores API; PostgreSQL `daily_rag_quality` (aggregated from Langfuse) |
-| **Budget Accumulator** | Real-time spend counter in Redis; writes alerts when `max_spend_usd` threshold hit | PostgreSQL `budget_limits`, Grafana `Cost Governance` panel |
-| **SLO Evaluator** | Multi-window burn-rate calculator (1h and 6h); writes `daily_slo_compliance` | Grafana `SLO Error Budget` panel, PostgreSQL |
+| **Budget Accumulator** | Real-time spend counter in Redis; writes alerts when `max_spend_usd` threshold hit | PostgreSQL `budget_limits` → Custom Dashboard Service Cost Governance page |
 | **W3C TraceContext Extractor** | Reads `traceparent` Kafka headers; propagates full W3C trace through all enrichment steps | All downstream stores and Chatbot |
-| **Vector Health Monitor** | Tracks embedding drift score, index freshness, retrieval recall@k | Elasticsearch `ai-obs-vector-health-*`, PostgreSQL `vector_health_snapshots` |
-| **Alert Rule Syncer** | Reads PostgreSQL `alert_threshold` → pushes rules to Grafana API; eliminates dashboard drift | Grafana `alert_rules` |
+| **Vector Health Monitor** | Tracks embedding drift score, index freshness, retrieval recall@k | Elasticsearch `ai-obs-vector-health-*`, PostgreSQL `vector_health_snapshots` → Custom Dashboard RAG Quality page |
 | **Incident Router** | Consumes `ai-obs-incidents` Kafka topic; triggers PagerDuty/Jira for critical negative feedback | External ticketing, S3 debug bundles |
 | **Per-LOB ES Namespacing** | Indices partitioned as `ai-obs-{lob}-*`; enables per-tenant retention + index-level RBAC | Kibana per-LOB orgs, multi-tenant isolation |
 | **Offline Batch RCA Engine** | Nightly job: joins errors ↔ traces ↔ aggregates; ranks root causes; writes weekly digest | S3 `rca-reports/`, Elasticsearch, Slack/Email |
@@ -261,7 +257,7 @@ flowchart TB
 
 | Topic | Producer | Consumer | Purpose |
 |---|---|---|---|
-| `ai-obs-anomalies` | Anomaly Detection Service | Grafana adapter, Elasticsearch indexer | Anomaly events with score, baseline, metric name |
+| `ai-obs-anomalies` | Anomaly Detection Service | Custom Dashboard Service, Elasticsearch indexer | Anomaly events with score, baseline, metric name |
 | `ai-obs-incidents` | Feedback Quality Gate | Incident Router Service | Incident triggers with `correlation_id`, severity, debug bundle reference |
 | `ai-obs-quality` | LLM/RAG wrappers via SDK | Telemetry Processor (Faithfulness Scorer) | Quality signals: faithfulness, entropy, embedding drift |
 
@@ -419,17 +415,21 @@ Per-LOB benefits:
 
 ```text
 observability-iac/
-├── grafana/
-│   ├── dashboards/
-│   │   ├── platform-overview.json
-│   │   ├── agent-observability.json
-│   │   ├── llm-cost.json
-│   │   ├── rag-quality.json
-│   │   ├── slo-error-budget.json
-│   │   ├── cost-governance.json
-│   │   └── anomaly-detection.json
-│   └── alert-rules/
-│       └── sync-from-postgres.py     ← reads alert_threshold, calls Grafana API
+├── custom-dashboard/
+│   ├── pages/
+│   │   ├── platform-overview.tsx
+│   │   ├── agent-observability.tsx
+│   │   ├── llm-cost.tsx
+│   │   ├── rag-quality.tsx
+│   │   ├── cost-governance.tsx
+│   │   ├── kafka-health.tsx
+│   │   ├── feedback-trends.tsx
+│   │   └── anomaly-view.tsx
+│   └── api/
+│       ├── overview.py               ← FastAPI: queries agg_hourly_application_metrics
+│       ├── cost_governance.py        ← FastAPI: queries budget_limits + agg_hourly_llm_metrics
+│       ├── kafka_health.py           ← FastAPI: queries obs_metrics (kafka_consumer_lag)
+│       └── rag_quality.py            ← FastAPI: queries daily_rag_quality
 ├── elasticsearch/
 │   ├── index-templates/
 │   │   ├── ai-obs-requests.json
@@ -464,7 +464,7 @@ observability-iac/
 | **P1** | **Langfuse Prompt Management** | Replaces DB-backed PromptTemplateFactory; adds versioning + A/B testing | Medium (3 days) | Phase 2 (Instrument) |
 | **P1** | **Langfuse LLM-as-judge evals** | Replaces custom FaithfulnessScorer; faithfulness + hallucination + relevance | Low (1 day config) | Phase 3 (Ingestion) |
 | **P1** | **User Feedback → Langfuse score link** | Closes feedback-to-trace gap; links every rating to the exact LLM trace | Very Low (0.5 days) | Phase 2 (Instrument) |
-| **P1** | SLO error budget burn-rate alerts | Eliminates alert fatigue from single-threshold firing | Low | Phase 3 (Ingestion) |
+| **P1** | Custom Dashboard Service (FastAPI + React + Tremor) | Platform Overview, Cost Governance, Kafka Health, RAG Quality — no external tool dependency | Medium (2–3 weeks) | Phase 4 (Dashboards) |
 | **P1** | Observability-as-code (IaC) | Reproducible deployments; eliminates dashboard drift | Medium | Phase 3 (Ingestion) |
 | **P2** | ML anomaly detection layer | Catches subtle degradation invisible to static thresholds | High | Phase 6 (Anomaly) |
 | **P2** | Feedback → incident auto-routing | Closes quality feedback loop automatically | Medium | Phase 5 (Chatbot) |
@@ -490,14 +490,24 @@ Adding Langfuse creates a clean two-layer model. Services emit to both layers in
 │  UI:     Langfuse Web (trace explorer, prompt mgmt, evals)         │
 │                                                                     │
 ├─────────────────────────────────────────────────────────────────────┤
-│  Layer 2 — Platform / Infrastructure (OIS + Kafka + Grafana)       │
+│  Layer 2 — Platform / Infrastructure (OIS + Kafka)                 │
 │                                                                     │
 │  What:   Kafka lag, service health, document ingestion,            │
-│          SLO compliance, business KPIs, budget governance          │
+│          business KPIs, budget governance, anomaly events           │
 │  Who:    All 8 services via OIS HTTP emitter                        │
 │  How:    POST /v1/ingest — fire-and-forget                          │
 │  Store:  PostgreSQL obs_*, Elasticsearch, S3                        │
-│  UI:     Grafana, Kibana, Observability Chatbot                     │
+│  UI:     Custom Dashboard Service (FastAPI + React + Tremor),       │
+│          Kibana, Observability Chatbot                              │
+│                                                                     │
+│  Custom Dashboard Pages:                                            │
+│    • Platform Overview (requests, errors, latency, tokens)         │
+│    • Cost Governance (spend vs budget, model comparison)            │
+│    • Business KPIs (agent success, feedback trends)                 │
+│    • Kafka Health (consumer lag, offset, partition health)          │
+│    • RAG Quality (faithfulness, no-result rate, freshness)          │
+│    • Anomaly View (ML-detected deviations over time)               │
+│    • Feedback Trends (ratings, categories, resolution status)       │
 └─────────────────────────────────────────────────────────────────────┘
 ```
 

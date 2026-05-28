@@ -56,10 +56,10 @@ Read this alongside the architecture document and the refined architecture diagr
 |---|---|---|---|
 | `ai-obs-traces` | Distributed trace spans | All services via SDK | Telemetry Processor |
 | `ai-obs-events` | Domain events (REQUEST_RECEIVED, TOOL_CALL_COMPLETED, etc.) | All services via SDK | Telemetry Processor |
-| `ai-obs-metrics` | Counters, histograms, Kafka lag | All services + JMX exporter | Telemetry Processor, Grafana |
+| `ai-obs-metrics` | Counters, histograms, Kafka lag | All services + JMX exporter | Telemetry Processor, Custom Dashboard Service |
 | `ai-obs-quality` | Faithfulness scores, entropy, embedding drift | LLM Wrapper, RAG Wrapper via SDK | Telemetry Processor |
 | `ai-obs-cost` | Token cost events and budget snapshots | LLM Wrapper via SDK | Telemetry Processor |
-| `ai-obs-anomalies` | ML-detected anomaly events | Anomaly Detection Service | Elasticsearch indexer, Grafana adapter |
+| `ai-obs-anomalies` | ML-detected anomaly events | Anomaly Detection Service | Elasticsearch indexer, Custom Dashboard Service |
 | `ai-obs-incidents` | Incident triggers from feedback gate | Stream Processor | Incident Router Service |
 
 **W3C traceparent** must be injected as a Kafka message header (not inside the payload) on every message produced.
@@ -103,7 +103,7 @@ Read this alongside the architecture document and the refined architecture diagr
 - Publishes `ANOMALY_DETECTED` events to `ai-obs-anomalies` Kafka topic
 
 **Inputs:** Kafka topic `ai-obs-metrics`, `ai-obs-events` (enriched by processor)
-**Outputs:** Kafka topic `ai-obs-anomalies` → Elasticsearch `ai-obs-anomalies-*` → Grafana
+**Outputs:** Kafka topic `ai-obs-anomalies` → Elasticsearch `ai-obs-anomalies-*` → Custom Dashboard Service Anomaly View
 
 **Technology:** Python, scikit-learn (Isolation Forest), PyTorch or TensorFlow (LSTM), Redis, Kafka consumer
 
@@ -125,21 +125,6 @@ Read this alongside the architecture document and the refined architecture diagr
 **Technology:** Python, PagerDuty Python SDK or Jira REST, boto3, psycopg2
 
 ---
-
-### 1.6 Alert Rule Syncer
-
-**What it is:** A Python script (run as a Kubernetes CronJob or CI step) that reads the `alert_threshold` PostgreSQL table and pushes alert rules to Grafana via the Grafana Alerting API.
-
-**What it does:**
-- Reads all active rows from `alert_threshold`
-- Converts each row to a Grafana alert rule JSON payload
-- Creates or updates the rule via Grafana HTTP API
-- Reports drift (rules in Grafana not in PostgreSQL) for cleanup
-
-**Inputs:** PostgreSQL `alert_threshold` table
-**Outputs:** Grafana alert rules (via API)
-
-**Technology:** Python, requests (HTTP), psycopg2, Grafana Alerting API v1
 
 ---
 
@@ -166,15 +151,15 @@ Read this alongside the architecture document and the refined architecture diagr
 **What it is:** A natural-language interface for querying the observability data. Uses a metric semantic layer to route questions to the correct data source.
 
 **What it does:**
-- Classifies user intent (aggregate metric question, trace drill-down, RCA question, infra/SLO question)
+- Classifies user intent (aggregate metric question, trace drill-down, RCA question, cost/KPI question)
 - Enforces RBAC — users can only query data for their application/LOB
-- Routes queries to PostgreSQL (aggregates), Elasticsearch (events/traces), S3 (artifacts), or Grafana (infra metrics)
+- Routes queries to PostgreSQL (aggregates), Elasticsearch (events/traces), S3 (artifacts), or Custom Dashboard Service (platform metrics)
 - Generates structured answers with metric value, time range, applied filters, source, and dashboard link
 
 **Inputs:** User natural-language question, user identity/role
 **Outputs:** Structured answer with metric value, source attribution, dashboard link, recommended action
 
-**Technology:** Python, LLM (gemini/gpt-4o) for intent classification + answer generation, PostgreSQL, Elasticsearch, boto3, Grafana API
+**Technology:** Python, LLM (gemini/gpt-4o) for intent classification + answer generation, PostgreSQL, Elasticsearch, boto3, Custom Dashboard Service API
 
 ---
 
@@ -185,7 +170,7 @@ Read this alongside the architecture document and the refined architecture diagr
 | **Elasticsearch** | Elasticsearch 8.x | Hot operational event store; searchable logs, traces, errors, LLM/tool/RAG events |
 | **PostgreSQL** | PostgreSQL 14+ | Control plane — registries, KPI definitions, aggregate tables, alert thresholds, chatbot metric catalog |
 | **Amazon S3** | S3 with SSE-KMS | Object store — redacted payloads, full traces, RAG contexts, audit evidence, debug bundles, RCA reports |
-| **Grafana** | Grafana 10+ | Monitoring, SLO/SLA dashboards, alerting; reads from ES, PG, CloudWatch, Kafka JMX |
+| **Custom Dashboard Service** | FastAPI + React + Tremor | Platform dashboards — Platform Overview, Cost Governance, Kafka Health, RAG Quality, Anomaly View, Business KPIs; COIN JWT auth native |
 | **Redis / ElastiCache** | Redis 7+ | Runtime cache — budget accumulators, agent execution state, Kafka dedup, chatbot query cache |
 | **Kibana** | Kibana 8.x | Operational search UI over Elasticsearch for event and trace drill-down |
 
@@ -983,7 +968,7 @@ langfuse.create_llm_as_judge_eval(
 
 These scores are stored in Langfuse, queryable via the Langfuse SDK, and can be exported to PostgreSQL `daily_rag_quality` via a nightly sync job.
 
-### 3a.10 Nightly Langfuse → PostgreSQL Sync (for Grafana dashboards)
+### 3a.10 Nightly Langfuse → PostgreSQL Sync (for Custom Dashboard)
 
 ```python
 # aggregation/langfuse_to_postgres.py — run as K8s CronJob nightly
@@ -1074,7 +1059,7 @@ schema-version: 1.0
 
 ### 4.3 Dead-Letter Queue Handler
 
-Build a small consumer that reads from `*-dlq` topics, logs with context to Elasticsearch `ai-obs-errors-*`, and optionally alerts via Grafana.
+Build a small consumer that reads from `*-dlq` topics, logs with context to Elasticsearch `ai-obs-errors-*`, and surfaces counts on the Custom Dashboard Service error panel.
 
 ```python
 class DLQConsumer:
@@ -2031,66 +2016,7 @@ class IncidentRouterService:
 
 ## 9. Observability-as-Code Pipeline — What to Build
 
-### 9.1 Alert Rule Syncer
-
-```python
-import psycopg2
-import requests
-
-class AlertRuleSyncer:
-    def __init__(self, pg_dsn: str, grafana_url: str, grafana_token: str):
-        self._pg = psycopg2.connect(pg_dsn)
-        self._grafana_url = grafana_url
-        self._headers = {"Authorization": f"Bearer {grafana_token}"}
-
-    def sync(self):
-        rules = self._load_rules_from_postgres()
-        for rule in rules:
-            grafana_rule = self._convert_to_grafana_format(rule)
-            self._upsert_grafana_rule(grafana_rule)
-
-    def _load_rules_from_postgres(self) -> list[dict]:
-        with self._pg.cursor() as cur:
-            cur.execute("""
-                SELECT a.alert_id, a.metric_id, a.application_id, a.threshold_value,
-                       a.comparison_operator, a.window_minutes, a.severity,
-                       a.notification_channel, m.source_table, m.metric_name
-                FROM alert_threshold a
-                JOIN metric_catalog m ON m.metric_id = a.metric_id
-                WHERE a.active_flag = TRUE
-            """)
-            cols = [d[0] for d in cur.description]
-            return [dict(zip(cols, row)) for row in cur.fetchall()]
-
-    def _convert_to_grafana_format(self, rule: dict) -> dict:
-        return {
-            "uid": rule["alert_id"],
-            "title": f"Alert: {rule['metric_name']} for {rule.get('application_id', 'platform')}",
-            "condition": "A",
-            "data": [{
-                "refId": "A",
-                "queryType": "range",
-                "relativeTimeRange": {"from": rule["window_minutes"] * 60, "to": 0},
-                "datasourceUid": "postgresql",
-                "model": {
-                    "rawSql": f"SELECT {rule['metric_name']} FROM {rule['source_table']} WHERE application_id = '{rule.get('application_id', '')}' ORDER BY hour_timestamp DESC LIMIT 1",
-                }
-            }],
-            "noDataState": "NoData",
-            "execErrState": "Error",
-            "for": f"{rule['window_minutes']}m",
-        }
-
-    def _upsert_grafana_rule(self, rule: dict):
-        resp = requests.put(
-            f"{self._grafana_url}/api/v1/provisioning/alert-rules/{rule['uid']}",
-            json=rule,
-            headers=self._headers,
-        )
-        resp.raise_for_status()
-```
-
-### 9.2 CI Pipeline (`deploy.yml` steps)
+### 9.1 CI Pipeline (`deploy.yml` steps)
 
 ```yaml
 # ci/deploy.yml — runs on merge to main
@@ -2111,17 +2037,18 @@ steps:
           -d @$f
       done
 
-  - name: Deploy Grafana Dashboards
+  - name: Build and Deploy Custom Dashboard Service
     run: |
-      for f in grafana/dashboards/*.json; do
-        curl -X POST "${GRAFANA_URL}/api/dashboards/import" \
-          -H "Authorization: Bearer ${GRAFANA_TOKEN}" \
-          -H "Content-Type: application/json" \
-          -d "{\"dashboard\": $(cat $f), \"overwrite\": true}"
-      done
+      cd custom-dashboard/
+      npm run build                            # build React + Tremor frontend
+      docker build -t obs-dashboard:${GIT_SHA} .
+      kubectl rollout restart deployment/obs-dashboard-service
 
-  - name: Sync Alert Rules from PostgreSQL
-    run: python grafana/alert-rules/sync.py
+  - name: Run PostgreSQL Migrations
+    run: |
+      for f in postgres/migrations/*.sql; do
+        psql "${PG_DSN}" -f $f
+      done
 ```
 
 ---
@@ -2143,7 +2070,7 @@ observability-chatbot/
 │   │   ├── postgres.py      ← PostgresSource: aggregate queries
 │   │   ├── elasticsearch.py ← ElasticsearchSource: event/trace queries
 │   │   ├── s3.py            ← S3Source: artifact retrieval with RBAC check
-│   │   └── grafana.py       ← GrafanaSource: service health lookups
+│   │   └── langfuse.py      ← LangfuseSource: LLM/RAG trace + quality queries
 │   └── answer.py            ← AnswerGenerator: formats final response
 ├── tests/
 └── Dockerfile
@@ -2193,11 +2120,11 @@ class QueryPlanner:
         "cost_analysis":     ["langfuse", "postgres"],        # Langfuse has per-call cost
         "rag_quality":       ["langfuse", "postgres"],        # Langfuse has faithfulness scores
         "tool_health":       ["postgres", "elasticsearch"],
-        "slo_status":        ["postgres", "grafana"],
         "feedback_summary":  ["langfuse", "postgres"],        # Langfuse links feedback to traces
-        "infra_health":      "grafana",
-        "prompt_quality":    "langfuse",                      # new intent — prompt version analytics
-        "llm_trace":         "langfuse",                      # new intent — specific LLM call drill-down
+        "infra_health":      "postgres",                      # Custom Dashboard queries agg_* tables
+        "kafka_health":      "postgres",                      # queries obs_metrics kafka_consumer_lag
+        "prompt_quality":    "langfuse",                      # prompt version analytics
+        "llm_trace":         "langfuse",                      # specific LLM call drill-down
     }
 
     def plan(self, intent: str, question: str, context: dict) -> list[dict]:
@@ -2285,26 +2212,26 @@ class AnswerGenerator:
 
 ### 11.1 Dashboard Build Order and Technology
 
-All dashboards should be built as Grafana JSON (version-controlled) or Kibana saved objects (exported as NDJSON). Langfuse provides its own built-in UI for LLM/RAG/agent trace exploration — those do not need to be rebuilt in Grafana. Build in this order:
+All custom dashboards are built in the **Custom Dashboard Service** (FastAPI + React + Tremor) — version-controlled as React components and FastAPI endpoint files. Kibana serves operational event search. Langfuse provides its own built-in UI for LLM/RAG/agent trace exploration. Build in this order:
 
 | Order | Dashboard | Technology | Primary Data Source | Note |
 |---|---|---|---|---|
-| 1 | Platform Overview | Grafana | PostgreSQL `agg_hourly_application_metrics` | |
+| 1 | Platform Overview | **Custom Dashboard Service** | PostgreSQL `agg_hourly_application_metrics` | React KPI cards + BarChart; COIN JWT auth |
 | 2 | Error and Incident | Kibana | Elasticsearch `ai-obs-*-errors-*` | |
-| 3 | Application / CSI | Kibana + Grafana | Elasticsearch + PostgreSQL | |
+| 3 | Application / CSI | Kibana + Custom Dashboard | Elasticsearch + PostgreSQL | |
 | 4 | **LLM Trace Explorer** | **Langfuse UI** (built-in) | **Langfuse DB** | **Free — no build needed** |
 | 5 | **RAG Pipeline Quality** | **Langfuse UI** (built-in) | **Langfuse DB** | **Free — no build needed** |
 | 6 | **Agent Step Tree** | **Langfuse UI** (built-in) | **Langfuse DB** | **Free — no build needed** |
 | 7 | **Prompt Version Analytics** | **Langfuse UI** (built-in) | **Langfuse DB** | **Free — no build needed** |
-| 8 | Agent Observability (aggregate) | Kibana + Grafana | Elasticsearch + PostgreSQL | For aggregate trends only; trace drill-down → Langfuse |
-| 9 | Tool Health | Kibana + Grafana | Elasticsearch + PostgreSQL | |
-| 10 | LLM / Token / Cost (aggregate) | Grafana | PostgreSQL `agg_hourly_llm_metrics` + nightly Langfuse sync | Aggregate view; per-call detail → Langfuse |
-| 11 | RAG + Vector Health (aggregate) | Kibana + Grafana | PostgreSQL `daily_rag_quality` (synced from Langfuse nightly) | |
-| 12 | Feedback + Incident | Grafana | PostgreSQL `feedback_case` + Langfuse scores | |
-| 13 | SLO Error Budget | Grafana | PostgreSQL `daily_slo_compliance` | |
-| 14 | Cost Governance | Grafana | PostgreSQL `budget_limits` + `agg_hourly_llm_metrics` | |
-| 15 | Anomaly Detection | Grafana | Elasticsearch `ai-obs-anomalies-*` | |
-| 16 | Business KPI | Grafana | PostgreSQL `agg_daily_kpi_metrics` | |
+| 8 | Agent Observability (aggregate) | Kibana + Custom Dashboard | Elasticsearch + PostgreSQL | For aggregate trends; trace drill-down → Langfuse |
+| 9 | Tool Health | Kibana + Custom Dashboard | Elasticsearch + PostgreSQL | |
+| 10 | LLM / Token / Cost (aggregate) | **Custom Dashboard Service** | PostgreSQL `agg_hourly_llm_metrics` + nightly Langfuse sync | AreaChart + KPI cards; per-call detail → Langfuse |
+| 11 | RAG + Vector Health (aggregate) | **Custom Dashboard Service** | PostgreSQL `daily_rag_quality` (synced from Langfuse nightly) | |
+| 12 | Feedback + Incident | **Custom Dashboard Service** | PostgreSQL `feedback_case` + Langfuse scores | |
+| 13 | Cost Governance | **Custom Dashboard Service** | PostgreSQL `budget_limits` + `agg_hourly_llm_metrics` | AreaChart actual vs budget cap line |
+| 14 | Kafka Health | **Custom Dashboard Service** | PostgreSQL `obs_metrics` (kafka_consumer_lag) | |
+| 15 | Anomaly View | **Custom Dashboard Service** | Elasticsearch `ai-obs-anomalies-*` | |
+| 16 | Business KPI | **Custom Dashboard Service** | PostgreSQL `agg_daily_kpi_metrics` | |
 
 ### 11.2 Required Panels per Dashboard
 
@@ -2484,9 +2411,9 @@ class HypothesisRanker:
 
 ### Phase 4 — Dashboards (Weeks 10–14)
 
-**Deliverables:** All 12 dashboards (Section 11), version-controlled as JSON in `observability-iac/`
+**Deliverables:** All 16 dashboards (Section 11), Custom Dashboard Service React components + FastAPI endpoints version-controlled in `observability-iac/custom-dashboard/`
 
-**Build order:** Platform Overview → Error Dashboard → Application/CSI → Agent → Tool → LLM/Cost → SLO Error Budget → Cost Governance → RAG+Vector Health → Feedback+Incident → Anomaly → Business KPI
+**Build order:** Platform Overview → Error Dashboard (Kibana) → Application/CSI → Agent → Tool → LLM/Cost → Cost Governance → RAG+Vector Health → Kafka Health → Feedback+Incident → Anomaly View → Business KPI
 
 ---
 
@@ -2497,8 +2424,8 @@ class HypothesisRanker:
 2. IntentClassifier (backed by LLM)
 3. MetricSemanticLayer (reads `metric_catalog`)
 4. AccessController (RBAC by application/LOB from `application_registry`)
-5. QueryPlanner with routing to PostgreSQL, Elasticsearch, S3, Grafana
-6. AnswerGenerator with source attribution and dashboard links
+5. QueryPlanner with routing to PostgreSQL, Elasticsearch, S3, Langfuse (no Grafana dependency)
+6. AnswerGenerator with source attribution and Custom Dashboard deep-links
 7. Feedback Quality Gate → `ai-obs-incidents` Kafka topic publish
 8. Incident Router Service consuming `ai-obs-incidents`
 
@@ -2509,7 +2436,7 @@ class HypothesisRanker:
 **Deliverables:**
 1. Anomaly Detection Service (Isolation Forest + LSTM, Redis baselines)
 2. Elasticsearch `ai-obs-anomalies-*` indexer
-3. Grafana Anomaly Dashboard
+3. Custom Dashboard Service Anomaly View page (reads Elasticsearch `ai-obs-anomalies-*`)
 4. Offline Batch RCA Engine (nightly CronJob)
 5. Weekly digest (Slack webhook + SES email)
 
@@ -2518,9 +2445,8 @@ class HypothesisRanker:
 ### Phase 7 — Observability-as-Code (Weeks 20–23)
 
 **Deliverables:**
-1. `observability-iac/` repository with all dashboard JSON, index templates, ILM policies, migrations
-2. CI pipeline deploying all artifacts on merge to main
-3. Alert Rule Syncer (reads `alert_threshold` → Grafana API)
+1. `observability-iac/` repository with all Custom Dashboard React pages, FastAPI endpoints, Elasticsearch index templates, ILM policies, migrations
+2. CI pipeline deploying all artifacts on merge to main (ES templates + Custom Dashboard build + deploys)
 
 ---
 
@@ -2546,11 +2472,11 @@ Phase 2 (SDK + Langfuse @observe) ───────────────�
   ↓                                                  │
 Phase 3 (Processor + Langfuse Evals + Sync) ────┐   │
   ↓                    ↓                         │   │
-Phase 4 (Dashboards)  Phase 5 (Chatbot           │   │
-  (Grafana/Kibana)      + Langfuse source)        │   │
-  ↓                    ↓                         │   │
-Phase 7 (IaC)         Phase 5.b (Incident Router)│   │
-                                                 ↓   ↓
+Phase 4 (Custom        Phase 5 (Chatbot          │   │
+  Dashboard +           + Langfuse source)        │   │
+  Kibana Dashboards)    ↓                         │   │
+  ↓                    Phase 5.b (Incident Router)│   │
+Phase 7 (IaC)                                    ↓   ↓
                         Phase 6 (Anomaly Detection + RCA)
                                 ↓
                         Phase 8 (Multi-Tenant Isolation)
@@ -2560,4 +2486,6 @@ Phase 7 (IaC)         Phase 5.b (Incident Router)│   │
 
 **Phases 4 and 5 can run in parallel** after Phase 3 is producing data to PostgreSQL and Elasticsearch.
 
-**Langfuse shortcut:** After Phase 2 Langfuse instrumentation is done, the **LLM Trace Explorer, RAG Pipeline Quality, Agent Step Tree, and Prompt Version Analytics dashboards are already available in the Langfuse UI** — without building any Grafana/Kibana dashboards. This unlocks immediate value for ML engineers and application teams while Phase 3–4 builds the broader platform dashboards for SREs and business stakeholders.
+**Langfuse shortcut:** After Phase 2 Langfuse instrumentation is done, the **LLM Trace Explorer, RAG Pipeline Quality, Agent Step Tree, and Prompt Version Analytics dashboards are already available in the Langfuse UI** — without building any Custom Dashboard or Kibana dashboards. This unlocks immediate value for ML engineers and application teams while Phase 3–4 builds the broader platform dashboards for business stakeholders.
+
+**Custom Dashboard Service** (Phase 4) is self-contained — it serves Platform Overview, Cost Governance, Kafka Health, RAG Quality, Anomaly View, and Business KPIs via a FastAPI backend querying PostgreSQL `agg_*` tables + Elasticsearch. No external dashboard tool required.

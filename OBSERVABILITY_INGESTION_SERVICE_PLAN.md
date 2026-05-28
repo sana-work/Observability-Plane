@@ -78,8 +78,8 @@ The platform observability layer is split into two complementary planes. OIS han
 | Kafka lag / consumer offsets | OIS | Infrastructure metric |
 | Document ingestion pipeline events | OIS | Not LLM-centric |
 | Service health events (REQUEST_RECEIVED, AUTH_COMPLETED) | OIS | Platform-level signal |
-| SLO compliance, error budgets | OIS → PostgreSQL → Grafana | Operational SRE concern |
-| Business KPIs, budget governance | OIS → PostgreSQL → Grafana | Domain-specific aggregates |
+| Business KPIs, budget governance | OIS → PostgreSQL → Custom Dashboard Service | Domain-specific aggregates (FastAPI + React + Tremor) |
+| Cost governance, model spend | OIS → PostgreSQL → Custom Dashboard Service | Per-application budget tracking |
 
 ### 2.2 Core Principles
 
@@ -1226,7 +1226,7 @@ MODEL_PRICING = {
 | Implement ErrorMapper (exception → error_code) | SRE | Standard error codes in obs_events |
 | Implement 8 typed writers (LLM, Agent, Tool, RAG, Feedback, Log, Metric, Dead Letter) | Platform Engineering | Telemetry in correct tables |
 | Implement EventRouter | Platform Engineering | Event type → correct writer |
-| Add `/metrics` Prometheus endpoint | Platform Engineering | Grafana can scrape OIS |
+| Add `/metrics` Prometheus endpoint | Platform Engineering | Prometheus scrapes OIS; Custom Dashboard Service plots data |
 
 ### Phase 3 — Service Integration (Week 5–7)
 
@@ -1248,8 +1248,9 @@ Integration order — lowest effort first:
 | Task | Owner | Output |
 |---|---|---|
 | Implement `obs_hourly_summary` rollup job | Data Engineering | Hourly aggregates populated |
-| Connect Grafana to `obs_events` and aggregates | SRE | Basic dashboards operational |
-| Build error rate and latency dashboards | SRE | Alert rules can fire on real data |
+| Deploy Custom Dashboard Service (FastAPI + React + Tremor) | Platform Engineering | Platform Overview, Cost Governance, Kafka Health dashboards live |
+| Connect Custom Dashboard to `obs_events` and aggregates | Platform Engineering | Basic dashboards operational |
+| Build Platform Overview, Error Rate, Latency, Cost Governance dashboards | Platform Engineering | First dashboards live on Custom Dashboard |
 | Validate all 8 services emitting events | All teams | End-to-end proof |
 
 ---
