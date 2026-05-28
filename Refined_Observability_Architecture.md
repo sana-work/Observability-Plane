@@ -4,7 +4,7 @@
 
 The diagram below extends the baseline architecture with 10 advanced capability layers:
 ML-based anomaly detection, LLM quality observability, cost governance, SLO error budget tracking,
-W3C TraceContext on Kafka, embedding/vector health monitoring, observability-as-code, feedback-to-incident routing,
+W3C TraceContext on Kafka, embedding/vector health monitoring, observability-as-code,
 multi-tenant namespace isolation, and offline batch RCA.
 
 ```mermaid
@@ -57,7 +57,6 @@ flowchart TB
         T_EVENTS["ai-obs-events"]
         T_METRICS["ai-obs-metrics"]
         T_ANOMALY["ai-obs-anomalies"]
-        T_INCIDENT["ai-obs-incidents"]
         T_QUALITY["ai-obs-quality"]
     end
 
@@ -78,12 +77,6 @@ flowchart TB
         BASELINE["Per-app Dynamic Baselines\n(P50/P95/P99 sliding windows)"]
         CORR["Metric Correlation Engine\n(latency ↔ tool ↔ LLM via correlation_id)"]
         ANOMOUT["Anomaly Events → Kafka"]
-    end
-
-    subgraph INCSVC["Incident Router Service"]
-        FBGATE["Feedback Quality Gate\n(score < 2 + critical tier → incident)"]
-        INCPUB["Incident Publisher\n(PagerDuty / Jira webhook)"]
-        DEBUNDLE["Debug Bundle Assembler\n(correlation_id + S3 artifacts)"]
     end
 
     subgraph IACPIPE["Observability-as-Code Pipeline"]
@@ -136,7 +129,7 @@ flowchart TB
         TRACEVIEW["Trace Explorer"]
         RAGDASH["RAG + Vector Health Dashboard\n(faithfulness, drift, freshness)"]
         LLMDASH["LLM / Token / Cost Dashboard"]
-        FEEDDASH["Feedback + Incident Dashboard"]
+        FEEDDASH["Feedback Trends Dashboard"]
     end
 
     subgraph BATCHRCA["Offline Batch RCA Engine (Nightly)"]
@@ -204,12 +197,6 @@ flowchart TB
     RAG -. index health .-> ES_VECTOR
     ES_VECTOR --> PG_VECH
 
-    %% Incident routing
-    T_INCIDENT --> INCSVC
-    FBGATE --> INCPUB
-    DEBUNDLE --> S3
-    ES_FEED --> FBGATE
-
     %% IaC pipeline
     DASHCODE & IDXTMPL --> S3
 
@@ -247,7 +234,6 @@ flowchart TB
 | **Budget Accumulator** | Real-time spend counter in Redis; writes alerts when `max_spend_usd` threshold hit | PostgreSQL `budget_limits` → Custom Dashboard Service Cost Governance page |
 | **W3C TraceContext Extractor** | Reads `traceparent` Kafka headers; propagates full W3C trace through all enrichment steps | All downstream stores and Chatbot |
 | **Vector Health Monitor** | Tracks embedding drift score, index freshness, retrieval recall@k | Elasticsearch `ai-obs-vector-health-*`, PostgreSQL `vector_health_snapshots` → Custom Dashboard RAG Quality page |
-| **Incident Router** | Consumes `ai-obs-incidents` Kafka topic; triggers PagerDuty/Jira for critical negative feedback | External ticketing, S3 debug bundles |
 | **Per-LOB ES Namespacing** | Indices partitioned as `ai-obs-{lob}-*`; enables per-tenant retention + index-level RBAC | Kibana per-LOB orgs, multi-tenant isolation |
 | **Offline Batch RCA Engine** | Nightly job: joins errors ↔ traces ↔ aggregates; ranks root causes; writes weekly digest | S3 `rca-reports/`, Elasticsearch, Slack/Email |
 
@@ -258,7 +244,6 @@ flowchart TB
 | Topic | Producer | Consumer | Purpose |
 |---|---|---|---|
 | `ai-obs-anomalies` | Anomaly Detection Service | Custom Dashboard Service, Elasticsearch indexer | Anomaly events with score, baseline, metric name |
-| `ai-obs-incidents` | Feedback Quality Gate | Incident Router Service | Incident triggers with `correlation_id`, severity, debug bundle reference |
 | `ai-obs-quality` | LLM/RAG wrappers via SDK | Telemetry Processor (Faithfulness Scorer) | Quality signals: faithfulness, entropy, embedding drift |
 
 ---
@@ -381,16 +366,6 @@ def consume_event(msg: KafkaMessage) -> dict:
 
 ---
 
-## Feedback-to-Incident Auto-Routing Rules
-
-| Condition | Action | Artifacts Attached |
-|---|---|---|
-| `feedback_score < 2` AND `application_tier = "critical"` | Create PagerDuty/Jira incident | `correlation_id`, `agent_id`, S3 debug bundle URI |
-| `negative_feedback_count > 10` in 1h for single agent | Create low-severity ticket | Feedback summary, top categories, trace samples |
-| `guardrail_block_rate > 5x` baseline | Create compliance incident | Guardrail event IDs, policy version, violation types |
-
----
-
 ## Multi-Tenant Index Naming Convention
 
 ```text
@@ -467,7 +442,6 @@ observability-iac/
 | **P1** | Custom Dashboard Service (FastAPI + React + Tremor) | Platform Overview, Cost Governance, Kafka Health, RAG Quality — no external tool dependency | Medium (2–3 weeks) | Phase 4 (Dashboards) |
 | **P1** | Observability-as-code (IaC) | Reproducible deployments; eliminates dashboard drift | Medium | Phase 3 (Ingestion) |
 | **P2** | ML anomaly detection layer | Catches subtle degradation invisible to static thresholds | High | Phase 6 (Anomaly) |
-| **P2** | Feedback → incident auto-routing | Closes quality feedback loop automatically | Medium | Phase 5 (Chatbot) |
 | **P2** | Embedding/vector health monitoring | Prevents silent RAG quality degradation | Medium | Phase 4 (Dashboards) |
 | **P3** | Per-LOB Elasticsearch namespacing | Scales cleanly to more LOBs and compliance domains | High | Phase 4 (Dashboards) |
 | **P3** | Offline batch RCA engine | Strategic weekly reliability insights | High | Phase 6 (Anomaly) |

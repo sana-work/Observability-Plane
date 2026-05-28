@@ -17,12 +17,11 @@ Read this alongside the architecture document and the refined architecture diagr
 5. [Telemetry Processor — What to Build](#5-telemetry-processor--what-to-build)
 6. [Storage Layer — What to Build](#6-storage-layer--what-to-build)
 7. [Anomaly Detection Service — What to Build](#7-anomaly-detection-service--what-to-build)
-8. [Incident Router Service — What to Build](#8-incident-router-service--what-to-build)
-9. [Observability-as-Code Pipeline — What to Build](#9-observability-as-code-pipeline--what-to-build)
-10. [Observability Chatbot — What to Build](#10-observability-chatbot--what-to-build)
-11. [Dashboard Specifications — What to Build](#11-dashboard-specifications--what-to-build)
-12. [Offline Batch RCA Engine — What to Build](#12-offline-batch-rca-engine--what-to-build)
-13. [Development Sequence and Dependencies](#13-development-sequence-and-dependencies)
+8. [Observability-as-Code Pipeline — What to Build](#8-observability-as-code-pipeline--what-to-build)
+9. [Observability Chatbot — What to Build](#9-observability-chatbot--what-to-build)
+10. [Dashboard Specifications — What to Build](#10-dashboard-specifications--what-to-build)
+11. [Offline Batch RCA Engine — What to Build](#11-offline-batch-rca-engine--what-to-build)
+12. [Development Sequence and Dependencies](#12-development-sequence-and-dependencies)
 
 ---
 
@@ -60,7 +59,6 @@ Read this alongside the architecture document and the refined architecture diagr
 | `ai-obs-quality` | Faithfulness scores, entropy, embedding drift | LLM Wrapper, RAG Wrapper via SDK | Telemetry Processor |
 | `ai-obs-cost` | Token cost events and budget snapshots | LLM Wrapper via SDK | Telemetry Processor |
 | `ai-obs-anomalies` | ML-detected anomaly events | Anomaly Detection Service | Elasticsearch indexer, Custom Dashboard Service |
-| `ai-obs-incidents` | Incident triggers from feedback gate | Stream Processor | Incident Router Service |
 
 **W3C traceparent** must be injected as a Kafka message header (not inside the payload) on every message produced.
 
@@ -106,23 +104,6 @@ Read this alongside the architecture document and the refined architecture diagr
 **Outputs:** Kafka topic `ai-obs-anomalies` → Elasticsearch `ai-obs-anomalies-*` → Custom Dashboard Service Anomaly View
 
 **Technology:** Python, scikit-learn (Isolation Forest), PyTorch or TensorFlow (LSTM), Redis, Kafka consumer
-
----
-
-### 1.5 Incident Router Service
-
-**What it is:** A lightweight consumer of the `ai-obs-incidents` Kafka topic that dispatches incident payloads to external ticketing systems (PagerDuty, Jira ServiceNow).
-
-**What it does:**
-- Evaluates routing rules (severity, application tier, incident type)
-- Calls PagerDuty Events API or Jira REST API to create incidents
-- Assembles a debug bundle (Elasticsearch links, S3 artifact URIs, trace links) and stores it in S3
-- Writes `linked_incident_id` back to the `feedback_case` PostgreSQL table
-
-**Inputs:** Kafka topic `ai-obs-incidents` (published by stream processor's feedback quality gate)
-**Outputs:** PagerDuty/Jira incident, S3 debug bundle, PostgreSQL `feedback_case.linked_incident_id`
-
-**Technology:** Python, PagerDuty Python SDK or Jira REST, boto3, psycopg2
 
 ---
 
@@ -1021,7 +1002,6 @@ kafka-topics.sh --create --topic ai-obs-metrics      --partitions 6  --replicati
 kafka-topics.sh --create --topic ai-obs-quality      --partitions 6  --replication-factor 3
 kafka-topics.sh --create --topic ai-obs-cost         --partitions 6  --replication-factor 3
 kafka-topics.sh --create --topic ai-obs-anomalies    --partitions 6  --replication-factor 3
-kafka-topics.sh --create --topic ai-obs-incidents    --partitions 3  --replication-factor 3
 
 # Dead-letter queues for each topic
 kafka-topics.sh --create --topic ai-obs-events-dlq   --partitions 6  --replication-factor 3
@@ -1637,7 +1617,6 @@ CREATE TABLE feedback_case (
     category              VARCHAR(64),
     comment_redacted      TEXT,
     status                VARCHAR(32) DEFAULT 'open',
-    linked_incident_id    VARCHAR(128),
     submitted_by_role     VARCHAR(32),
     created_at            TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -1915,106 +1894,7 @@ class IsolationForestDetector:
 
 ---
 
-## 8. Incident Router Service — What to Build
-
-### 8.1 Feedback Quality Gate (runs inside Telemetry Processor)
-
-```python
-class FeedbackQualityGate:
-    def __init__(self, pg_conn, kafka_producer):
-        self._pg = pg_conn
-        self._producer = kafka_producer
-
-    def process(self, event: dict, _headers: dict) -> dict:
-        if event.get("event_type") != "FEEDBACK_SUBMITTED":
-            return event
-
-        rating = event.get("rating", 5)
-        app_id = event.get("application_id")
-        tier = self._get_application_tier(app_id)
-
-        if rating <= 2 and tier == "critical":
-            self._publish_incident(event, severity="high", reason="critical_negative_feedback")
-        return event
-
-    def _publish_incident(self, event: dict, severity: str, reason: str):
-        incident = {
-            "event_type": "INCIDENT_TRIGGERED",
-            "incident_id": str(uuid4()),
-            "correlation_id": event.get("correlation_id"),
-            "application_id": event.get("application_id"),
-            "agent_id": event.get("agent_id"),
-            "severity": severity,
-            "reason": reason,
-            "feedback_rating": event.get("rating"),
-            "timestamp": datetime.utcnow().isoformat() + "Z",
-        }
-        self._producer.produce("ai-obs-incidents", value=json.dumps(incident).encode())
-```
-
-### 8.2 Incident Router Consumer
-
-```python
-class IncidentRouterService:
-    def __init__(self, consumer, pagerduty_client, jira_client, s3_client, pg_conn):
-        self._consumer = consumer
-        self._pd = pagerduty_client
-        self._jira = jira_client
-        self._s3 = s3_client
-        self._pg = pg_conn
-
-    def run(self):
-        self._consumer.subscribe(["ai-obs-incidents"])
-        while True:
-            msg = self._consumer.poll(1.0)
-            if msg and not msg.error():
-                incident = json.loads(msg.value())
-                self._route(incident)
-
-    def _route(self, incident: dict):
-        # Build debug bundle
-        bundle_uri = self._assemble_debug_bundle(incident)
-
-        # Create PagerDuty event
-        if incident.get("severity") == "high":
-            pd_event_id = self._pd.create_event(
-                summary=f"AI Platform Incident: {incident['reason']}",
-                source=incident["application_id"],
-                severity="error",
-                custom_details={
-                    "correlation_id": incident["correlation_id"],
-                    "agent_id": incident.get("agent_id"),
-                    "debug_bundle": bundle_uri,
-                }
-            )
-            # Write back linked_incident_id to PostgreSQL
-            self._pg.execute(
-                "UPDATE feedback_case SET linked_incident_id = %s, status = 'escalated' WHERE correlation_id = %s",
-                (pd_event_id, incident["correlation_id"])
-            )
-
-    def _assemble_debug_bundle(self, incident: dict) -> str:
-        bundle = {
-            "incident_id": incident["incident_id"],
-            "correlation_id": incident["correlation_id"],
-            "elasticsearch_links": [
-                f"/app/discover#/?_g=()&_a=(query:(language:kuery,query:'correlation_id:\"{incident[\"correlation_id\"]}\"'))"
-            ],
-            "created_at": datetime.utcnow().isoformat(),
-        }
-        key = f"debug-bundles/{datetime.utcnow().strftime('%Y/%m/%d')}/{incident['incident_id']}/bundle.json"
-        self._s3.put_object(
-            Bucket="ai-observability-prod",
-            Key=key,
-            Body=json.dumps(bundle).encode(),
-            ServerSideEncryption="aws:kms",
-        )
-        return f"s3://ai-observability-prod/{key}"
-```
-
----
-
-## 9. Observability-as-Code Pipeline — What to Build
+## 8. Observability-as-Code Pipeline — What to Build
 
 ### 9.1 CI Pipeline (`deploy.yml` steps)
 
@@ -2053,9 +1933,9 @@ steps:
 
 ---
 
-## 10. Observability Chatbot — What to Build
+## 9. Observability Chatbot — What to Build
 
-### 10.1 Application Structure
+### 9.1 Application Structure
 
 ```text
 observability-chatbot/
@@ -2076,7 +1956,7 @@ observability-chatbot/
 └── Dockerfile
 ```
 
-### 10.2 Intent Classifier
+### 9.2 Intent Classifier
 
 ```python
 class IntentClassifier:
@@ -2107,7 +1987,7 @@ class IntentClassifier:
         return response.text.strip().lower()
 ```
 
-### 10.3 Query Planner
+### 9.3 Query Planner
 
 Langfuse is added as a query source for LLM/RAG/agent quality intents. The chatbot queries Langfuse for trace-level detail and PostgreSQL/Elasticsearch for aggregates and infrastructure.
 
@@ -2177,7 +2057,7 @@ class LangfuseSource:
         return {"source": "langfuse", "data": None}
 ```
 
-### 10.4 Answer Generator
+### 9.4 Answer Generator
 
 ```python
 class AnswerGenerator:
@@ -2208,16 +2088,16 @@ class AnswerGenerator:
 
 ---
 
-## 11. Dashboard Specifications — What to Build
+## 10. Dashboard Specifications — What to Build
 
-### 11.1 Dashboard Build Order and Technology
+### 9.1 Dashboard Build Order and Technology
 
 All custom dashboards are built in the **Custom Dashboard Service** (FastAPI + React + Tremor) — version-controlled as React components and FastAPI endpoint files. Kibana serves operational event search. Langfuse provides its own built-in UI for LLM/RAG/agent trace exploration. Build in this order:
 
 | Order | Dashboard | Technology | Primary Data Source | Note |
 |---|---|---|---|---|
 | 1 | Platform Overview | **Custom Dashboard Service** | PostgreSQL `agg_hourly_application_metrics` | React KPI cards + BarChart; COIN JWT auth |
-| 2 | Error and Incident | Kibana | Elasticsearch `ai-obs-*-errors-*` | |
+| 2 | Error Dashboard | Kibana | Elasticsearch `ai-obs-*-errors-*` | |
 | 3 | Application / CSI | Kibana + Custom Dashboard | Elasticsearch + PostgreSQL | |
 | 4 | **LLM Trace Explorer** | **Langfuse UI** (built-in) | **Langfuse DB** | **Free — no build needed** |
 | 5 | **RAG Pipeline Quality** | **Langfuse UI** (built-in) | **Langfuse DB** | **Free — no build needed** |
@@ -2227,13 +2107,13 @@ All custom dashboards are built in the **Custom Dashboard Service** (FastAPI + R
 | 9 | Tool Health | Kibana + Custom Dashboard | Elasticsearch + PostgreSQL | |
 | 10 | LLM / Token / Cost (aggregate) | **Custom Dashboard Service** | PostgreSQL `agg_hourly_llm_metrics` + nightly Langfuse sync | AreaChart + KPI cards; per-call detail → Langfuse |
 | 11 | RAG + Vector Health (aggregate) | **Custom Dashboard Service** | PostgreSQL `daily_rag_quality` (synced from Langfuse nightly) | |
-| 12 | Feedback + Incident | **Custom Dashboard Service** | PostgreSQL `feedback_case` + Langfuse scores | |
+| 12 | Feedback Trends | **Custom Dashboard Service** | PostgreSQL `feedback_case` + Langfuse scores | |
 | 13 | Cost Governance | **Custom Dashboard Service** | PostgreSQL `budget_limits` + `agg_hourly_llm_metrics` | AreaChart actual vs budget cap line |
 | 14 | Kafka Health | **Custom Dashboard Service** | PostgreSQL `obs_metrics` (kafka_consumer_lag) | |
 | 15 | Anomaly View | **Custom Dashboard Service** | Elasticsearch `ai-obs-anomalies-*` | |
 | 16 | Business KPI | **Custom Dashboard Service** | PostgreSQL `agg_daily_kpi_metrics` | |
 
-### 11.2 Required Panels per Dashboard
+### 9.2 Required Panels per Dashboard
 
 **Platform Overview — must include:**
 - Request count (counter, 24h)
@@ -2260,9 +2140,9 @@ All custom dashboards are built in the **Custom Dashboard Service** (FastAPI + R
 
 ---
 
-## 12. Offline Batch RCA Engine — What to Build
+## 11. Offline Batch RCA Engine — What to Build
 
-### 12.1 Job Structure
+### 9.1 Job Structure
 
 ```text
 rca-engine/
@@ -2277,7 +2157,7 @@ rca-engine/
 └── Dockerfile
 ```
 
-### 12.2 Failure Correlator
+### 9.2 Failure Correlator
 
 ```python
 class FailureCorrelator:
@@ -2314,7 +2194,7 @@ class FailureCorrelator:
         return incidents
 ```
 
-### 12.3 Hypothesis Ranker
+### 11.3 Hypothesis Ranker
 
 ```python
 class HypothesisRanker:
@@ -2346,7 +2226,7 @@ class HypothesisRanker:
 
 ---
 
-## 13. Development Sequence and Dependencies
+## 12. Development Sequence and Dependencies
 
 ### Phase 1 — Foundation (Weeks 1–3)
 
@@ -2413,7 +2293,7 @@ class HypothesisRanker:
 
 **Deliverables:** All 16 dashboards (Section 11), Custom Dashboard Service React components + FastAPI endpoints version-controlled in `observability-iac/custom-dashboard/`
 
-**Build order:** Platform Overview → Error Dashboard (Kibana) → Application/CSI → Agent → Tool → LLM/Cost → Cost Governance → RAG+Vector Health → Kafka Health → Feedback+Incident → Anomaly View → Business KPI
+**Build order:** Platform Overview → Error Dashboard (Kibana) → Application/CSI → Agent → Tool → LLM/Cost → Cost Governance → RAG+Vector Health → Kafka Health → Feedback Trends → Anomaly View → Business KPI
 
 ---
 
@@ -2426,8 +2306,6 @@ class HypothesisRanker:
 4. AccessController (RBAC by application/LOB from `application_registry`)
 5. QueryPlanner with routing to PostgreSQL, Elasticsearch, S3, Langfuse (no Grafana dependency)
 6. AnswerGenerator with source attribution and Custom Dashboard deep-links
-7. Feedback Quality Gate → `ai-obs-incidents` Kafka topic publish
-8. Incident Router Service consuming `ai-obs-incidents`
 
 ---
 
@@ -2474,8 +2352,8 @@ Phase 3 (Processor + Langfuse Evals + Sync) ────┐   │
   ↓                    ↓                         │   │
 Phase 4 (Custom        Phase 5 (Chatbot          │   │
   Dashboard +           + Langfuse source)        │   │
-  Kibana Dashboards)    ↓                         │   │
-  ↓                    Phase 5.b (Incident Router)│   │
+  Kibana Dashboards)                              │   │
+  ↓                                               │   │
 Phase 7 (IaC)                                    ↓   ↓
                         Phase 6 (Anomaly Detection + RCA)
                                 ↓

@@ -537,7 +537,7 @@ This table maps every major observability data category to the correct storage c
 | **PostgreSQL** | KPI definitions | `kpi_definition` | One row per KPI | Business KPI formulas, thresholds, ownership, reportability | KPI dashboard, business reporting, chatbot |
 | **PostgreSQL** | Feedback cases | `feedback_case` | One row per user/SME feedback item | Feedback workflow, sentiment, category, resolution status | Feedback dashboard, quality improvement, chatbot |
 | **PostgreSQL** | Dashboard configurations | `dashboard_config` | One row per dashboard/widget configuration | Dashboard metadata, filters, ownership, visibility | Dashboard service, admin UI |
-| **PostgreSQL** | Alert thresholds | `alert_threshold` | One row per alert rule/threshold | Threshold conditions surfaced as KPI card colours in Custom Dashboard Service | Custom Dashboard Service KPI cards, incident routing |
+| **PostgreSQL** | Alert thresholds | `alert_threshold` | One row per alert rule/threshold | Threshold conditions surfaced as KPI card colours in Custom Dashboard Service | Custom Dashboard Service KPI cards, threshold alerting |
 | **PostgreSQL** | Chatbot semantic metric catalog | `metric_catalog` | One row per governed metric | Metric names, aliases, formulas, dimensions, approved sources | Observability chatbot, dashboard consistency |
 | **PostgreSQL** | Hourly application metrics | `agg_hourly_application_metrics` | One row per application per hour | Fast application-level rollups | Executive dashboard, chatbot, SLA reporting |
 | **PostgreSQL** | Hourly agent metrics | `agg_hourly_agent_metrics` | One row per agent per hour | Fast agent-level rollups | Agent dashboard, chatbot |
@@ -581,7 +581,7 @@ The following map expands the storage responsibility model across **all data sto
 | **PostgreSQL** | `feedback_case` | Governed feedback workflow and resolution tracking | One row per feedback case | Feedback UI / review workflow | 1–3 years | Feedback dashboard, improvement backlog |
 | **PostgreSQL** | `metric_catalog` | Semantic metric catalog used by dashboards and chatbot | One row per approved metric | Platform analytics team | Long-lived | Chatbot semantic layer, dashboards |
 | **PostgreSQL** | `dashboard_config` | Dashboard/page/widget/filter configuration | One row per dashboard or widget config | Dashboard admin UI/config pipeline | Long-lived | Custom Dashboard Service + Kibana config |
-| **PostgreSQL** | `alert_threshold` | Thresholds and conditions surfaced in Custom Dashboard KPI cards | One row per threshold/condition | SRE/app owner configuration | Long-lived | Custom Dashboard Service KPI cards, incident routing |
+| **PostgreSQL** | `alert_threshold` | Thresholds and conditions surfaced in Custom Dashboard KPI cards | One row per threshold/condition | SRE/app owner configuration | Long-lived | Custom Dashboard Service KPI cards, threshold alerting |
 | **PostgreSQL** | `agg_hourly_application_metrics` | Hourly application-level rollups | One row per application/hour | Stream or scheduled aggregation | 1–2 years | Executive/app dashboard, chatbot |
 | **PostgreSQL** | `agg_hourly_agent_metrics` | Hourly agent execution rollups | One row per agent/hour | Stream or scheduled aggregation | 1–2 years | Agent dashboard, chatbot |
 | **PostgreSQL** | `agg_hourly_tool_metrics` | Hourly tool reliability rollups | One row per tool/hour | Stream or scheduled aggregation | 1–2 years | Tool dashboard, RCA, chatbot, alerts |
@@ -614,7 +614,7 @@ Elasticsearch is the **hot operational search store**. It should contain normali
 | `ai-observability-tool-calls-*` | `TOOL_CALL_STARTED`, `TOOL_CALL_COMPLETED`, `TOOL_CALL_FAILED` | `correlation_id`, `agent_id`, `tool_id`, `span_id` | `tool_name`, `tool_type`, `http_status`, `latency_ms`, `retry_count`, `timeout_flag`, `error_code` | Tool execution metadata | Tool request/response body with sensitive data | Tool health, dependency errors |
 | `ai-observability-rag-events-*` | `RAG_RETRIEVAL_STARTED`, `RAG_RETRIEVAL_COMPLETED`, `RAG_NO_RESULT`, `RAG_GENERATION_COMPLETED` | `correlation_id`, `rag_id`, `agent_id`, `span_id` | `knowledge_base`, `top_k`, `retrieved_chunk_count`, `avg_relevance_score`, `citation_coverage_pct`, `no_result_flag`, `s3_rag_context_uri` | Retrieval metrics and artifact pointers | Full retrieved chunks if large/sensitive | RAG dashboard, knowledge quality |
 | `ai-observability-guardrail-events-*` | `GUARDRAIL_EVALUATED`, `GUARDRAIL_BLOCKED`, `CONTENT_REDACTED` | `correlation_id`, `policy_id`, `span_id` | `decision`, `risk_score`, `violation_type`, `blocked_stage`, `redaction_applied`, `policy_version` | Policy decision metadata | Sensitive detected content | Guardrail dashboard, compliance review |
-| `ai-observability-feedback-*` | `FEEDBACK_SUBMITTED`, `FEEDBACK_UPDATED` | `feedback_id`, `correlation_id`, `application_id` | `rating`, `thumbs`, `sentiment`, `category`, `status`, `linked_incident_id` | Searchable feedback summary | Unredacted free-text comments | Feedback dashboard, quality review |
+| `ai-observability-feedback-*` | `FEEDBACK_SUBMITTED`, `FEEDBACK_UPDATED` | `feedback_id`, `correlation_id`, `application_id` | `rating`, `thumbs`, `sentiment`, `category`, `status` | Searchable feedback summary | Unredacted free-text comments | Feedback dashboard, quality review |
 
 #### 5.6.3 PostgreSQL Table Responsibility Map
 
@@ -629,10 +629,10 @@ PostgreSQL is the **governed control-plane and aggregate store**. It owns applic
 | RAG registry | `rag_registry` | RAG/knowledge-base configuration and ownership | `rag_id`, `application_id`, `knowledge_base_name`, `vector_index_name`, `embedding_model`, `refresh_frequency`, `owner_team`, `active_flag` | RAG admin/config service | RAG dashboard, retrieval quality analysis, chatbot |
 | Error code catalog | `error_code_catalog` | Standard platform/agent/tool/LLM/RAG error definitions | `error_code`, `error_category`, `severity`, `description`, `runbook_url`, `owner_team` | Platform engineering / SRE | Error dashboards, RCA, chatbot, alerts |
 | KPI definitions | `kpi_definition` | Business and operational KPI definitions | `kpi_id`, `application_id`, `agent_id`, `kpi_name`, `kpi_category`, `formula`, `data_source`, `threshold_green`, `threshold_yellow`, `threshold_red`, `owner`, `active_flag` | KPI admin / product owners | KPI dashboard, business scorecards, chatbot |
-| Feedback cases | `feedback_case` | User/SME feedback linked to traces and responses | `feedback_id`, `correlation_id`, `application_id`, `agent_id`, `rating`, `thumbs`, `sentiment`, `category`, `comment_redacted`, `status`, `linked_incident_id` | Feedback UI / chatbot / review workflow | Feedback dashboard, RCA, model improvement workflow |
+| Feedback cases | `feedback_case` | User/SME feedback linked to traces and responses | `feedback_id`, `correlation_id`, `application_id`, `agent_id`, `rating`, `thumbs`, `sentiment`, `category`, `comment_redacted`, `status` | Feedback UI / chatbot / review workflow | Feedback dashboard, RCA, model improvement workflow |
 | Metric catalog | `metric_catalog` | Governed metric dictionary and chatbot semantic layer | `metric_id`, `metric_name`, `metric_aliases`, `metric_category`, `formula`, `source_table`, `time_grain`, `dimensions`, `owner`, `active_flag` | Platform analytics team | Observability chatbot, dashboards, metric consistency |
 | Dashboard configurations | `dashboard_config` | Dashboard and widget metadata/configuration | `dashboard_id`, `dashboard_name`, `dashboard_type`, `owner_team`, `filters_json`, `widgets_json`, `visibility`, `active_flag` | Dashboard admin/config UI | Custom Dashboard Service + Kibana |
-| Alert thresholds | `alert_threshold` | Threshold conditions surfaced as KPI card colours in the Custom Dashboard Service | `alert_id`, `metric_id`, `application_id`, `agent_id`, `tool_id`, `threshold_value`, `comparison_operator`, `window_minutes`, `severity`, `notification_channel`, `active_flag` | SRE / app owners | Custom Dashboard Service KPI cards, incident routing |
+| Alert thresholds | `alert_threshold` | Threshold conditions surfaced as KPI card colours in the Custom Dashboard Service | `alert_id`, `metric_id`, `application_id`, `agent_id`, `tool_id`, `threshold_value`, `comparison_operator`, `window_minutes`, `severity`, `notification_channel`, `active_flag` | SRE / app owners | Custom Dashboard Service KPI cards, threshold alerting |
 | Hourly application metrics | `agg_hourly_application_metrics` | Hourly app-level metrics | `hour_timestamp`, `application_id`, `request_count`, `success_count`, `error_count`, `avg_latency_ms`, `p95_latency_ms`, `total_tokens`, `estimated_cost` | Aggregation job / stream processor | Executive dashboard, app dashboard, chatbot |
 | Hourly agent metrics | `agg_hourly_agent_metrics` | Hourly agent-level execution metrics | `hour_timestamp`, `application_id`, `agent_id`, `request_count`, `success_count`, `error_count`, `avg_latency_ms`, `p95_latency_ms`, `avg_step_count`, `loop_count`, `handoff_count` | Aggregation job / stream processor | Agent dashboard, chatbot |
 | Hourly tool metrics | `agg_hourly_tool_metrics` | Hourly tool/connecter reliability metrics | `hour_timestamp`, `application_id`, `agent_id`, `tool_id`, `tool_call_count`, `tool_success_count`, `tool_failure_count`, `timeout_count`, `retry_count`, `p95_latency_ms`, `top_error_code` | Aggregation job / stream processor | Tool dashboard, RCA, chatbot, alerts |
@@ -963,7 +963,6 @@ Capture structured and free-text feedback.
 | `free_text_comment_redacted` | Redacted text |
 | `submitted_by_role` | user, CSO, SME, admin |
 | `resolution_status` | open, reviewed, fixed |
-| `linked_incident_id` | ServiceNow/Jira ID if applicable |
 
 ---
 
@@ -1108,7 +1107,6 @@ CREATE TABLE feedback_case (
     category              VARCHAR,
     comment_redacted      TEXT,
     status                VARCHAR DEFAULT 'open',
-    linked_incident_id    VARCHAR,
     created_at            TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 ```
@@ -1359,7 +1357,7 @@ Application | Agent | Tool | Calls | Failures | Failure % | P95 Latency | Top Er
 
 ---
 
-### 9.7 Error and Incident Dashboard
+### 9.7 Error Dashboard
 
 Metrics:
 
@@ -1768,7 +1766,7 @@ Build the dashboards in this order:
 
 1. Platform Overview
 2. Application / CSI Overview
-3. Error and Incident Dashboard
+3. Error Dashboard
 4. Agent Observability
 5. Tool Observability
 6. LLM Token and Cost Dashboard
@@ -2313,29 +2311,7 @@ observability-iac/
 
 ---
 
-### 17.8 Feedback-to-Incident Auto-Routing
-
-**Gap closed:** Negative feedback is stored passively. Critical-tier applications with poor feedback require manual escalation, adding hours to incident response time.
-
-**New component:** `Incident Router Service` — subscribes to the `ai-obs-incidents` Kafka topic and calls external ticketing APIs.
-
-**Routing rules:**
-
-| Condition | Action | Artifacts Attached |
-|---|---|---|
-| `feedback_score < 2` AND `application_tier = critical` | Create PagerDuty/Jira incident immediately | `correlation_id`, `agent_id`, S3 debug bundle URI |
-| `negative_feedback_count > 10` in 1h for single agent | Create low-severity ticket | Feedback summary, top categories, 5 trace samples |
-| `guardrail_block_rate > 5×` baseline in 15 min | Create compliance incident | Guardrail event IDs, policy version, violation types |
-
-**Kafka topic:** `ai-obs-incidents`
-
-The Feedback Quality Gate (in the stream processor) evaluates each feedback event against these rules and publishes matched incidents to the topic. The Incident Router consumes and dispatches.
-
-**Debug Bundle Assembler:** Automatically packages `correlation_id`, relevant Elasticsearch event links, and S3 artifact URIs into a debug bundle stored at `s3://ai-observability-{env}/debug-bundles/{incident_id}/`.
-
----
-
-### 17.9 Multi-Tenant Observability Isolation
+### 17.8 Multi-Tenant Observability Isolation
 
 **Gap closed:** All LOBs share a single Elasticsearch index namespace. This prevents per-LOB retention policies, makes document-level RBAC expensive, and couples LOB data in Kibana.
 
@@ -2420,7 +2396,7 @@ The following diagram shows the complete enhanced architecture with all 10 new c
 ┌─────────────────────────────────────────────────────────────────────────────────────┐
 │  Kafka Observability Topics                                                         │
 │  ai-obs-traces │ ai-obs-events │ ai-obs-metrics │ ai-obs-quality                   │
-│  ai-obs-anomalies (NEW) │ ai-obs-incidents (NEW)                                   │
+│  ai-obs-anomalies (NEW)                                                             │
 └──────────────────────────────┬──────────────────────────────────────────────────────┘
                                │
                                ▼
@@ -2442,10 +2418,9 @@ The following diagram shows the complete enhanced architecture with all 10 new c
   +vector-*
        │
        ▼
-  Incident Router (NEW)              Offline Batch RCA (NEW)
-  feedback < 2 + critical tier   →  Nightly: errors ↔ traces ↔ KPI aggregates
-  → PagerDuty/Jira incident          → Root cause ranking
-  → S3 debug bundle                  → Weekly digest → S3 + Slack
+  Offline Batch RCA (NEW)
+  Nightly: errors ↔ traces ↔ KPI aggregates
+  → Root cause ranking → Weekly digest → S3 + Slack
        │
        ▼
 ┌─────────────────────────────────────────────────────────────────────────────────────┐
@@ -2474,7 +2449,7 @@ The original 6-phase roadmap is extended with two new phases:
 | Phase 2 | Instrument Core Platform | SDK on all components + **W3C traceparent on Kafka** |
 | Phase 3 | Build Ingestion and Storage | Processor + ES + PG + S3 + **budget_limits, slo_compliance, daily_rag_quality, vector_health tables** + **Faithfulness Scorer** + **SLO Evaluator** + **Budget Accumulator** |
 | Phase 4 | Build Dashboards | Custom Dashboard Service (FastAPI + React + Tremor) — Platform Overview, Cost Governance, Kafka Health, RAG Quality, Business KPI pages + **per-LOB Kibana orgs** |
-| Phase 5 | Build Observability Chatbot | Semantic layer + RBAC + query planner + **Custom Dashboard Service API integration** + **Feedback-to-Incident Auto-Routing** |
+| Phase 5 | Build Observability Chatbot | Semantic layer + RBAC + query planner + **Custom Dashboard Service API integration** |
 | Phase 6 | Anomaly Detection and RCA | **ML Anomaly Detection Service** + Custom Dashboard Anomaly View page + **Offline Batch RCA Engine** + weekly digest |
 | Phase 7 | Observability-as-Code | IaC repo + Custom Dashboard Docker deploy (CI) + ES index templates |
 | Phase 8 | Multi-Tenant Isolation | Per-LOB index namespacing + per-LOB COIN JWT scoping in Custom Dashboard + per-LOB Kafka consumer groups |

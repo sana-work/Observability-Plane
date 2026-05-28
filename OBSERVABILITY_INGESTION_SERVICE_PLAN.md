@@ -192,7 +192,6 @@ Every service must send this JSON structure to `POST /v1/ingest`. The same envel
     "feedback_category": null,
     "feedback_role": null,
     "resolution_status": null,
-    "linked_incident_id": null,
 
     "kafka_topic": null,
     "kafka_partition": null,
@@ -341,8 +340,6 @@ GUARDRAIL_ESCALATED
 FEEDBACK_SUBMITTED
 FEEDBACK_SUBMIT_FAILED
 FEEDBACK_REVIEWED
-FEEDBACK_INCIDENT_TRIGGERED
-
 # Infrastructure / Health
 SERVICE_STARTED
 SERVICE_STOPPED
@@ -700,8 +697,7 @@ CREATE TABLE obs_feedback_events (
     feedback_sentiment    VARCHAR(16),  -- 'positive' | 'negative' | 'neutral'
     feedback_category     VARCHAR(64),
     feedback_role         VARCHAR(64),  -- 'user' | 'cso' | 'sme' | 'admin'
-    resolution_status     VARCHAR(32) DEFAULT 'open',
-    linked_incident_id    VARCHAR(128)
+    resolution_status     VARCHAR(32) DEFAULT 'open'
 );
 
 CREATE INDEX idx_obs_feedback_correlation ON obs_feedback_events(correlation_id);
@@ -919,7 +915,6 @@ class EventPayload(BaseModel):
     feedback_category: Optional[str] = None
     feedback_role: Optional[str] = None
     resolution_status: Optional[str] = None
-    linked_incident_id: Optional[str] = None
     kafka_topic: Optional[str] = None
     kafka_partition: Optional[int] = None
     kafka_offset: Optional[int] = None
@@ -1276,7 +1271,6 @@ To keep OIS focused and lightweight:
 - **Does not replace existing application logs** — services keep their local JSON logs; OIS is additive
 - **Does not write to Elasticsearch** — OIS writes to PostgreSQL only; Elasticsearch integration is a separate Telemetry Processor concern
 - **Does not compute business KPIs** — `agg_daily_kpi_metrics` is computed by a separate KPI calculation job
-- **Does not route incidents** — incident routing is a separate Incident Router Service consuming from the OIS tables
 - **Does not replace the audit_table in Agent Executor** — that table serves a replay/debugging purpose; OIS is the observability view
 - **Does not handle LLM/RAG/Agent trace trees** — that is Langfuse's responsibility (see Section 13)
 - **Does not manage prompt versions or run evaluations** — Langfuse handles prompt management and LLM-as-judge eval
