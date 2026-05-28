@@ -17,7 +17,7 @@
 | 5 | Distributed traces (cross-service) | **OpenTelemetry + Grafana Tempo** | Medium | Yes — 4–6 weeks |
 | 6 | HTTP latency / error rate metrics | **prometheus-fastapi-instrumentator** | Very Low | Yes — 2–3 weeks |
 | 7 | Kafka consumer lag & health | **kminion → Prometheus → Custom Dashboard Service** | Low | Yes — 2 weeks |
-| 8 | PII detection and redaction | **Microsoft Presidio** | Low | Yes — 3–4 weeks |
+| 8 | PII detection and redaction | **GLiNER** (in-process NER, no sidecar) | Low | Yes — 1 day |
 | 9 | Error aggregation and grouping | **Sentry (self-hosted)** | Low | Yes — 4 weeks |
 | 10 | Cost and budget governance | **Langfuse + Redis + PostgreSQL + Custom Dashboard** | Low | Yes — 4 weeks |
 | 11 | Kubernetes / infra metrics | **kube-state-metrics + Prometheus** | Very Low | Yes — 1 week |
@@ -524,105 +524,151 @@ await emit_event(
 
 **Problem today:** `user_id` / SOE_ID logged as plain text in all 8 services. Full HTTP bodies logged in Consumer Service, Data Ingestion, GSSP GS, User Feedback — all flagged 🔴 PII Risk.
 
-**Tool: Microsoft Presidio (self-hosted)**
+**Tool: GLiNER (in-process NER model — no sidecar service)**
 
-### Why Presidio?
+### Why GLiNER over Presidio?
 
-| | Custom regex redactor (current plan) | Presidio |
-|---|---|---|
-| Entity types covered | 5 patterns (email, phone, card, SSN, passport) | 50+ entity types including names, addresses, medical IDs, bank account numbers |
-| ML-based detection | ❌ Regex only | ✅ spaCy NER models — detects context-aware PII |
-| Multi-language | ❌ English only | ✅ Multi-language |
-| Custom entities | Hard to add | ✅ Easy to add (e.g. COIN token patterns, account IDs) |
-| False positive rate | High (regex over-matches) | Low (NER + pattern) |
-| Self-hosted | ✅ | ✅ |
+| | Custom regex (current plan) | Presidio | GLiNER |
+|---|---|---|---|
+| Entity types covered | 5 patterns | 50+ fixed types | Unlimited — defined as plain English strings |
+| ML-based detection | ❌ Regex only | ✅ spaCy NER | ✅ Zero-shot transformer NER |
+| Add custom entity type | Hard (regex) | New recogniser class | Add a string to a list |
+| Infrastructure | None | 2 sidecar services (analyzer + anonymizer) | None — runs in-process inside OIS |
+| Network hop | None | HTTP call per event | None |
+| Failure mode | Never fails | HTTP timeout = event blocked | Never fails |
+| Multi-language | ❌ | ✅ | ✅ (zero-shot) |
+| Accuracy | Low | High | High — matches or exceeds Presidio |
+| Self-hosted | ✅ | ✅ | ✅ |
 
-### Deploy Presidio (two services)
+**Key advantage:** GLiNER runs inside the OIS process. No new K8s deployment, no HTTP call per event, no network failure mode. Model loads once at startup and is shared across all events.
 
-```yaml
-# docker-compose
-presidio-analyzer:
-  image: mcr.microsoft.com/presidio-analyzer:latest
-  ports:
-    - "5001:3000"
+### Installation
 
-presidio-anonymizer:
-  image: mcr.microsoft.com/presidio-anonymizer:latest
-  ports:
-    - "5002:3000"
+```bash
+pip install gliner
+```
+
+Model is downloaded once on first startup (~300MB, cached locally):
+
+```python
+from gliner import GLiNER
+model = GLiNER.from_pretrained("urchade/gliner_medium-v2.1")
 ```
 
 ### Integration in OIS Enrichment pipeline
 
 ```python
-# processing/pii_redactor.py — replaces the custom PiiRedactor in Telemetry Processor
-import httpx
+# processing/pii_redactor.py
+import re
+import hashlib
+from gliner import GLiNER
 
-class PresidioPiiRedactor:
-    ANALYZER_URL = "http://presidio-analyzer.internal:5001/analyze"
-    ANONYMIZER_URL = "http://presidio-anonymizer.internal:5002/anonymize"
 
-    # Fields that contain free text and need full NER analysis
-    TEXT_FIELDS = {"message", "free_text_comment", "error_description", "raw_prompt"}
+class PiiRedactor:
+    """
+    GLiNER-based PII redactor — runs in-process inside OIS.
+    No sidecar services, no HTTP calls, no new K8s deployments.
+    Model loads once at startup (~300MB).
+    """
 
-    # Fields that are always hashed (known user identifiers)
+    # Zero-shot entity labels — add new types here as plain English strings
+    PII_LABELS = [
+        "person name",
+        "email address",
+        "phone number",
+        "credit card number",
+        "social security number",
+        "home address",
+        "date of birth",
+        "organization name",
+        "employee ID",
+        "case ID",
+        "account number",
+        "COIN token",
+        "passport number",
+        "IP address",
+    ]
+
+    # Regex fallback for structured patterns GLiNER may miss in short strings
+    REGEX_PATTERNS = {
+        "SSN":         re.compile(r"\b\d{3}-\d{2}-\d{4}\b"),
+        "CREDIT_CARD": re.compile(r"\b(?:4[0-9]{12}(?:[0-9]{3})?|5[1-5][0-9]{14}|3[47][0-9]{13})\b"),
+        "IP_ADDRESS":  re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b"),
+        "COIN_TOKEN":  re.compile(r"eyJ[A-Za-z0-9+/=]{20,}"),   # JWT / COIN token
+    }
+
+    # Fields that contain free text — run full NER + regex
+    TEXT_FIELDS = {"message", "free_text_comment", "error_description", "raw_prompt", "payload"}
+
+    # Fields that are always hashed (known structured user identifiers)
     HASH_FIELDS = {"soe_id", "user_id", "soeid"}
 
-    async def redact(self, event: dict) -> dict:
-        import hashlib
+    def __init__(self):
+        self.model = GLiNER.from_pretrained("urchade/gliner_medium-v2.1")
 
+    def redact_event(self, event: dict) -> dict:
         # Hash known user identifier fields
         for field in self.HASH_FIELDS:
             if event.get(field):
                 event["user_hash"] = "sha256_" + hashlib.sha256(
-                    event[field].encode()
+                    str(event[field]).encode()
                 ).hexdigest()[:16]
-                event[field] = None     # remove plain text
+                event[field] = None     # remove plain text identifier
 
-        # Run Presidio NER on free-text fields
+        # Redact free-text fields with GLiNER + regex
         for field in self.TEXT_FIELDS:
-            if event.get(field):
-                event[field] = await self._anonymize(event[field])
+            if event.get(field) and isinstance(event[field], str):
+                event[field] = self._redact_text(event[field])
 
         return event
 
-    async def _anonymize(self, text: str) -> str:
-        async with httpx.AsyncClient() as client:
-            # Step 1: Analyze — find PII entities
-            analyze_resp = await client.post(self.ANALYZER_URL, json={
-                "text": text,
-                "language": "en",
-                "entities": ["PERSON", "EMAIL_ADDRESS", "PHONE_NUMBER",
-                             "CREDIT_CARD", "US_SSN", "IBAN_CODE", "IP_ADDRESS"],
-            })
-            entities = analyze_resp.json()
+    def _redact_text(self, text: str) -> str:
+        if not text or len(text) > 10_000:
+            return text
 
-            if not entities:
-                return text
+        # GLiNER NER pass — catches names, addresses, context-aware PII
+        entities = self.model.predict_entities(
+            text, self.PII_LABELS, threshold=0.5
+        )
+        for ent in sorted(entities, key=lambda x: x["start"], reverse=True):
+            tag = ent["label"].upper().replace(" ", "_")
+            text = text[:ent["start"]] + f"[{tag}]" + text[ent["end"]:]
 
-            # Step 2: Anonymize — replace with type tags
-            anon_resp = await client.post(self.ANONYMIZER_URL, json={
-                "text": text,
-                "analyzer_results": entities,
-                "anonymizers": {
-                    "DEFAULT": {"type": "replace", "new_value": "<REDACTED>"},
-                    "PERSON":  {"type": "replace", "new_value": "<NAME>"},
-                    "EMAIL_ADDRESS": {"type": "replace", "new_value": "<EMAIL>"},
-                },
-            })
-            return anon_resp.json()["text"]
+        # Regex pass — catches structured patterns (SSN format, card numbers, JWT)
+        for label, pattern in self.REGEX_PATTERNS.items():
+            text = pattern.sub(f"[{label}]", text)
+
+        return text
 ```
 
-### Custom Presidio recogniser for COIN / internal IDs
+### Adding a new custom entity type
+
+No code changes to the model. Add a string to `PII_LABELS`:
 
 ```python
-from presidio_analyzer import PatternRecognizer, Pattern
+# Before: detect COIN tokens
+PII_LABELS = [..., "COIN token"]
 
-# Add to Presidio analyzer on startup
-coin_token_recognizer = PatternRecognizer(
-    supported_entity="COIN_TOKEN",
-    patterns=[Pattern("COIN JWT", r"eyJ[A-Za-z0-9+/=]{20,}", 0.9)],
-)
+# After: also detect employee badge numbers
+PII_LABELS = [..., "COIN token", "employee badge number", "internal case reference"]
+```
+
+The zero-shot model handles it immediately — no retraining, no redeployment.
+
+### Wire into OIS at startup
+
+```python
+# ois/main.py
+from processing.pii_redactor import PiiRedactor
+
+# Load model once at startup — shared across all requests
+pii_redactor = PiiRedactor()
+
+@app.post("/v1/ingest")
+async def ingest(event: ObsEvent):
+    clean_event = pii_redactor.redact_event(event.dict())
+    await writer.write(clean_event)
+    return {"status": "accepted"}
 ```
 
 ---
@@ -1144,7 +1190,7 @@ Kibana → Machine Learning → Anomaly Explorer
 │  Vector / embed health   ──► Custom CronJob → Pushgateway              │
 │                               → Custom Dashboard RAG Quality page      │
 │                                                                         │
-│  PII redaction           ──► Microsoft Presidio (self-hosted)          │
+│  PII redaction           ──► GLiNER (in-process, OIS pipeline)         │
 │  Error aggregation       ──► Sentry (self-hosted)                      │
 │  Cost / budget caps      ──► Langfuse + Redis + PostgreSQL             │
 │                               → Custom Dashboard Cost Governance page  │
@@ -1167,7 +1213,7 @@ Kibana → Machine Learning → Anomaly Explorer
 | Custom Component in Docs | Replaced By | Weeks Saved |
 |---|---|---|
 | Custom `JSONFormatter` + `AppInfoFilter` | `structlog` shared config | 2 weeks |
-| Custom `PiiRedactor` (regex) | Microsoft Presidio | 3–4 weeks |
+| Custom `PiiRedactor` (regex) | GLiNER in-process NER | 1 day |
 | Custom `FaithfulnessScorer` | Langfuse LLM-as-judge | 3–4 weeks |
 | Custom Anomaly Detection service (Phase 1) | Kibana ML (built into Elasticsearch) | 6–8 weeks |
 | Custom distributed trace correlation | OpenTelemetry → Grafana Tempo | 4–6 weeks |
@@ -1190,7 +1236,7 @@ Kibana → Machine Learning → Anomaly Explorer
 | **Week 2** | `structlog` migration (start with 1 service) | 3 days | Consistent log schema |
 | **Week 3** | OpenTelemetry + Grafana Tempo (trace backend) | 3 days | Cross-service trace tree in Tempo |
 | **Week 3** | Langfuse on GSSP QS + Agent Executor | 3 days | RAG + agent traces |
-| **Week 4** | Presidio deploy + wire into OIS redactor | 2 days | PII redaction for all events |
+| **Week 4** | `pip install gliner` + wire `PiiRedactor` into OIS enrichment pipeline | 1 day | PII redaction for all events — no new service |
 | **Week 4** | Sentry self-hosted + SDK in all services | 2 days | Error grouping and trends |
 | **Week 5** | Custom Dashboard Service — backend FastAPI endpoints | 3 days | Platform Overview + Kafka Health live |
 | **Week 5** | Custom Dashboard Service — React + Tremor frontend | 2 days | Cost Governance + RAG Quality pages |
