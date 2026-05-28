@@ -142,6 +142,8 @@ flowchart TB
         OIS["Observability Ingestion Service\nPOST /v1/ingest\nPOST /v1/ingest/batch\nstandard JSON logs + events + metrics"]
         OISVAL["Validation + Enrichment\nschema_version, service_name,\nenvironment, user_hash, cost, latency"]
         OISPG["PostgreSQL\nobs_events\nobs_logs\nobs_metrics\nobs_dead_letter\nobs_hourly_summary"]
+        LF["Langfuse (self-hosted)\nLLM + RAG + Agent Traces\nPrompt Management\nEvaluations / Scores\nUser Feedback linking\nDatasets"]
+        LFDB["Langfuse DB (PostgreSQL)\nTraces + Spans\nScores (faithfulness, rating)\nPrompt versions\nDatasets"]
     end
 
     %% Client and orchestration flow

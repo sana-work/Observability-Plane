@@ -665,6 +665,363 @@ class TokenCostCalculator:
 
 ---
 
+## 3a. Langfuse Integration — LLM, RAG & Agent Trace Layer
+
+Langfuse is a self-hosted LLM observability platform that handles the AI quality and trace layer. It runs alongside the custom Observability SDK — services emit to both. Langfuse requires **zero new infrastructure** beyond a Docker container backed by a dedicated PostgreSQL database.
+
+### 3a.1 Why Langfuse (not custom-built)
+
+| What you would build custom | What Langfuse gives you instead | Time saved |
+|---|---|---|
+| `obs_llm_events` nested trace view | Full trace tree explorer in Langfuse UI | 4–6 weeks |
+| Custom `FaithfulnessScorer` (token overlap) | LLM-as-judge evals with Gemini/Claude | 3–4 weeks |
+| `PromptTemplateFactory` versioning | Langfuse Prompt Management with A/B test | 2–3 weeks |
+| Feedback-to-trace correlation query | `langfuse.score(trace_id=...)` — one call | 1–2 weeks |
+| RAG span (chunk count, relevance, no-result) | Native `as_type="retrieval"` span | 2–3 weeks |
+| Production dataset curation for fine-tuning | Langfuse Datasets UI | Not planned today |
+
+**Total estimated custom build avoided: 12–18 weeks of engineering.**
+
+### 3a.2 Deployment
+
+```yaml
+# Add to platform Helm chart / docker-compose
+langfuse:
+  image: ghcr.io/langfuse/langfuse:latest
+  environment:
+    DATABASE_URL: postgresql://langfuse:${LANGFUSE_DB_PASS}@postgres/langfuse
+    NEXTAUTH_SECRET: ${LANGFUSE_SECRET}
+    SALT: ${LANGFUSE_SALT}
+    NEXTAUTH_URL: http://langfuse.internal:3000
+    LANGFUSE_ENABLE_EXPERIMENTAL_FEATURES: "true"
+  ports:
+    - "3000:3000"
+```
+
+Run database migrations on first deploy:
+```bash
+docker run --rm ghcr.io/langfuse/langfuse:latest node_modules/.bin/prisma migrate deploy
+```
+
+**Multi-tenancy:** Create one Langfuse **Project** per `application_id` (or per LOB). Each project gets independent API keys. This maps directly to your existing `application_registry`.
+
+### 3a.3 Shared Configuration (add to each service's settings)
+
+```python
+# config/settings.py — add to existing Pydantic Settings
+from pydantic_settings import BaseSettings
+
+class Settings(BaseSettings):
+    # ... existing fields ...
+    LANGFUSE_PUBLIC_KEY: str = ""
+    LANGFUSE_SECRET_KEY: str = ""
+    LANGFUSE_HOST: str = "http://langfuse.internal:3000"
+    LANGFUSE_ENABLED: bool = True          # set False in unit tests
+```
+
+```python
+# shared/langfuse_client.py — one shared initialisation
+from langfuse import Langfuse
+from config.settings import get_settings
+
+_settings = get_settings()
+
+langfuse = Langfuse(
+    public_key=_settings.LANGFUSE_PUBLIC_KEY,
+    secret_key=_settings.LANGFUSE_SECRET_KEY,
+    host=_settings.LANGFUSE_HOST,
+    enabled=_settings.LANGFUSE_ENABLED,
+)
+```
+
+### 3a.4 GSSP GS — LLM Call Tracing
+
+**File to modify:** `query/generators/vertexai_generator.py` (and equivalent files for Claude, Llama generators)
+
+```python
+from langfuse.decorators import observe, langfuse_context
+from shared.langfuse_client import langfuse
+
+@observe(as_type="generation", name="llm-call")
+async def generate(self, prompt: str, ctx: ObsContext) -> GenerationResult:
+    result = await self.vertex_client.generate(prompt)
+
+    langfuse_context.update_current_observation(
+        model=self.model_name,                          # "gemini-1.5-pro"
+        model_parameters={
+            "temperature": self.temperature,
+            "max_tokens": self.max_output_tokens,
+        },
+        # Do NOT pass raw prompt/response — use hashes only
+        input={"prompt_hash": sha256(prompt.encode()).hexdigest()},
+        output={"response_hash": sha256(result.text.encode()).hexdigest()},
+        usage={
+            "input": result.usage.input_tokens,
+            "output": result.usage.output_tokens,
+            "total": result.usage.total_tokens,
+        },
+        metadata={
+            "correlation_id": ctx.correlation_id,
+            "application_id": ctx.application_id,
+            "prompt_template_id": self.prompt_template_id,
+            "finish_reason": result.finish_reason,
+            "safety_blocked": result.safety_blocked,
+            "rate_limit_hit": result.rate_limit_hit,
+        },
+    )
+    return result
+```
+
+**What this captures automatically (no extra code):** `latency_ms`, `estimated_cost_usd`, `model_name`, `input_tokens`, `output_tokens` — all the fields currently ❌ in the coverage matrix.
+
+### 3a.5 GSSP QS — Full RAG Pipeline Trace
+
+**File to modify:** `query/execute_pipeline.py`
+
+```python
+from langfuse.decorators import observe, langfuse_context
+
+@observe(name="rag-pipeline")
+async def execute_pipeline(self, query: str, ctx: ObsContext) -> QueryResult:
+    # Set trace-level context — applies to all child spans
+    langfuse_context.update_current_trace(
+        session_id=ctx.session_id,
+        user_id=ctx.user_hash,
+        tags=[ctx.lob, ctx.environment, "rag"],
+        metadata={"correlation_id": ctx.correlation_id, "application_id": ctx.application_id},
+    )
+
+    await self._run_guardrail(query, ctx)
+    cache_result = await self._check_semantic_cache(query, ctx)
+    if cache_result:
+        return cache_result
+
+    chunks = await self._retrieve_chunks(query, ctx)
+    return await self._generate_answer(query, chunks, ctx)
+
+
+@observe(name="guardrail-check")
+async def _run_guardrail(self, query: str, ctx: ObsContext):
+    result = await self.guardrail_client.evaluate(query)
+    langfuse_context.update_current_observation(
+        metadata={"decision": result.decision, "risk_score": result.risk_score},
+    )
+    return result
+
+
+@observe(name="cache-lookup", as_type="retrieval")
+async def _check_semantic_cache(self, query: str, ctx: ObsContext):
+    result = await self.cache.lookup(query)
+    langfuse_context.update_current_observation(
+        metadata={"cache_hit": result is not None},
+    )
+    return result
+
+
+@observe(name="retrieval", as_type="retrieval")
+async def _retrieve_chunks(self, query: str, ctx: ObsContext) -> list:
+    chunks = await self.retrieval_client.retrieve(query)
+    langfuse_context.update_current_observation(
+        input={"query_hash": sha256(query.encode()).hexdigest()},
+        output={"document_count": len(chunks)},
+        metadata={
+            "retrieved_chunk_count": len(chunks),
+            "avg_relevance_score": mean(c.score for c in chunks) if chunks else 0.0,
+            "no_result_flag": len(chunks) == 0,
+            "knowledge_base": self.config.knowledge_base_name,
+        },
+    )
+    return chunks
+
+
+@observe(name="generation", as_type="generation")
+async def _generate_answer(self, query: str, chunks: list, ctx: ObsContext):
+    # Generation tracing handled by GSSP GS's @observe on its generate()
+    return await self.generation_client.generate(query, chunks)
+```
+
+**Resulting Langfuse trace tree for one RAG request:**
+```
+rag-pipeline  (1.24s total)
+  ├── guardrail-check   (44ms)  decision=allow  risk_score=0.02
+  ├── cache-lookup      (11ms)  cache_hit=false
+  ├── retrieval         (337ms) chunks=5  avg_score=0.87  no_result=false
+  └── generation        (851ms) gemini-1.5-pro  660 tokens  $0.00132
+```
+
+### 3a.6 Agent Executor — Agent Step Hierarchy
+
+**File to modify:** `executor/services/agent_execution_service.py`
+
+```python
+from langfuse.decorators import observe, langfuse_context
+
+@observe(name="agent-execution")
+async def execute(self, request: AgentExecutionRequest) -> AgentResult:
+    langfuse_context.update_current_trace(
+        metadata={
+            "correlation_id": request.correlation_id,
+            "agent_id": self.agent_config.agent_id,
+            "agent_version": self.agent_config.version,
+        },
+    )
+    for step_num in range(self.max_steps):
+        result = await self._execute_step(step_num, request)
+        if result.done:
+            break
+    return result
+
+
+@observe(name="agent-step")
+async def _execute_step(self, step_num: int, request) -> StepResult:
+    langfuse_context.update_current_observation(
+        metadata={"step_number": step_num, "step_name": self.current_step_name},
+    )
+    # Tool and LLM calls inside the step are automatically child spans
+    # because they are also decorated with @observe
+    ...
+```
+
+### 3a.7 User Feedback — Link Ratings to Traces
+
+**File to modify:** `feedback/api/v1/feedback.py`
+
+```python
+from shared.langfuse_client import langfuse
+
+@router.post("/feedback", status_code=201)
+async def submit_feedback(feedback: FeedbackRequest):
+    # Existing DB write — unchanged
+    record = await repo.create(feedback)
+
+    # Link the rating to the exact Langfuse trace for this agent execution
+    if feedback.correlation_id:
+        langfuse.score(
+            trace_id=feedback.correlation_id,
+            name="user-feedback-rating",
+            value=feedback.rating / 5.0,          # normalise 1–5 → 0.0–1.0
+            comment=redact_pii(feedback.comment),
+            data_type="NUMERIC",
+        )
+        if feedback.thumbs:
+            langfuse.score(
+                trace_id=feedback.correlation_id,
+                name="user-feedback-thumbs",
+                value=1.0 if feedback.thumbs == "up" else 0.0,
+                data_type="BOOLEAN",
+            )
+
+    return {"feedback_id": record.id}
+```
+
+### 3a.8 Prompt Management — Replacing PromptTemplateFactory
+
+**Where to change:** `gssp-gs/query/factories/prompt_template_factory.py`
+
+```python
+# Before — fetches from PostgreSQL prompt_template table
+class PromptTemplateFactory:
+    async def get_template(self, template_id: str) -> str:
+        return await self.db.fetch_one("SELECT template FROM prompt_template WHERE id = $1", template_id)
+
+# After — fetches from Langfuse (versioned, A/B testable, auditable)
+from shared.langfuse_client import langfuse
+
+class PromptTemplateFactory:
+    async def get_template(self, template_id: str, label: str = "production") -> CompiledPrompt:
+        prompt = langfuse.get_prompt(template_id, label=label)
+        # SDK automatically attaches prompt_name + version to every trace that uses this prompt
+        return prompt
+```
+
+**Langfuse Prompt Management benefits over raw DB:**
+- Full version history with diff view
+- Rollback to any previous version in one click
+- A/B testing: route N% of traffic to `experiment` label, compare faithfulness scores
+- Automatic `prompt_hash` tracking for drift detection across deployments
+
+### 3a.9 Evaluations — Replacing FaithfulnessScorer
+
+Configure once in Langfuse UI or via API — no custom scorer code needed:
+
+```python
+# Run during Phase 3 setup — registers evaluator that runs on all future RAG traces
+from langfuse import Langfuse
+
+langfuse = Langfuse()
+
+# Faithfulness: is the answer grounded in the retrieved context?
+langfuse.create_llm_as_judge_eval(
+    name="rag-faithfulness",
+    prompt_template="""
+        Context: {{retrieved_context}}
+        Answer: {{output}}
+        Rate how faithful the answer is to the context on a scale 0.0 to 1.0.
+        Return only the number.
+    """,
+    variables={"retrieved_context": "retrieval.output", "output": "generation.output"},
+    model="gemini-1.5-flash",         # cheap model for eval
+    score_name="faithfulness",
+    min_score=0.0,
+    max_score=1.0,
+)
+
+# Hallucination: is the model making up facts not in context?
+langfuse.create_llm_as_judge_eval(
+    name="hallucination-check",
+    prompt_template="""
+        Context: {{retrieved_context}}
+        Answer: {{output}}
+        Does the answer contain claims not supported by the context? Answer yes or no.
+    """,
+    variables={"retrieved_context": "retrieval.output", "output": "generation.output"},
+    model="gemini-1.5-flash",
+    score_name="hallucination",
+    data_type="BOOLEAN",
+)
+```
+
+These scores are stored in Langfuse, queryable via the Langfuse SDK, and can be exported to PostgreSQL `daily_rag_quality` via a nightly sync job.
+
+### 3a.10 Nightly Langfuse → PostgreSQL Sync (for Grafana dashboards)
+
+```python
+# aggregation/langfuse_to_postgres.py — run as K8s CronJob nightly
+from langfuse import Langfuse
+import psycopg2
+from datetime import date, timedelta
+
+langfuse = Langfuse()
+
+def sync_rag_quality(quality_date: date):
+    # Fetch all RAG traces from yesterday
+    traces = langfuse.get_traces(
+        from_timestamp=quality_date,
+        to_timestamp=quality_date + timedelta(days=1),
+        tags=["rag"],
+    )
+    # Aggregate faithfulness scores per rag_id
+    by_rag = {}
+    for trace in traces:
+        rag_id = trace.metadata.get("rag_id")
+        scores = [s.value for s in trace.scores if s.name == "faithfulness"]
+        if rag_id and scores:
+            by_rag.setdefault(rag_id, []).extend(scores)
+
+    # Upsert into PostgreSQL daily_rag_quality
+    with psycopg2.connect(PG_DSN) as conn:
+        for rag_id, scores in by_rag.items():
+            conn.execute("""
+                INSERT INTO daily_rag_quality (quality_date, rag_id, avg_faithfulness_score, sample_count)
+                VALUES (%s, %s, %s, %s)
+                ON CONFLICT (quality_date, rag_id) DO UPDATE
+                SET avg_faithfulness_score = EXCLUDED.avg_faithfulness_score,
+                    sample_count = EXCLUDED.sample_count
+            """, (quality_date, rag_id, mean(scores), len(scores)))
+```
+
+---
+
 ## 4. Kafka Layer — What to Build
 
 ### 4.1 Topic Configuration
@@ -1825,18 +2182,22 @@ class IntentClassifier:
 
 ### 10.3 Query Planner
 
+Langfuse is added as a query source for LLM/RAG/agent quality intents. The chatbot queries Langfuse for trace-level detail and PostgreSQL/Elasticsearch for aggregates and infrastructure.
+
 ```python
 class QueryPlanner:
     INTENT_TO_SOURCE = {
         "aggregate_metric":  "postgres",
-        "trace_drill_down":  "elasticsearch",
-        "error_rca":         ["elasticsearch", "s3"],
-        "cost_analysis":     ["postgres", "elasticsearch"],
-        "rag_quality":       ["postgres", "elasticsearch"],
+        "trace_drill_down":  ["langfuse", "elasticsearch"],  # Langfuse first for LLM traces
+        "error_rca":         ["elasticsearch", "langfuse", "s3"],
+        "cost_analysis":     ["langfuse", "postgres"],        # Langfuse has per-call cost
+        "rag_quality":       ["langfuse", "postgres"],        # Langfuse has faithfulness scores
         "tool_health":       ["postgres", "elasticsearch"],
         "slo_status":        ["postgres", "grafana"],
-        "feedback_summary":  "postgres",
+        "feedback_summary":  ["langfuse", "postgres"],        # Langfuse links feedback to traces
         "infra_health":      "grafana",
+        "prompt_quality":    "langfuse",                      # new intent — prompt version analytics
+        "llm_trace":         "langfuse",                      # new intent — specific LLM call drill-down
     }
 
     def plan(self, intent: str, question: str, context: dict) -> list[dict]:
@@ -1844,6 +2205,49 @@ class QueryPlanner:
         if isinstance(sources, str):
             sources = [sources]
         return [{"source": s, "question": question, "context": context} for s in sources]
+```
+
+Add a `LangfuseSource` alongside the existing `ElasticsearchSource` and `PostgresSource`:
+
+```python
+# chatbot/sources/langfuse.py
+from langfuse import Langfuse
+
+class LangfuseSource:
+    def __init__(self):
+        self._client = Langfuse()
+
+    def query(self, intent: str, question: str, context: dict) -> dict:
+        correlation_id = context.get("correlation_id")
+
+        if correlation_id:
+            # Fetch the specific trace by correlation_id
+            trace = self._client.get_trace(correlation_id)
+            return {
+                "source": "langfuse",
+                "trace_id": trace.id,
+                "total_cost_usd": sum(o.calculated_total_cost or 0 for o in trace.observations),
+                "total_tokens": sum((o.usage.total or 0) for o in trace.observations if o.usage),
+                "faithfulness_score": next(
+                    (s.value for s in trace.scores if s.name == "faithfulness"), None
+                ),
+                "user_feedback": next(
+                    (s.value for s in trace.scores if s.name == "user-feedback-rating"), None
+                ),
+                "trace_url": f"{LANGFUSE_HOST}/trace/{trace.id}",
+            }
+
+        if intent == "rag_quality":
+            # Fetch aggregate RAG quality scores
+            scores = self._client.get_scores(name="faithfulness", limit=1000)
+            values = [s.value for s in scores if s.value is not None]
+            return {
+                "source": "langfuse",
+                "avg_faithfulness": mean(values) if values else None,
+                "sample_count": len(values),
+            }
+
+        return {"source": "langfuse", "data": None}
 ```
 
 ### 10.4 Answer Generator
@@ -1881,22 +2285,26 @@ class AnswerGenerator:
 
 ### 11.1 Dashboard Build Order and Technology
 
-All dashboards should be built as Grafana JSON (version-controlled) or Kibana saved objects (exported as NDJSON). Build in this order:
+All dashboards should be built as Grafana JSON (version-controlled) or Kibana saved objects (exported as NDJSON). Langfuse provides its own built-in UI for LLM/RAG/agent trace exploration — those do not need to be rebuilt in Grafana. Build in this order:
 
-| Order | Dashboard | Technology | Primary Data Source |
-|---|---|---|---|
-| 1 | Platform Overview | Grafana | PostgreSQL `agg_hourly_application_metrics` |
-| 2 | Error and Incident | Kibana | Elasticsearch `ai-obs-*-errors-*` |
-| 3 | Application / CSI | Kibana + Grafana | Elasticsearch + PostgreSQL |
-| 4 | Agent Observability | Kibana | Elasticsearch `ai-obs-*-agent-steps-*` |
-| 5 | Tool Health | Kibana + Grafana | Elasticsearch + PostgreSQL |
-| 6 | LLM / Token / Cost | Grafana | PostgreSQL `agg_hourly_llm_metrics` + `budget_limits` |
-| 7 | RAG + Vector Health | Kibana + Grafana | Elasticsearch + PostgreSQL `daily_rag_quality` |
-| 8 | Feedback + Incident | Grafana | PostgreSQL `feedback_case` + `agg_daily_feedback_metrics` |
-| 9 | SLO Error Budget | Grafana | PostgreSQL `daily_slo_compliance` |
-| 10 | Cost Governance | Grafana | PostgreSQL `budget_limits` + `agg_hourly_llm_metrics` |
-| 11 | Anomaly Detection | Grafana | Elasticsearch `ai-obs-anomalies-*` |
-| 12 | Business KPI | Grafana | PostgreSQL `agg_daily_kpi_metrics` |
+| Order | Dashboard | Technology | Primary Data Source | Note |
+|---|---|---|---|---|
+| 1 | Platform Overview | Grafana | PostgreSQL `agg_hourly_application_metrics` | |
+| 2 | Error and Incident | Kibana | Elasticsearch `ai-obs-*-errors-*` | |
+| 3 | Application / CSI | Kibana + Grafana | Elasticsearch + PostgreSQL | |
+| 4 | **LLM Trace Explorer** | **Langfuse UI** (built-in) | **Langfuse DB** | **Free — no build needed** |
+| 5 | **RAG Pipeline Quality** | **Langfuse UI** (built-in) | **Langfuse DB** | **Free — no build needed** |
+| 6 | **Agent Step Tree** | **Langfuse UI** (built-in) | **Langfuse DB** | **Free — no build needed** |
+| 7 | **Prompt Version Analytics** | **Langfuse UI** (built-in) | **Langfuse DB** | **Free — no build needed** |
+| 8 | Agent Observability (aggregate) | Kibana + Grafana | Elasticsearch + PostgreSQL | For aggregate trends only; trace drill-down → Langfuse |
+| 9 | Tool Health | Kibana + Grafana | Elasticsearch + PostgreSQL | |
+| 10 | LLM / Token / Cost (aggregate) | Grafana | PostgreSQL `agg_hourly_llm_metrics` + nightly Langfuse sync | Aggregate view; per-call detail → Langfuse |
+| 11 | RAG + Vector Health (aggregate) | Kibana + Grafana | PostgreSQL `daily_rag_quality` (synced from Langfuse nightly) | |
+| 12 | Feedback + Incident | Grafana | PostgreSQL `feedback_case` + Langfuse scores | |
+| 13 | SLO Error Budget | Grafana | PostgreSQL `daily_slo_compliance` | |
+| 14 | Cost Governance | Grafana | PostgreSQL `budget_limits` + `agg_hourly_llm_metrics` | |
+| 15 | Anomaly Detection | Grafana | Elasticsearch `ai-obs-anomalies-*` | |
+| 16 | Business KPI | Grafana | PostgreSQL `agg_daily_kpi_metrics` | |
 
 ### 11.2 Required Panels per Dashboard
 
@@ -2023,8 +2431,13 @@ class HypothesisRanker:
 4. Apply Elasticsearch index templates (via IaC pipeline)
 5. Apply PostgreSQL DDL (all registry + governance + aggregate tables)
 6. Create S3 buckets with encryption and lifecycle policies
+7. **Deploy Langfuse self-hosted** (Helm chart / Docker Compose, dedicated PostgreSQL DB, internal DNS `langfuse.internal:3000`)
+8. **Create Langfuse Projects** — one per application or LOB; distribute API key pairs to each service team
+9. **Add `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, `LANGFUSE_HOST` to platform secrets store**
 
 **Team:** Platform Engineering + Data Engineering
+
+> **Why Langfuse in Phase 1:** Deploying Langfuse takes 1 day. Every week of Phase 2 instrumentation work immediately produces visible traces in the Langfuse UI, giving the team rapid feedback and validating the instrumentation as it's built — without waiting for the full Telemetry Processor pipeline to be complete.
 
 ---
 
@@ -2035,8 +2448,18 @@ class HypothesisRanker:
 2. Add SDK to: Orchestration Service, Executor Service, LLM Wrapper, Tool Executor, RAG Wrapper, Guardrails Engine, Memory Module, Feedback UI
 3. W3C traceparent injection in all Kafka produces
 4. Validate events flowing to Kafka topics by observing consumer output
+5. **Add Langfuse `@observe` decorators to GSSP GS** — LLM generator functions (Section 3a.4)
+6. **Add Langfuse `@observe` decorators to GSSP QS** — all 5 RAG pipeline stages (Section 3a.5)
+7. **Add Langfuse `@observe` decorators to Agent Executor** — step execution loop (Section 3a.6)
+8. **Add Langfuse `@observe` decorators to GSSP RS** — `retrieve()` and `embed()` functions
+9. **Add `langfuse.score()` call to User Feedback Service** — link ratings to traces (Section 3a.7)
+10. **Migrate `PromptTemplateFactory` to Langfuse Prompt Management** (Section 3a.8)
 
-**Acceptance criteria:** Every request produces at minimum: `REQUEST_RECEIVED`, `AGENT_STARTED`, one `LLM_CALL_COMPLETED` or `TOOL_CALL_COMPLETED`, `AGENT_COMPLETED`, `RESPONSE_DELIVERED` — all linked by the same `correlation_id`.
+**Acceptance criteria:**
+- Every request produces at minimum: `REQUEST_RECEIVED`, `AGENT_STARTED`, one `LLM_CALL_COMPLETED` or `TOOL_CALL_COMPLETED`, `AGENT_COMPLETED`, `RESPONSE_DELIVERED` — all linked by the same `correlation_id`
+- **Langfuse UI shows nested trace trees for every GSSP GS, GSSP QS, and Agent Executor request**
+- **Langfuse UI shows per-call token count, cost, and latency for every LLM call**
+- User feedback scores are visible inside the Langfuse trace for the corresponding `correlation_id`
 
 ---
 
@@ -2051,9 +2474,11 @@ class HypothesisRanker:
 6. S3 Archiver for prompts, responses, RAG contexts, full traces
 7. Token Cost Calculator + Budget Accumulator
 8. SLO Evaluator (burn-rate computation)
-9. Faithfulness Scorer for RAG events
+9. ~~Faithfulness Scorer for RAG events~~ → **Replaced by Langfuse LLM-as-judge evaluators** (Section 3a.9)
+10. **Configure Langfuse evaluators** — faithfulness, hallucination, answer relevance (Section 3a.9)
+11. **Build nightly Langfuse → PostgreSQL sync job** for `daily_rag_quality` aggregates (Section 3a.10)
 
-**Acceptance criteria:** Elasticsearch shows indexed events; PostgreSQL `agg_hourly_application_metrics` has rows; S3 has redacted prompt objects.
+**Acceptance criteria:** Elasticsearch shows indexed events; PostgreSQL `agg_hourly_application_metrics` has rows; S3 has redacted prompt objects; **Langfuse shows faithfulness scores on RAG traces; `daily_rag_quality` is populated from nightly sync**.
 
 ---
 
@@ -2112,13 +2537,17 @@ class HypothesisRanker:
 ### Dependency Graph Summary
 
 ```
-Phase 1 (Schema + Infrastructure)
+Phase 1 (Schema + Infrastructure + Langfuse Deploy)
   ↓
-Phase 2 (SDK) ──────────────────────────────────────┐
+Phase 2 (SDK + Langfuse @observe) ──────────────────┐
   ↓                                                  │
-Phase 3 (Processor) ────────────────────────────┐   │
+  ├── Langfuse traces visible immediately            │
+  │   (no Processor needed for LLM/RAG quality)     │
+  ↓                                                  │
+Phase 3 (Processor + Langfuse Evals + Sync) ────┐   │
   ↓                    ↓                         │   │
-Phase 4 (Dashboards)  Phase 5 (Chatbot)          │   │
+Phase 4 (Dashboards)  Phase 5 (Chatbot           │   │
+  (Grafana/Kibana)      + Langfuse source)        │   │
   ↓                    ↓                         │   │
 Phase 7 (IaC)         Phase 5.b (Incident Router)│   │
                                                  ↓   ↓
@@ -2130,3 +2559,5 @@ Phase 7 (IaC)         Phase 5.b (Incident Router)│   │
 **Phases 2 and 3 overlap by 2 weeks** — the processor can be built while SDK instrumentation is added service by service, as long as the Kafka schema is locked at Phase 1.
 
 **Phases 4 and 5 can run in parallel** after Phase 3 is producing data to PostgreSQL and Elasticsearch.
+
+**Langfuse shortcut:** After Phase 2 Langfuse instrumentation is done, the **LLM Trace Explorer, RAG Pipeline Quality, Agent Step Tree, and Prompt Version Analytics dashboards are already available in the Langfuse UI** — without building any Grafana/Kibana dashboards. This unlocks immediate value for ML engineers and application teams while Phase 3–4 builds the broader platform dashboards for SREs and business stakeholders.

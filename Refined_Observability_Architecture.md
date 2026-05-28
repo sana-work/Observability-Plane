@@ -243,8 +243,9 @@ flowchart TB
 
 | New Component | Role | Connects To |
 |---|---|---|
+| **Langfuse (self-hosted)** | LLM + RAG + agent trace store; prompt management; LLM-as-judge evaluations; user feedback linking | GSSP GS, GSSP QS, GSSP RS, Agent Executor, Agentic Orchestration, User Feedback → Langfuse DB (PostgreSQL) |
 | **Anomaly Detection Service** | ML-based anomaly scoring per app/model with sliding P50/P95/P99 baselines | Kafka `ai-obs-anomalies` → Elasticsearch, Grafana |
-| **Faithfulness Scorer** | Computes RAG faithfulness (context overlap), entropy, retrieval precision at stream time | Elasticsearch `ai-obs-quality-scores-*`, PostgreSQL `daily_rag_quality` |
+| **Faithfulness Scorer** | Computes RAG faithfulness (context overlap), entropy, retrieval precision at stream time — **delegate to Langfuse evaluators** | Langfuse scores API; PostgreSQL `daily_rag_quality` (aggregated from Langfuse) |
 | **Budget Accumulator** | Real-time spend counter in Redis; writes alerts when `max_spend_usd` threshold hit | PostgreSQL `budget_limits`, Grafana `Cost Governance` panel |
 | **SLO Evaluator** | Multi-window burn-rate calculator (1h and 6h); writes `daily_slo_compliance` | Grafana `SLO Error Budget` panel, PostgreSQL |
 | **W3C TraceContext Extractor** | Reads `traceparent` Kafka headers; propagates full W3C trace through all enrichment steps | All downstream stores and Chatbot |
@@ -455,13 +456,49 @@ observability-iac/
 
 | Priority | Enhancement | Impact | Effort | Phase |
 |---|---|---|---|---|
+| **P0** | **Langfuse self-hosted deployment** | Unlocks LLM/RAG/agent trace visibility + prompt management immediately | Low (1 day) | Phase 1 (Foundation) |
+| **P0** | **Langfuse SDK — GSSP GS + Agent Executor** | Captures LLM tokens, cost, latency, finish_reason — all currently missing | Low (2 days) | Phase 2 (Instrument) |
+| **P0** | **Langfuse SDK — GSSP QS RAG pipeline** | Captures full RAG trace tree, retrieved_chunk_count, relevance scores | Medium (2 days) | Phase 2 (Instrument) |
 | **P0** | W3C TraceContext on Kafka | Enables native OTEL compatibility, no infra change | Low | Phase 2 (Instrument) |
 | **P0** | Cost governance + budget caps | Prevents runaway model spend | Medium | Phase 3 (Ingestion) |
+| **P1** | **Langfuse Prompt Management** | Replaces DB-backed PromptTemplateFactory; adds versioning + A/B testing | Medium (3 days) | Phase 2 (Instrument) |
+| **P1** | **Langfuse LLM-as-judge evals** | Replaces custom FaithfulnessScorer; faithfulness + hallucination + relevance | Low (1 day config) | Phase 3 (Ingestion) |
+| **P1** | **User Feedback → Langfuse score link** | Closes feedback-to-trace gap; links every rating to the exact LLM trace | Very Low (0.5 days) | Phase 2 (Instrument) |
 | **P1** | SLO error budget burn-rate alerts | Eliminates alert fatigue from single-threshold firing | Low | Phase 3 (Ingestion) |
-| **P1** | Faithfulness scoring in RAG pipeline | Detects quality regression before user reports it | Medium | Phase 3 (Ingestion) |
 | **P1** | Observability-as-code (IaC) | Reproducible deployments; eliminates dashboard drift | Medium | Phase 3 (Ingestion) |
 | **P2** | ML anomaly detection layer | Catches subtle degradation invisible to static thresholds | High | Phase 6 (Anomaly) |
 | **P2** | Feedback → incident auto-routing | Closes quality feedback loop automatically | Medium | Phase 5 (Chatbot) |
 | **P2** | Embedding/vector health monitoring | Prevents silent RAG quality degradation | Medium | Phase 4 (Dashboards) |
 | **P3** | Per-LOB Elasticsearch namespacing | Scales cleanly to more LOBs and compliance domains | High | Phase 4 (Dashboards) |
 | **P3** | Offline batch RCA engine | Strategic weekly reliability insights | High | Phase 6 (Anomaly) |
+
+---
+
+## Langfuse — Two-Layer Observability Model
+
+Adding Langfuse creates a clean two-layer model. Services emit to both layers in parallel:
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│  Layer 1 — AI Quality & Trace (Langfuse)                           │
+│                                                                     │
+│  What:   LLM traces, RAG pipeline spans, agent step trees,         │
+│          prompt versions, faithfulness scores, user feedback        │
+│  Who:    GSSP GS, GSSP QS, GSSP RS, Agent Executor, Orchestration  │
+│  How:    langfuse SDK @observe decorator — 1 line per function      │
+│  Store:  Langfuse DB (self-hosted PostgreSQL)                       │
+│  UI:     Langfuse Web (trace explorer, prompt mgmt, evals)         │
+│                                                                     │
+├─────────────────────────────────────────────────────────────────────┤
+│  Layer 2 — Platform / Infrastructure (OIS + Kafka + Grafana)       │
+│                                                                     │
+│  What:   Kafka lag, service health, document ingestion,            │
+│          SLO compliance, business KPIs, budget governance          │
+│  Who:    All 8 services via OIS HTTP emitter                        │
+│  How:    POST /v1/ingest — fire-and-forget                          │
+│  Store:  PostgreSQL obs_*, Elasticsearch, S3                        │
+│  UI:     Grafana, Kibana, Observability Chatbot                     │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+**Correlation bridge:** Both layers share `correlation_id`. The Observability Chatbot can query Langfuse for the LLM trace tree and OIS/PostgreSQL for the infrastructure context of the same request — joined on `correlation_id`.

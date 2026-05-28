@@ -132,21 +132,51 @@ It recreates the exact problem the Observability Plane is trying to solve: no st
 | **Enrichment** | OIS enrichment layer |
 | **Fan-out to multiple stores** | Kafka consumer can write to PostgreSQL, ES, S3 independently |
 
-### Recommended Architecture: OIS as Producer → Kafka as Buffer → Consumer writes to PostgreSQL
+### Recommended Architecture: OIS + Kafka + Langfuse
 
 ```
-Service → POST /v1/ingest → OIS
-                                ↓
-                     Validate + Enrich + Map errors
-                                ↓
-                     Produce to ai-obs-events (Kafka)
-                                ↓  (durable buffer)
-                     OIS Consumer Service
-                                ↓
-                     PostgreSQL obs_events + typed tables
-                                ↓
-                     Elasticsearch (if needed)
+                        ┌─────────────────────────────────────────┐
+                        │           8 Backend Services            │
+                        └──┬──────────────────────────────────────┘
+                           │  emit to both layers in parallel
+          ┌────────────────┴─────────────────────┐
+          ▼                                       ▼
+  ┌──────────────────┐                  ┌─────────────────────┐
+  │  OIS HTTP        │                  │  Langfuse SDK       │
+  │  POST /v1/ingest │                  │  @observe()         │
+  └────────┬─────────┘                  └──────────┬──────────┘
+           │ Validate + Enrich                      │ LLM/RAG/Agent
+           │ Map errors                             │ trace trees
+           ▼                                        ▼
+  ┌──────────────────┐                  ┌─────────────────────┐
+  │  Kafka           │                  │  Langfuse DB        │
+  │  ai-obs-events   │                  │  Traces + Scores    │
+  │  (durable buffer)│                  │  Prompts + Datasets │
+  └────────┬─────────┘                  └──────────┬──────────┘
+           │                                        │ nightly sync
+           ▼                                        ▼
+  ┌──────────────────┐                  ┌─────────────────────┐
+  │  PostgreSQL      │◄─────────────────│  daily_rag_quality  │
+  │  obs_events      │                  │  agg_hourly_llm     │
+  │  Elasticsearch   │                  └─────────────────────┘
+  │  S3              │
+  └──────────────────┘
 ```
+
+**What each layer handles:**
+
+| Signal | Layer | Why |
+|---|---|---|
+| LLM call traces, token counts, cost | Langfuse | Native LLM trace model; auto cost calc |
+| RAG pipeline spans, chunk count, faithfulness | Langfuse | Native retrieval span type; LLM-as-judge evals |
+| Agent step trees, tool/LLM nesting | Langfuse | Native agent trace hierarchy |
+| Prompt versions, A/B tests | Langfuse | Built-in prompt management |
+| User feedback linked to exact trace | Langfuse | `langfuse.score(trace_id=...)` |
+| Kafka lag, consumer offsets | OIS → PostgreSQL | Infrastructure metric |
+| Document ingestion pipeline events | OIS → PostgreSQL | Non-LLM pipeline |
+| Service health, auth events | OIS → PostgreSQL | Platform-level signals |
+| SLO compliance, error budgets | OIS → PostgreSQL → Grafana | SRE operational concern |
+| Business KPIs, budget governance | OIS → PostgreSQL → Grafana | Domain aggregates |
 
 **Why this is correct:**
 
@@ -180,7 +210,7 @@ Service → POST /v1/ingest → OIS
 | Backup if down | Events lost | Events buffered | Events lost | Events buffered |
 | **Recommended** | Phase 1 only | No (too much producer work) | Never | **Target state** |
 
-**Recommendation in one sentence:** Build OIS Phase 1 exactly as planned for the developer interface, but wire OIS to produce to Kafka rather than writing directly to PostgreSQL — Kafka becomes the durability guarantee, and the PostgreSQL writers become Kafka consumers. The 8 services never need to know Kafka exists.
+**Recommendation in one sentence:** Build OIS (with Kafka backing for durability) for platform/infrastructure signals, and deploy Langfuse self-hosted for the LLM/RAG/agent trace layer — the two are complementary, joined by `correlation_id`, and together cover every observability gap in the current platform without duplicating any effort.
 
 ---
 

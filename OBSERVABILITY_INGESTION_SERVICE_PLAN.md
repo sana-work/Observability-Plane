@@ -25,28 +25,61 @@ All eight platform services produce observability data today, but:
 
 ### 2.1 Architecture Position
 
+The platform observability layer is split into two complementary planes. OIS handles platform-level and infrastructure signals. Langfuse handles the AI quality and trace layer (LLM calls, RAG pipelines, agent steps, prompt management, evaluations). Both run in parallel — services emit to both.
+
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
 │                      AI Services Platform                           │
 │                                                                     │
 │  Agentic Orchestration ──┐                                          │
 │  Agent Executor ──────────┤                                         │
-│  GSSP GS ─────────────────┤                                         │
-│  GSSP QS ─────────────────┼──► POST /v1/ingest  ──► OIS API        │
-│  GSSP RS ─────────────────┤      (log/event/metric JSON)           │
-│  Data Ingestion ──────────┤                           ▼             │
-│  Consumer Service ────────┤                    Validation &         │
-│  User Feedback ───────────┘                    Enrichment           │
-│                                                    │                │
-│                                              ┌─────────────────┐     │
-│                                              │ PostgreSQL      │     │
-│                                              │ obs_events      │     │
-│                                              │ obs_logs        │     │
-│                                              │ obs_metrics     │     │
-│                                              │ obs_dead_letter │     │
-│                                              └─────────────────┘     │
+│  GSSP GS ─────────────────┤──► POST /v1/ingest ──► OIS API         │
+│  GSSP QS ─────────────────┤      (log/event/metric JSON)     │      │
+│  GSSP RS ─────────────────┤                    Validation &   │      │
+│  Data Ingestion ──────────┤                    Enrichment     │      │
+│  Consumer Service ────────┤                           │       │      │
+│  User Feedback ───────────┘                           ▼       │      │
+│                                              ┌──────────────┐ │      │
+│                                              │  PostgreSQL  │ │      │
+│                                              │  obs_events  │ │      │
+│                                              │  obs_logs    │ │      │
+│                                              │  obs_metrics │ │      │
+│                                              │  obs_dead_   │ │      │
+│                                              │  letter      │ │      │
+│                                              └──────────────┘ │      │
+│                                                               │      │
+│  ─────────────── AI Quality & Trace Layer (Langfuse) ──────── │      │
+│                                                               │      │
+│  Agent Executor ──────────┐                                   │      │
+│  GSSP GS ─────────────────┤──► Langfuse SDK ──► Langfuse      │      │
+│  GSSP QS ─────────────────┤     @observe()       (self-hosted)│      │
+│  GSSP RS ─────────────────┤                           │       │      │
+│  Agentic Orchestration ───┘                           ▼       │      │
+│                                              ┌──────────────┐ │      │
+│                                              │  Langfuse DB │ │      │
+│                                              │  Traces      │ │      │
+│                                              │  Scores/Eval │ │      │
+│                                              │  Prompts     │ │      │
+│                                              │  Datasets    │ │      │
+│                                              └──────────────┘ │      │
 └─────────────────────────────────────────────────────────────────────┘
 ```
+
+**Division of responsibility:**
+
+| Signal Type | Captured By | Why |
+|---|---|---|
+| LLM call traces (tokens, cost, latency, finish_reason) | Langfuse | Native LLM trace model |
+| RAG pipeline spans (retrieval, embedding, re-rank, faithfulness) | Langfuse | Native RAG span types |
+| Agent step trees (step → LLM → tool nesting) | Langfuse | Native agent trace hierarchy |
+| Prompt versions, A/B tests, prompt hashes | Langfuse | Built-in prompt management |
+| Evaluation scores (faithfulness, hallucination, relevance) | Langfuse | Built-in LLM-as-judge evals |
+| User feedback linked to traces | Langfuse | `langfuse.score(trace_id=...)` |
+| Kafka lag / consumer offsets | OIS | Infrastructure metric |
+| Document ingestion pipeline events | OIS | Not LLM-centric |
+| Service health events (REQUEST_RECEIVED, AUTH_COMPLETED) | OIS | Platform-level signal |
+| SLO compliance, error budgets | OIS → PostgreSQL → Grafana | Operational SRE concern |
+| Business KPIs, budget governance | OIS → PostgreSQL → Grafana | Domain-specific aggregates |
 
 ### 2.2 Core Principles
 
@@ -1244,3 +1277,226 @@ To keep OIS focused and lightweight:
 - **Does not compute business KPIs** — `agg_daily_kpi_metrics` is computed by a separate KPI calculation job
 - **Does not route incidents** — incident routing is a separate Incident Router Service consuming from the OIS tables
 - **Does not replace the audit_table in Agent Executor** — that table serves a replay/debugging purpose; OIS is the observability view
+- **Does not handle LLM/RAG/Agent trace trees** — that is Langfuse's responsibility (see Section 13)
+- **Does not manage prompt versions or run evaluations** — Langfuse handles prompt management and LLM-as-judge eval
+
+---
+
+## 13. Langfuse Integration — LLM, RAG & Agent Trace Layer
+
+Langfuse is a self-hosted, open-source LLM observability platform that handles the AI quality and trace layer that OIS was not designed for. OIS and Langfuse are **complementary, not competing** — they capture different signal types.
+
+### 13.1 What Langfuse Covers (OIS does NOT need to duplicate this)
+
+| Capability | Langfuse Feature | Replaces Custom Build |
+|---|---|---|
+| Nested LLM/RAG/agent trace trees | Traces + Spans | Custom `obs_llm_events` trace view |
+| Per-call token count, cost, latency | Auto from SDK | Manual `LLMUsageMetrics` capture |
+| Faithfulness, hallucination, relevance scoring | LLM-as-judge evals | Custom `FaithfulnessScorer` |
+| Prompt version control + A/B testing | Prompt Management | `PromptTemplateFactory` in DB |
+| User feedback linked to exact trace | `langfuse.score(trace_id=...)` | Partial `correlation_id` linkage |
+| Production dataset curation for fine-tuning | Datasets | Not built today |
+| Retrieval span (chunk count, relevance score) | RAG span type | All RAG fields are ❌ today |
+
+### 13.2 Deployment
+
+Langfuse is self-hosted within the platform network — no data leaves the environment:
+
+```yaml
+# Add to platform docker-compose or Helm chart
+services:
+  langfuse:
+    image: ghcr.io/langfuse/langfuse:latest
+    environment:
+      DATABASE_URL: postgresql://langfuse:${LANGFUSE_DB_PASS}@postgres/langfuse
+      NEXTAUTH_SECRET: ${LANGFUSE_SECRET}
+      SALT: ${LANGFUSE_SALT}
+      NEXTAUTH_URL: http://langfuse.internal:3000
+    ports:
+      - "3000:3000"
+```
+
+One Langfuse project per `application_id` (or per LOB) maps to the existing multi-tenant model.
+
+### 13.3 SDK Installation
+
+```bash
+pip install langfuse
+```
+
+Add to each service's `requirements.txt`. No new infrastructure — Langfuse SDK calls the self-hosted server directly.
+
+### 13.4 Shared Initialisation (add to each service's `config/settings.py`)
+
+```python
+from langfuse import Langfuse
+from langfuse.decorators import langfuse_context
+
+langfuse = Langfuse(
+    public_key=settings.LANGFUSE_PUBLIC_KEY,
+    secret_key=settings.LANGFUSE_SECRET_KEY,
+    host=settings.LANGFUSE_HOST,          # http://langfuse.internal:3000
+)
+```
+
+### 13.5 Per-Service Integration
+
+#### GSSP GS — LLM Call Tracing
+
+```python
+from langfuse.decorators import observe, langfuse_context
+
+@observe(as_type="generation")
+async def generate(self, prompt: str, ctx: ObsContext):
+    result = await self.vertex_client.generate(prompt)
+    langfuse_context.update_current_observation(
+        model=self.model_name,
+        model_parameters={"temperature": self.temperature},
+        usage={"input": result.usage.input_tokens, "output": result.usage.output_tokens},
+        metadata={"correlation_id": ctx.correlation_id, "application_id": ctx.application_id},
+    )
+    return result
+```
+
+#### GSSP QS — Full RAG Pipeline Trace
+
+```python
+from langfuse.decorators import observe, langfuse_context
+
+@observe(name="rag-pipeline")
+async def execute_pipeline(self, query: str, ctx: ObsContext):
+    langfuse_context.update_current_trace(
+        session_id=ctx.session_id,
+        user_id=ctx.user_hash,
+        tags=[ctx.lob, ctx.environment],
+        metadata={"correlation_id": ctx.correlation_id},
+    )
+
+    @observe(name="guardrail-check")
+    async def run_guardrail(): ...
+
+    @observe(name="cache-lookup", as_type="retrieval")
+    async def check_semantic_cache(): ...
+
+    @observe(name="retrieval", as_type="retrieval")
+    async def retrieve_chunks():
+        chunks = await self.retrieval_client.retrieve(query)
+        langfuse_context.update_current_observation(
+            input={"query_hash": sha256(query)},
+            output={"document_count": len(chunks)},
+            metadata={
+                "retrieved_chunk_count": len(chunks),
+                "avg_relevance_score": mean(c.score for c in chunks),
+                "no_result_flag": len(chunks) == 0,
+                "knowledge_base": self.config.knowledge_base,
+            },
+        )
+        return chunks
+
+    @observe(name="generation", as_type="generation")
+    async def generate_answer(chunks): ...
+```
+
+This renders in Langfuse UI as a nested trace tree showing every stage with timing, scores, and metadata — the distributed trace view the current platform cannot produce.
+
+#### Agent Executor — Agent Step Tree
+
+```python
+from langfuse.decorators import observe, langfuse_context
+
+@observe(name="agent-execution")
+async def execute_agent(self, request, ctx: ObsContext):
+    langfuse_context.update_current_trace(
+        metadata={"correlation_id": ctx.correlation_id, "agent_id": self.agent_id},
+    )
+    for step_num, step in enumerate(self.agent.steps):
+
+        @observe(name=f"step-{step_num}")
+        async def run_step():
+            # Tool call child span
+            @observe(name="tool-call", as_type="tool")
+            async def call_tool(): ...
+
+            # LLM call child span
+            @observe(name="llm-call", as_type="generation")
+            async def call_llm(): ...
+```
+
+#### User Feedback Service — Link Feedback to Trace
+
+```python
+from langfuse import Langfuse
+
+langfuse = Langfuse()
+
+async def submit_feedback(self, feedback: FeedbackRequest):
+    # Persist to own DB as normal
+    await self.repo.create(feedback)
+
+    # Link score to the Langfuse trace for that agent execution
+    langfuse.score(
+        trace_id=feedback.correlation_id,
+        name="user-feedback",
+        value=feedback.rating / 5.0,        # normalise to 0.0–1.0
+        comment=redact(feedback.comment),
+        data_type="NUMERIC",
+    )
+```
+
+### 13.6 Prompt Management (replaces PromptTemplateFactory DB lookups)
+
+```python
+# Fetch current production prompt — Langfuse manages versioning
+from langfuse import Langfuse
+
+langfuse = Langfuse()
+
+prompt = langfuse.get_prompt("pricing_summary", label="production")
+compiled_prompt = prompt.compile(user_query=query, rag_context=context)
+# SDK automatically attaches prompt_name + prompt_version to every trace
+```
+
+Benefits over current DB-backed `PromptTemplateFactory`:
+- Version history with rollback
+- A/B testing (route % of traffic to `experiment` label)
+- Automatic prompt drift detection via hash comparison across versions
+- Per-prompt performance analytics (faithfulness score, user rating, cost)
+
+### 13.7 Evaluation — Replaces Custom FaithfulnessScorer
+
+```python
+# Define once — runs automatically on all matching traces
+from langfuse import Langfuse
+
+langfuse = Langfuse()
+
+langfuse.create_dataset_run_item(
+    dataset_name="rag-faithfulness-eval",
+    run_name="gemini-1.5-pro-v2",
+    trace_id=trace_id,
+    expected_output={"faithfulness_min": 0.7},
+)
+```
+
+Built-in evaluators available without custom code:
+- **Faithfulness** — answer grounded in retrieved context?
+- **Answer Relevance** — does the answer address the question?
+- **Hallucination** — is the model making up facts?
+- **Context Precision** — are all retrieved chunks relevant?
+- **Toxicity / Bias**
+
+### 13.8 Updated Implementation Phase
+
+Langfuse is additive — it can be integrated service by service without blocking any other phase:
+
+| Phase | Langfuse Work | Effort |
+|---|---|---|
+| Phase 1 | Deploy Langfuse self-hosted (Helm/Docker) | 1 day |
+| Phase 2 | Add `@observe` to GSSP GS LLM calls | 1 day |
+| Phase 2 | Add `@observe` to GSSP QS RAG pipeline stages | 2 days |
+| Phase 2 | Add `@observe` to Agent Executor step loop | 2 days |
+| Phase 2 | Add `@observe` to GSSP RS retrieval + embed | 1 day |
+| Phase 2 | Migrate `PromptTemplateFactory` to Langfuse Prompt Management | 3 days |
+| Phase 3 | Configure LLM-as-judge evaluators (faithfulness, relevance) | 1 day |
+| Phase 3 | Wire User Feedback `langfuse.score()` call | 0.5 days |
+| Phase 4 | Add Langfuse as query source in Observability Chatbot | 2 days |
