@@ -87,10 +87,9 @@ Kafka path: Service → Kafka → Enrichment Consumer → Storage
 
 | Topic | Purpose | Retention | Partitions | Replication |
 |---|---|---|---|---|
-| `ai-obs-events-raw` | Raw events from all 8 services — unvalidated, unredacted | 7 days | 12 | 3 |
-| `ai-obs-events-processed` | Enriched, redacted, validated events ready for storage | 3 days | 12 | 3 |
-| `ai-obs-dead-letter` | Failed validation — stored for debugging and replay after fix | 14 days | 3 | 3 |
-| `ai-obs-anomalies` | Anomaly detection results | 7 days | 6 | 3 |
+| `ai-obs-events-raw` | All 8 services produce all 38 event types here — unvalidated, unredacted | 7 days | 12 | 3 |
+| `ai-obs-events-processed` | Enriched, validated, PII-redacted events — `event_type` field routes internally | 3 days | 12 | 3 |
+| `ai-obs-dead-letter` | Failed validation or enrichment — held for debugging and replay | 14 days | 3 | 3 |
 
 ### Create topics
 

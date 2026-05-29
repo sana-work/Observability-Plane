@@ -39,7 +39,7 @@ Read this alongside the architecture document and the refined architecture diagr
 - Captures quality signals (faithfulness, response entropy) for LLM and RAG calls
 
 **Inputs:** Service code instrumentation calls (context managers / decorators)
-**Outputs:** Kafka messages on `ai-obs-traces`, `ai-obs-events`, `ai-obs-metrics`, `ai-obs-quality`, `ai-obs-cost`
+**Outputs:** Kafka messages on `ai-obs-events-raw` (single topic — all event types)
 
 **Technology:** Python (primary), Java (secondary), OpenTelemetry SDK, confluent-kafka or kafka-python
 
@@ -51,14 +51,13 @@ Read this alongside the architecture document and the refined architecture diagr
 
 **Topics required:**
 
-| Topic | Purpose | Producers | Consumers |
-|---|---|---|---|
-| `ai-obs-traces` | Distributed trace spans | All services via SDK | Telemetry Processor |
-| `ai-obs-events` | Domain events (REQUEST_RECEIVED, TOOL_CALL_COMPLETED, etc.) | All services via SDK | Telemetry Processor |
-| `ai-obs-metrics` | Counters, histograms, Kafka lag | All services + JMX exporter | Telemetry Processor, Custom Dashboard Service |
-| `ai-obs-quality` | Faithfulness scores, entropy, embedding drift | LLM Wrapper, RAG Wrapper via SDK | Telemetry Processor |
-| `ai-obs-cost` | Token cost events and budget snapshots | LLM Wrapper via SDK | Telemetry Processor |
-| `ai-obs-anomalies` | ML-detected anomaly events | Anomaly Detection Service | Elasticsearch indexer, Custom Dashboard Service |
+| Topic | Purpose | Producers | Consumers | Retention |
+|---|---|---|---|---|
+| `ai-obs-events-raw` | All 38 event types from all 8 services — unvalidated, unredacted | All 8 services via SDK | Enrichment Consumer | 7 days |
+| `ai-obs-events-processed` | Enriched, validated, PII-redacted events ready for storage | Enrichment Consumer | Storage Consumer, Anomaly Detection Service | 3 days |
+| `ai-obs-dead-letter` | Events that failed schema validation or enrichment — held for debugging and replay | Enrichment Consumer | DLQ Handler | 14 days |
+
+**Routing by `event_type` field** — consumers read from one topic and route internally using the `event_type` field. No separate topic per signal type.
 
 **W3C traceparent** must be injected as a Kafka message header (not inside the payload) on every message produced.
 
@@ -82,8 +81,8 @@ Read this alongside the architecture document and the refined architecture diagr
 | SLO Evaluator | Computes burn rate for 1h and 6h windows; writes `daily_slo_compliance` |
 | S3 Archiver | Writes large payloads (prompts, responses, full traces, RAG contexts) to S3 |
 
-**Inputs:** Kafka topics `ai-obs-traces`, `ai-obs-events`, `ai-obs-quality`, `ai-obs-cost`
-**Outputs:** Elasticsearch indices, PostgreSQL tables, Amazon S3 objects, Kafka `ai-obs-anomalies`
+**Inputs:** Kafka topic `ai-obs-events-processed` (all event types via `event_type` field routing)
+**Outputs:** Elasticsearch indices, PostgreSQL tables, Amazon S3 objects
 
 **Technology:** Python (Faust or custom consumer) or Java (Kafka Streams), Redis (budget accumulator), PostgreSQL (registry cache + aggregates), Elasticsearch client, boto3/S3 SDK
 
@@ -98,10 +97,10 @@ Read this alongside the architecture document and the refined architecture diagr
 - Runs Isolation Forest for point anomalies on `latency_ms`, `error_rate`, `token_cost`
 - Runs LSTM autoencoder for temporal pattern anomalies
 - Correlates anomalies across metrics using shared `correlation_id`
-- Publishes `ANOMALY_DETECTED` events to `ai-obs-anomalies` Kafka topic
+- Writes `ANOMALY_DETECTED` events directly to Elasticsearch `ai-obs-anomalies-*` index (no separate Kafka topic needed)
 
-**Inputs:** Kafka topic `ai-obs-metrics`, `ai-obs-events` (enriched by processor)
-**Outputs:** Kafka topic `ai-obs-anomalies` → Elasticsearch `ai-obs-anomalies-*` → Custom Dashboard Service Anomaly View
+**Inputs:** Kafka topic `ai-obs-events-processed` (subscribes to all events, filters by `event_type` for metrics and error signals)
+**Outputs:** Elasticsearch `ai-obs-anomalies-*` → Custom Dashboard Service Anomaly View
 
 **Technology:** Python, scikit-learn (Isolation Forest), PyTorch or TensorFlow (LSTM), Redis, Kafka consumer
 
@@ -995,19 +994,23 @@ def sync_rag_quality(quality_date: date):
 Deploy the following Kafka topics via IaC (Terraform or `kafka-topics.sh`):
 
 ```bash
-# Example topic creation (adjust partitions/replication for production)
-kafka-topics.sh --create --topic ai-obs-traces       --partitions 12 --replication-factor 3
-kafka-topics.sh --create --topic ai-obs-events       --partitions 24 --replication-factor 3
-kafka-topics.sh --create --topic ai-obs-metrics      --partitions 6  --replication-factor 3
-kafka-topics.sh --create --topic ai-obs-quality      --partitions 6  --replication-factor 3
-kafka-topics.sh --create --topic ai-obs-cost         --partitions 6  --replication-factor 3
-kafka-topics.sh --create --topic ai-obs-anomalies    --partitions 6  --replication-factor 3
+# Single raw input topic — all 8 services produce all 38 event types here
+kafka-topics.sh --create --topic ai-obs-events-raw \
+  --partitions 12 --replication-factor 3 \
+  --config retention.ms=604800000    # 7 days
 
-# Dead-letter queues for each topic
-kafka-topics.sh --create --topic ai-obs-events-dlq   --partitions 6  --replication-factor 3
+# Enriched output topic — Storage Consumer and Anomaly Detection read from here
+kafka-topics.sh --create --topic ai-obs-events-processed \
+  --partitions 12 --replication-factor 3 \
+  --config retention.ms=259200000    # 3 days
+
+# Dead letter — invalid/failed events held for debugging and replay
+kafka-topics.sh --create --topic ai-obs-dead-letter \
+  --partitions 6  --replication-factor 3 \
+  --config retention.ms=1209600000   # 14 days
 ```
 
-**Topic retention:** 7 days for all observability topics. Downstream sinks (ES, PG, S3) are the durable stores.
+**3 topics total.** Routing by signal type is done inside consumers via the `event_type` field — no separate topic per signal needed. Add a new topic only when one signal type genuinely floods others or needs different Kafka-level retention for compliance.
 
 ### 4.2 Message Schema
 
@@ -1039,7 +1042,7 @@ schema-version: 1.0
 
 ### 4.3 Dead-Letter Queue Handler
 
-Build a small consumer that reads from `*-dlq` topics, logs with context to Elasticsearch `ai-obs-errors-*`, and surfaces counts on the Custom Dashboard Service error panel.
+Build a small consumer that reads from `ai-obs-dead-letter`, logs with context to Elasticsearch `ai-obs-errors-*`, and surfaces counts on the Custom Dashboard Service error panel.
 
 ```python
 class DLQConsumer:
@@ -1048,7 +1051,7 @@ class DLQConsumer:
         self._es = es_client
 
     def run(self):
-        self._consumer.subscribe(["ai-obs-events-dlq", "ai-obs-traces-dlq"])
+        self._consumer.subscribe(["ai-obs-dead-letter"])
         while True:
             msg = self._consumer.poll(1.0)
             if msg and not msg.error():
@@ -1815,7 +1818,7 @@ anomaly-detector/
 │   │   ├── isolation_forest.py  ← point anomaly detection
 │   │   └── lstm.py              ← temporal pattern detection
 │   ├── correlator.py        ← metric correlation using correlation_id
-│   └── publisher.py         ← publishes ANOMALY_DETECTED to ai-obs-anomalies
+│   └── publisher.py         ← writes ANOMALY_DETECTED directly to Elasticsearch ai-obs-anomalies-*
 ├── tests/
 └── Dockerfile
 ```

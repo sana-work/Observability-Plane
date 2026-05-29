@@ -52,12 +52,10 @@ flowchart TB
         COSTEVT["Cost / Budget Events"]
     end
 
-    subgraph KAFKAOBS["Kafka Observability Topics"]
-        T_TRACES["ai-obs-traces"]
-        T_EVENTS["ai-obs-events"]
-        T_METRICS["ai-obs-metrics"]
-        T_ANOMALY["ai-obs-anomalies"]
-        T_QUALITY["ai-obs-quality"]
+    subgraph KAFKAOBS["Kafka Observability Topics  —  3 topics, event_type field routes internally"]
+        T_RAW["ai-obs-events-raw\n7-day retention\nAll 8 services produce all 38 event types here"]
+        T_PROC["ai-obs-events-processed\n3-day retention\nEnriched + validated + PII-redacted"]
+        T_DLQ["ai-obs-dead-letter\n14-day retention\nFailed validation or enrichment"]
     end
 
     subgraph PROC["Telemetry Processor / Enrichment Layer"]
@@ -76,7 +74,7 @@ flowchart TB
         MLMODEL["ML Anomaly Models\n(Isolation Forest / LSTM)"]
         BASELINE["Per-app Dynamic Baselines\n(P50/P95/P99 sliding windows)"]
         CORR["Metric Correlation Engine\n(latency ↔ tool ↔ LLM via correlation_id)"]
-        ANOMOUT["Anomaly Events → Kafka"]
+        ANOMOUT["Anomaly Events → Elasticsearch direct"]
     end
 
     subgraph IACPIPE["Observability-as-Code Pipeline"]
@@ -168,30 +166,32 @@ flowchart TB
     GUARD -. policy events .-> EVENTS
     FEEDBACK -. feedback events .-> EVENTS
 
-    %% Collection to Kafka
-    TRACES & LOGS & METRICS & EVENTS & QUALITY & COSTEVT --> T_TRACES & T_EVENTS & T_METRICS & T_QUALITY
+    %% Collection to Kafka — all signals → single raw topic
+    TRACES & LOGS & METRICS & EVENTS & QUALITY & COSTEVT --> T_RAW
 
-    %% Kafka to Processor
-    T_TRACES & T_EVENTS & T_METRICS & T_QUALITY --> TRACECTX --> REDACT --> ENRICH
+    %% Enrichment Consumer: raw → processed or dead-letter
+    T_RAW --> TRACECTX --> REDACT --> ENRICH
     ENRICH --> ERRMAP --> COSTCALC --> FAITH --> ROLLUP --> SLOEVAL --> ARCHIVER
+    REDACT -. invalid .-> T_DLQ
 
-    %% Processor to Anomaly Detection
-    ROLLUP --> ANOMSVC
-    MLMODEL --> BASELINE --> CORR --> ANOMOUT --> T_ANOMALY
+    %% Enrichment Consumer produces to processed topic
+    ARCHIVER --> T_PROC
 
-    %% Processor to Storage
+    %% Processor to Anomaly Detection — reads from processed topic
+    T_PROC --> ANOMSVC
+    MLMODEL --> BASELINE --> CORR --> ANOMOUT --> ES_ANOMALY
+
+    %% Storage Consumer reads from processed topic → Storage
     FAITH --> ES_RAG & PG_RAGQ
-    ENRICH --> ES_REQ & ES_ERR & ES_AGENT & ES_LLM & ES_TOOL & ES_GUARD & ES_FEED & ES_TRACE
-    T_ANOMALY --> ES_ANOMALY
-    T_QUALITY --> ES_QUALITY
+    T_PROC --> ES_REQ & ES_ERR & ES_AGENT & ES_LLM & ES_TOOL & ES_GUARD & ES_FEED & ES_TRACE
     ROLLUP --> PG_AGG
     COSTCALC --> PG_BUDGET
     SLOEVAL --> PG_SLO
     ARCHIVER --> S3
     COSTCALC --> COSTGOV
 
-    %% Anomaly → Custom Dashboard
-    T_ANOMALY --> ANOMDASH
+    %% Anomaly → Custom Dashboard (direct from ES index)
+    ES_ANOMALY --> ANOMDASH
 
     %% Vector health monitoring
     RAG -. index health .-> ES_VECTOR
@@ -229,7 +229,7 @@ flowchart TB
 | New Component | Role | Connects To |
 |---|---|---|
 | **Langfuse (self-hosted)** | LLM + RAG + agent trace store; prompt management; LLM-as-judge evaluations; user feedback linking | GSSP GS, GSSP QS, GSSP RS, Agent Executor, Agentic Orchestration, User Feedback → Langfuse DB (PostgreSQL) |
-| **Anomaly Detection Service** | ML-based anomaly scoring per app/model with sliding P50/P95/P99 baselines | Kafka `ai-obs-anomalies` → Elasticsearch → Custom Dashboard Service Anomaly View |
+| **Anomaly Detection Service** | ML-based anomaly scoring per app/model with sliding P50/P95/P99 baselines | Reads `ai-obs-events-processed` → writes directly to Elasticsearch `ai-obs-anomalies-*` → Custom Dashboard Service Anomaly View |
 | **Faithfulness Scorer** | Computes RAG faithfulness (context overlap), entropy, retrieval precision at stream time — **delegate to Langfuse evaluators** | Langfuse scores API; PostgreSQL `daily_rag_quality` (aggregated from Langfuse) |
 | **Budget Accumulator** | Real-time spend counter in Redis; writes alerts when `max_spend_usd` threshold hit | PostgreSQL `budget_limits` → Custom Dashboard Service Cost Governance page |
 | **W3C TraceContext Extractor** | Reads `traceparent` Kafka headers; propagates full W3C trace through all enrichment steps | All downstream stores and Chatbot |
@@ -239,12 +239,13 @@ flowchart TB
 
 ---
 
-## New Kafka Topics
+## Kafka Topics
 
-| Topic | Producer | Consumer | Purpose |
-|---|---|---|---|
-| `ai-obs-anomalies` | Anomaly Detection Service | Custom Dashboard Service, Elasticsearch indexer | Anomaly events with score, baseline, metric name |
-| `ai-obs-quality` | LLM/RAG wrappers via SDK | Telemetry Processor (Faithfulness Scorer) | Quality signals: faithfulness, entropy, embedding drift |
+| Topic | Producer | Consumer | Retention | Purpose |
+|---|---|---|---|---|
+| `ai-obs-events-raw` | All 8 services via SDK | Enrichment Consumer | 7 days | All 38 event types — unvalidated, unredacted |
+| `ai-obs-events-processed` | Enrichment Consumer | Storage Consumer, Anomaly Detection Service | 3 days | Enriched, validated, PII-redacted events — `event_type` field routes internally |
+| `ai-obs-dead-letter` | Enrichment Consumer | DLQ Handler | 14 days | Failed validation or enrichment — held for debugging and replay |
 
 ---
 
