@@ -1,0 +1,546 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Services Platform Observability Plane</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; background: #f0f4f8; padding: 20px; }
+
+  .page { background: white; border-radius: 12px; padding: 24px; max-width: 1420px; margin: 0 auto; box-shadow: 0 4px 20px rgba(0,0,0,0.12); }
+
+  /* ── Header ─────────────────────────────────────── */
+  .header { text-align: center; margin-bottom: 20px; }
+  .header h1 { font-size: 22px; font-weight: 700; color: #1a2744; }
+  .header p  { font-size: 12px; color: #6b7a99; margin-top: 4px; }
+
+  /* ── Row wrapper ─────────────────────────────────── */
+  .row { display: flex; align-items: stretch; gap: 10px; margin-bottom: 10px; }
+
+  /* ── Side label ──────────────────────────────────── */
+  .side-label {
+    width: 120px; min-width: 120px;
+    border-radius: 8px; padding: 10px 8px;
+    display: flex; flex-direction: column; justify-content: center; align-items: center;
+    text-align: center; gap: 6px;
+  }
+  .side-label .num {
+    width: 26px; height: 26px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px; font-weight: 700; color: white;
+  }
+  .side-label .title { font-size: 11px; font-weight: 700; line-height: 1.3; }
+  .side-label .sub   { font-size: 9.5px; line-height: 1.3; margin-top: 2px; }
+
+  /* Row 1 – blue */
+  .sl1 { background: #e8f0fe; }
+  .sl1 .num { background: #2d5be3; }
+  .sl1 .title { color: #1a3a8f; }
+  .sl1 .sub   { color: #4a6ab5; }
+
+  /* Row 2 – purple */
+  .sl2 { background: #ede7f6; }
+  .sl2 .num { background: #6c3fc5; }
+  .sl2 .title { color: #4a148c; }
+  .sl2 .sub   { color: #7b5ea7; }
+
+  /* Row 3 – teal */
+  .sl3 { background: #e0f5f1; }
+  .sl3 .num { background: #00897b; }
+  .sl3 .title { color: #00574f; }
+  .sl3 .sub   { color: #26a69a; }
+
+  /* Row 4 – dark green */
+  .sl4 { background: #e8f5e9; }
+  .sl4 .num { background: #2e7d32; }
+  .sl4 .title { color: #1b5e20; }
+  .sl4 .sub   { color: #388e3c; }
+
+  /* Row 5 – orange */
+  .sl5 { background: #fff3e0; }
+  .sl5 .num { background: #e65100; }
+  .sl5 .title { color: #bf360c; }
+  .sl5 .sub   { color: #f57c00; }
+
+  /* ── Content area ────────────────────────────────── */
+  .content { flex: 1; border-radius: 8px; padding: 10px 12px; }
+
+  /* Row 1 content */
+  .c1 { background: #f0f5ff; border: 1.5px solid #c5d4f7; }
+  /* Row 2 content */
+  .c2 { background: #f5f0fc; border: 1.5px solid #d4bff7; }
+  /* Row 3 content */
+  .c3 { background: #f0faf8; border: 1.5px solid #b2dfdb; }
+  /* Row 4 content */
+  .c4 { background: #f1f8e9; border: 1.5px solid #c5e1a5; }
+  /* Row 5 content */
+  .c5 { background: #fff8f0; border: 1.5px solid #ffcc80; }
+
+  /* ── Row 1: service boxes ─────────────────────────── */
+  .services { display: flex; gap: 7px; flex-wrap: wrap; }
+  .svc-box {
+    background: white; border: 1.5px solid #c5d4f7; border-radius: 8px;
+    padding: 8px 6px; text-align: center; flex: 1; min-width: 90px; max-width: 140px;
+  }
+  .svc-box .icon { font-size: 20px; margin-bottom: 3px; }
+  .svc-box .name { font-size: 9.5px; font-weight: 600; color: #1a3a8f; line-height: 1.3; }
+  .svc-box .sub  { font-size: 8.5px; color: #6b7a99; line-height: 1.2; margin-top: 1px; }
+
+  /* SDK bar */
+  .sdk-bar {
+    background: white; border: 1.5px solid #7c9ef5; border-radius: 7px;
+    padding: 7px 14px; margin-top: 8px;
+    display: flex; align-items: center; gap: 14px; font-size: 10.5px; font-weight: 600; color: #1a3a8f;
+  }
+  .sdk-bar .sdk-label { font-size: 11px; font-weight: 700; color: #1a3a8f; }
+  .sdk-bar .sdk-desc  { font-size: 9.5px; color: #5c6bc0; }
+  .sdk-divider { width: 1.5px; height: 20px; background: #c5d4f7; }
+
+  /* ── Row 2: Kafka flow ───────────────────────────── */
+  .kafka-flow { display: flex; align-items: center; gap: 10px; }
+  .kafka-box {
+    background: white; border: 2px solid #9575cd; border-radius: 9px;
+    padding: 10px 14px; text-align: center;
+  }
+  .kafka-box .kb-icon { font-size: 26px; margin-bottom: 3px; }
+  .kafka-box .kb-title { font-size: 11px; font-weight: 700; color: #4a148c; }
+  .kafka-box .kb-sub   { font-size: 9px; color: #7b5ea7; margin-top: 2px; }
+
+  .arrow { font-size: 20px; color: #6c3fc5; font-weight: 700; }
+  .arrow-right::after { content: '→'; }
+  .arrow-down::after  { content: '↓'; }
+
+  .proc-box {
+    background: #ede7f6; border: 2px solid #9575cd; border-radius: 9px;
+    padding: 10px 14px; text-align: center; min-width: 160px;
+  }
+  .proc-box .icon { font-size: 22px; }
+  .proc-box .title { font-size: 11px; font-weight: 700; color: #4a148c; margin-top: 4px; }
+  .proc-box .sub   { font-size: 9px; color: #6a1b9a; margin-top: 3px; line-height: 1.4; }
+
+  .output-stack { display: flex; flex-direction: column; gap: 7px; }
+  .out-box {
+    background: white; border: 2px solid #9575cd; border-radius: 8px;
+    padding: 7px 12px;
+  }
+  .out-box .o-icon { font-size: 14px; }
+  .out-box .o-title { font-size: 10px; font-weight: 700; color: #4a148c; }
+  .out-box .o-sub   { font-size: 8.5px; color: #7b5ea7; line-height: 1.3; margin-top: 1px; }
+  .out-box-dlq { border-style: dashed; }
+
+  /* ── Row 3: processor components ──────────────────── */
+  .proc-grid { display: flex; gap: 6px; flex-wrap: wrap; }
+  .pc-box {
+    background: white; border: 1.5px solid #b2dfdb; border-radius: 8px;
+    padding: 9px 7px; text-align: center; flex: 1; min-width: 95px; max-width: 145px;
+  }
+  .pc-box .icon  { font-size: 18px; margin-bottom: 3px; }
+  .pc-box .title { font-size: 10px; font-weight: 700; color: #00574f; line-height: 1.3; }
+  .pc-box .sub   { font-size: 8.5px; color: #26a69a; line-height: 1.3; margin-top: 2px; }
+  .pc-removed { opacity: 0.3; text-decoration: line-through; }
+
+  /* ── Row 4: storage boxes ─────────────────────────── */
+  .storage-grid { display: flex; gap: 8px; align-items: stretch; }
+  .st-box {
+    background: white; border: 1.5px solid #a5d6a7; border-radius: 9px;
+    padding: 10px 11px; flex: 1;
+  }
+  .st-box .st-header { display: flex; align-items: center; gap: 7px; margin-bottom: 6px; }
+  .st-box .st-logo   { font-size: 26px; }
+  .st-box .st-name   { font-size: 11px; font-weight: 700; color: #1b5e20; line-height: 1.3; }
+  .st-box .st-desc   { font-size: 8.5px; color: #388e3c; line-height: 1.4; }
+
+  .st-box-optional {
+    border: 1.5px dashed #a5d6a7; background: #fafff8;
+  }
+  .st-box-snowflake {
+    border: 2px solid #29b5e8; background: #f0faff;
+  }
+  .st-box-snowflake .st-name { color: #0277bd; }
+  .st-box-snowflake .st-desc { color: #0288d1; }
+
+  /* ── Row 5: presentation boxes ───────────────────── */
+  .pres-grid { display: flex; gap: 8px; align-items: stretch; }
+  .pr-box {
+    background: white; border: 1.5px solid #ffcc80; border-radius: 9px;
+    padding: 10px 12px; flex: 1;
+  }
+  .pr-box .pr-header { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; }
+  .pr-box .pr-logo   { font-size: 26px; }
+  .pr-box .pr-name   { font-size: 11.5px; font-weight: 700; color: #bf360c; }
+  .pr-box .pr-desc   { font-size: 9px; color: #e65100; line-height: 1.4; }
+
+  /* ── Governance bar ───────────────────────────────── */
+  .gov-bar {
+    background: #1a2744; border-radius: 9px;
+    padding: 11px 18px; display: flex; align-items: center; gap: 20px;
+    margin-top: 10px;
+  }
+  .gov-label { display: flex; align-items: center; gap: 6px; color: white; font-size: 11px; font-weight: 700; }
+  .gov-label .icon { font-size: 18px; }
+  .gov-item  { display: flex; align-items: center; gap: 6px; color: #b0c4e8; font-size: 10px; }
+  .gov-item .icon { font-size: 15px; }
+  .gov-divider { width: 1px; height: 24px; background: #3a4d6e; }
+
+  /* NEW badge */
+  .badge-new {
+    background: #29b5e8; color: white; font-size: 8px; font-weight: 700;
+    padding: 1px 5px; border-radius: 4px; vertical-align: middle; margin-left: 4px;
+  }
+  .badge-updated {
+    background: #f59e0b; color: white; font-size: 8px; font-weight: 700;
+    padding: 1px 5px; border-radius: 4px; vertical-align: middle; margin-left: 4px;
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <!-- Header -->
+  <div class="header">
+    <h1>AI Services Platform Observability Plane — Detailed Architecture</h1>
+    <p>End-to-end telemetry capture, enrichment, storage, dashboards, and chatbot access</p>
+  </div>
+
+  <!-- ── ROW 1: Producers ─────────────────────────────────── -->
+  <div class="row">
+    <div class="side-label sl1">
+      <div class="num">1</div>
+      <div class="title">AI Services Platform Producers</div>
+      <div class="sub">Emit observability telemetry through Observability SDK</div>
+    </div>
+    <div class="content c1">
+      <div class="services">
+        <div class="svc-box">
+          <div class="icon">🖥️</div>
+          <div class="name">Client / UI / API Gateway</div>
+        </div>
+        <div class="svc-box">
+          <div class="icon">⚙️</div>
+          <div class="name">Orchestration Service</div>
+        </div>
+        <div class="svc-box">
+          <div class="icon">📨</div>
+          <div class="name">Kafka Event Bus</div>
+          <div class="sub">(business execution path)</div>
+        </div>
+        <div class="svc-box">
+          <div class="icon">▶️</div>
+          <div class="name">Executor Service</div>
+        </div>
+        <div class="svc-box">
+          <div class="icon">🤖</div>
+          <div class="name">Agent Orchestrator / Agent Runtime</div>
+        </div>
+        <div class="svc-box">
+          <div class="icon">🧠</div>
+          <div class="name">LLM / Model Services</div>
+        </div>
+        <div class="svc-box">
+          <div class="icon">🔧</div>
+          <div class="name">Registered Tools</div>
+        </div>
+        <div class="svc-box">
+          <div class="icon">🗄️</div>
+          <div class="name">RAG / Knowledge Base</div>
+        </div>
+        <div class="svc-box">
+          <div class="icon">🛡️</div>
+          <div class="name">Guardrails / Memory / Feedback</div>
+        </div>
+      </div>
+      <div class="sdk-bar">
+        <span class="sdk-label">⬡ Observability SDK / OpenTelemetry</span>
+        <div class="sdk-divider"></div>
+        <span class="sdk-desc">standard events, logs, metrics, spans, Correlation_ID propagation · GLiNER PII redactor · Kafka fire-and-forget emitter</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── ROW 2: Kafka Topics ──────────────────────────────── -->
+  <div class="row">
+    <div class="side-label sl2">
+      <div class="num">2</div>
+      <div class="title">Kafka Observability Topics</div>
+      <div class="sub">Durable, scalable event transport — 3 topics</div>
+    </div>
+    <div class="content c2">
+      <div class="kafka-flow">
+        <div class="kafka-box">
+          <div class="kb-icon">🟣</div>
+          <div class="kb-title">ai-obs-events-raw</div>
+          <div class="kb-sub">ingestion kafka topic<br/>all 38 event types · 7-day retention</div>
+        </div>
+        <div class="arrow arrow-right"></div>
+        <div class="proc-box">
+          <div class="icon">⚙️</div>
+          <div class="title">Enrichment Consumer</div>
+          <div class="sub">Consumes raw events,<br/>validates, enriches,<br/>and routes</div>
+        </div>
+        <div class="arrow arrow-right"></div>
+        <div class="output-stack">
+          <div class="out-box">
+            <div class="o-icon">🟣</div>
+            <div class="o-title">ai-obs-events-processed</div>
+            <div class="o-sub">enrichment consumer output<br/>event_type routes internally · 3-day retention</div>
+          </div>
+          <div class="out-box out-box-dlq">
+            <div class="o-icon">🔴</div>
+            <div class="o-title">ai-obs-dead-letter</div>
+            <div class="o-sub">invalid / failed events · 14-day retention</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── ROW 3: Telemetry Processor ──────────────────────── -->
+  <div class="row">
+    <div class="side-label sl3">
+      <div class="num">3</div>
+      <div class="title">Telemetry Processor / Enrichment Layer</div>
+      <div class="sub">Normalize, enrich, redact, route</div>
+    </div>
+    <div class="content c3">
+      <div class="proc-grid">
+        <div class="pc-box">
+          <div class="icon">✅</div>
+          <div class="title">Schema Validator</div>
+          <div class="sub">validate structure and required fields</div>
+        </div>
+        <div class="pc-box">
+          <div class="icon">🔗</div>
+          <div class="title">Correlation_ID / Trace Context Extractor</div>
+          <div class="sub">extract &amp; propagate Correlation_ID, parent context</div>
+        </div>
+        <div class="pc-box">
+          <div class="icon">🔒</div>
+          <div class="title">PII / Sensitive Data Redactor</div>
+          <div class="sub">detect, mask, pseudonymise sensitive data</div>
+        </div>
+        <div class="pc-box">
+          <div class="icon">🏷️</div>
+          <div class="title">Metadata Enricher</div>
+          <div class="sub">add env, service, version, tenant, user, labels</div>
+        </div>
+        <div class="pc-box">
+          <div class="icon">⚠️</div>
+          <div class="title">Error Code Mapper</div>
+          <div class="sub">map errors to standard codes and categories</div>
+        </div>
+        <div class="pc-box">
+          <div class="icon">💰</div>
+          <div class="title">Token / Cost Calculator</div>
+          <div class="sub">compute tokens, cost, currency, rates</div>
+        </div>
+        <div class="pc-box">
+          <div class="icon">🗂️</div>
+          <div class="title">S3 Archiver</div>
+          <div class="sub">write large payloads &amp; artifacts to S3</div>
+        </div>
+        <div class="pc-box">
+          <div class="icon">⭐</div>
+          <div class="title">SLO Evaluator</div>
+          <div class="sub">burn-rate computation<br/>writes 1 row/day to PG</div>
+        </div>
+        <div class="pc-box">
+          <div class="icon">🔍</div>
+          <div class="title">RAG / Quality Scorer</div>
+          <div class="sub">score retrieval quality &amp; response quality</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── ROW 4: Storage Layer ─────────────────────────────── -->
+  <div class="row">
+    <div class="side-label sl4">
+      <div class="num">4</div>
+      <div class="title">Data &amp; Storage Layer</div>
+      <div class="sub">Persistent, durable, queryable stores</div>
+    </div>
+    <div class="content c4">
+      <div class="storage-grid">
+
+        <div class="st-box">
+          <div class="st-header">
+            <span class="st-logo">🔍</span>
+            <div class="st-name">Elasticsearch / Kibana<br/>Index Store</div>
+          </div>
+          <div class="st-desc">
+            Hot events (0–90 days)<br/>
+            raw searchable events, errors, traces,<br/>
+            tool calls, LLM calls, RAG events,<br/>
+            feedback events, anomalies<br/>
+            <em>per-LOB namespaced indices</em>
+          </div>
+        </div>
+
+        <div class="st-box">
+          <div class="st-header">
+            <span class="st-logo">🐘</span>
+            <div class="st-name">PostgreSQL<br/><span class="badge-updated">Updated</span></div>
+          </div>
+          <div class="st-desc">
+            <strong>Control plane only</strong><br/>
+            registries, metric catalog,<br/>
+            KPI definitions, dashboard config,<br/>
+            alert thresholds, budget_limits,<br/>
+            daily_slo_compliance, feedback_case<br/>
+            <em>No pre-computed aggregates</em>
+          </div>
+        </div>
+
+        <div class="st-box st-box-snowflake">
+          <div class="st-header">
+            <span class="st-logo">❄️</span>
+            <div class="st-name">Snowflake <span class="badge-new">NEW</span></div>
+          </div>
+          <div class="st-desc">
+            <strong>All events — forever retention</strong><br/>
+            on-demand analytics (no pre-aggregation)<br/>
+            LLM cost trends, RAG quality history,<br/>
+            agent performance, feedback analytics,<br/>
+            cross-LOB BI reporting, ML feature store,<br/>
+            compliance &amp; audit long-term data
+          </div>
+        </div>
+
+        <div class="st-box">
+          <div class="st-header">
+            <span class="st-logo">🪣</span>
+            <div class="st-name">Amazon S3<br/>Object Store</div>
+          </div>
+          <div class="st-desc">
+            redacted prompts/responses,<br/>
+            large payloads, full traces,<br/>
+            audit evidence, multimodal<br/>
+            document artifacts,<br/>
+            RCA reports, debug bundles
+          </div>
+        </div>
+
+        <div class="st-box st-box-optional">
+          <div class="st-header">
+            <span class="st-logo">⚡</span>
+            <div class="st-name">Optional Cache /<br/>Runtime Memory<br/>(Redis / Valkey)</div>
+          </div>
+          <div class="st-desc">
+            active Correlation_ID context,<br/>
+            dedupe, rate limits, session cache,<br/>
+            budget accumulator (real-time spend),<br/>
+            registry cache (5-min TTL)<br/>
+            <em>(Recommended, not source of truth)</em>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- ── ROW 5: Presentation ──────────────────────────────── -->
+  <div class="row">
+    <div class="side-label sl5">
+      <div class="num">5</div>
+      <div class="title">Presentation &amp; Consumers</div>
+      <div class="sub">Insights, analysis, alerts, and access</div>
+    </div>
+    <div class="content c5">
+      <div class="pres-grid">
+
+        <div class="pr-box">
+          <div class="pr-header">
+            <span class="pr-logo">📊</span>
+            <div class="pr-name">Kibana Dashboards</div>
+          </div>
+          <div class="pr-desc">
+            operational search,<br/>
+            error drill-down,<br/>
+            Correlation_ID trace view<br/>
+            <em>queries Elasticsearch hot events</em>
+          </div>
+        </div>
+
+        <div class="pr-box">
+          <div class="pr-header">
+            <span class="pr-logo">💬</span>
+            <div class="pr-name">Custom Dashboard Service</div>
+          </div>
+          <div class="pr-desc">
+            FastAPI + React + Tremor<br/>
+            recent ops → Elasticsearch<br/>
+            analytics &amp; trends → Snowflake (on-demand)<br/>
+            budget config → PostgreSQL
+          </div>
+        </div>
+
+        <div class="pr-box">
+          <div class="pr-header">
+            <span class="pr-logo">🤖</span>
+            <div class="pr-name">Observability Chatbot</div>
+          </div>
+          <div class="pr-desc">
+            natural language Q&amp;A<br/>
+            recent events → Elasticsearch<br/>
+            long-range analytics → Snowflake<br/>
+            fetches artifacts on demand → S3
+          </div>
+        </div>
+
+        <div class="pr-box">
+          <div class="pr-header">
+            <span class="pr-logo">🔴</span>
+            <div class="pr-name">Langfuse</div>
+          </div>
+          <div class="pr-desc">
+            self-hosted K8s<br/>
+            LLM trace explorer,<br/>
+            RAG pipeline quality,<br/>
+            prompt version management,<br/>
+            LLM-as-judge evaluators
+          </div>
+        </div>
+
+        <div class="pr-box">
+          <div class="pr-header">
+            <span class="pr-logo">🔔</span>
+            <div class="pr-name">Alerting / Notification Consumers</div>
+          </div>
+          <div class="pr-desc">
+            threshold breaches,<br/>
+            anomaly notifications,<br/>
+            SLO burn-rate alerts,<br/>
+            budget cap alerts
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Governance bar ───────────────────────────────────── -->
+  <div class="gov-bar">
+    <div class="gov-label">
+      <span class="icon">🛡️</span>
+      <span>Governance &amp; Standards</span>
+    </div>
+    <div class="gov-divider"></div>
+    <div class="gov-item"><span class="icon">🔗</span><span>Correlation_ID<br/>on every event</span></div>
+    <div class="gov-divider"></div>
+    <div class="gov-item"><span class="icon">📋</span><span>Standard<br/>event schema</span></div>
+    <div class="gov-divider"></div>
+    <div class="gov-item"><span class="icon">🔒</span><span>Retention<br/>&amp; RBAC</span></div>
+    <div class="gov-divider"></div>
+    <div class="gov-item"><span class="icon">🧑‍💼</span><span>PII redaction<br/>policy (GLiNER)</span></div>
+    <div class="gov-divider"></div>
+    <div class="gov-item"><span class="icon">📊</span><span>KPI &amp; metric<br/>catalog</span></div>
+    <div class="gov-divider"></div>
+    <div class="gov-item"><span class="icon">❄️</span><span>Snowflake on-demand<br/>analytics</span></div>
+    <div class="gov-divider"></div>
+    <div class="gov-item"><span class="icon">🚫</span><span>No pre-computed<br/>aggregates</span></div>
+  </div>
+
+</div>
+</body>
+</html>

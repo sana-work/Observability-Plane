@@ -49,7 +49,7 @@ flowchart TD
     end
 
     subgraph SC_BOX["Storage Consumer  |  obs-pipeline repo"]
-        sc["PostgreSQL writer\nElasticsearch writer\nS3 archiver"]
+        sc["Elasticsearch writer (hot 0-90d)\nSnowflake writer (all events forever)\nS3 archiver (raw payloads)\nPostgreSQL (daily_slo_compliance only)"]
     end
 
     subgraph AD_BOX["Anomaly Detection Service  |  obs-pipeline repo"]
@@ -76,13 +76,15 @@ flowchart TD
 
     subgraph STORE["Storage Backends"]
         direction LR
-        pg[("PostgreSQL\nregistries + aggregates\nfeedback_case\nbudget_limits\nmetric_catalog")]
-        es[("Elasticsearch\nper-LOB indices\nanomalies + errors\nfeedback + logs")]
-        s3[("Amazon S3\nredacted prompts\nRAG contexts\ndebug bundles")]
+        pg[("PostgreSQL\nControl plane only\nregistries + feedback_case\nbudget_limits + daily_slo_compliance")]
+        es[("Elasticsearch\nHot events 0-90 days\nper-LOB indices\nanomalies + errors")]
+        sf[("Snowflake\nAll events forever\nOn-demand analytics\nBusiness intelligence")]
+        s3[("Amazon S3\nRaw payloads\nredacted prompts\nRAG contexts")]
     end
 
     sc --> pg
     sc --> es
+    sc --> sf
     sc --> s3
     ad -- "anomaly events" --> es
 
@@ -106,17 +108,19 @@ flowchart TD
     fb -- "structured logs" --> es
     km --> prom
 
-    cds -- "reads" --> pg
-    cds -- "reads" --> es
+    cds -- "recent ops" --> es
+    cds -- "analytics on-demand" --> sf
+    cds -- "budget config" --> pg
     cds -. "Kafka metrics" .-> prom
 
-    bot -- "reads" --> pg
-    bot -- "reads" --> es
+    bot -- "on-demand analytics" --> sf
+    bot -- "recent events" --> es
+    bot -- "config + workflow" --> pg
     bot -- "reads" --> s3
     bot -- "reads LLM traces" --> LANGFUSE
 
-    rca -- "reads" --> pg
-    rca -- "reads" --> es
+    rca -- "recent errors" --> es
+    rca -- "historical trends" --> sf
 
     classDef sdk fill:#6366f1,color:#fff,stroke:#4338ca
     classDef biz fill:#16a34a,color:#fff,stroke:#15803d
@@ -125,6 +129,7 @@ flowchart TD
     classDef analytics fill:#7c3aed,color:#fff,stroke:#6d28d9
     classDef presentation fill:#0369a1,color:#fff,stroke:#075985
     classDef storage fill:#475569,color:#fff,stroke:#334155
+    classDef snowflake fill:#29b5e8,color:#fff,stroke:#0096d6
     classDef langfuse fill:#db2777,color:#fff,stroke:#be185d
     classDef infra fill:#92400e,color:#fff,stroke:#78350f
 
@@ -138,6 +143,7 @@ flowchart TD
     class cds presentation
     class bot presentation
     class pg,es,s3 storage
+    class sf snowflake
     class lf_ui langfuse
     class fb,km,prom,tempo infra
 ```
@@ -154,7 +160,8 @@ flowchart TD
 | Cyan | Kafka Consumers — Enrichment + Storage (obs-pipeline) |
 | Violet | Analytics Services — Anomaly Detection + RCA Engine (obs-pipeline) |
 | Blue | Presentation Services — Custom Dashboard + Chatbot (obs-pipeline) |
-| Slate | Storage Backends — PostgreSQL + Elasticsearch + S3 |
+| Slate | Storage Backends — PostgreSQL (control plane) + Elasticsearch (hot events) + S3 (payloads) |
+| Blue | Snowflake — all events forever, on-demand analytics, BI |
 | Pink | Langfuse — self-hosted LLM/RAG/Agent trace UI |
 | Brown | Infrastructure — Fluent Bit, kminion, Prometheus, Tempo (deploy only) |
 
@@ -177,7 +184,8 @@ flowchart TD
    |                                    +-----------+-----------+
    |                                    |                       |
    |                            Storage Consumer       Anomaly Detection
-   |                            PG + ES + S3           Isolation Forest
+   |                            ES + Snowflake         Isolation Forest
+   |                            + S3 + PG(slo only)
    |                                                           |
    |                                                   ES anomalies index
    |

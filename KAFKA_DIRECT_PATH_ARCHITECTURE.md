@@ -58,7 +58,7 @@ Kafka path: Service → Kafka → Enrichment Consumer → Storage
 │  Step 3 — Metadata enrichment (app/agent/tool registry)    │
 │  Step 4 — Error code mapping (error_code_catalog)          │
 │  Step 5 — Token cost calculation                           │
-│  Step 6 — Aggregate rollup generation                      │
+│  Step 6 — SLO burn-rate evaluation (writes 1 row/day to PG) │
 │                                                             │
 │  Valid events   → ai-obs-events-processed                  │
 │  Invalid events → ai-obs-dead-letter                       │

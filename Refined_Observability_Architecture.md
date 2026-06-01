@@ -65,8 +65,7 @@ flowchart TB
         COSTCALC["Token Cost Calculation\n+ Budget Accumulator (Redis)"]
         FAITH["Faithfulness Scorer\n(RAG context overlap)"]
         TRACECTX["W3C traceparent Extractor"]
-        ROLLUP["Hourly / Daily Rollup Generator"]
-        SLOEVAL["SLO Evaluator\n(burn-rate: 1h + 6h windows)"]
+        SLOEVAL["SLO Evaluator\n(burn-rate: 1h + 6h windows)\nwrites daily_slo_compliance only"]
         ARCHIVER["S3 Payload Archiver"]
     end
 
@@ -98,16 +97,23 @@ flowchart TB
             ES_VECTOR["ai-obs-vector-health-*"]
         end
 
-        subgraph PG["PostgreSQL — Control Plane + Aggregates"]
+        subgraph PG["PostgreSQL — Control Plane Only"]
             PG_REG["Registries\n(app, agent, tool, rag, prompt)"]
             PG_KPI["KPI + Feedback + Metric Catalog"]
-            PG_AGG["Hourly + Daily Aggregates"]
             PG_BUDGET["budget_limits\n(per app/model/period)"]
-            PG_SLO["daily_slo_compliance\n(error budget tracking)"]
-            PG_RAGQ["daily_rag_quality\n(faithfulness, precision, recall)"]
-            PG_VECH["vector_health_snapshots\n(drift score, freshness)"]
+            PG_SLO["daily_slo_compliance\n(SLO evaluator writes one row/day)"]
             PG_ALERT["alert_threshold\n(threshold definitions)"]
             PG_DASH["dashboard_config\n(Custom Dashboard pages/widgets)"]
+            PG_FEED["feedback_case\n(open/reviewed/fixed workflow)"]
+        end
+
+        subgraph SNOW["Snowflake — Analytics + Long-term"]
+            SF_EVENTS["All raw events\n(forever retention)"]
+            SF_LLM["LLM call details\n(cost, tokens, model, latency)"]
+            SF_AGENT["Agent step events\n(success, loops, handoffs)"]
+            SF_RAG["RAG + quality events\n(faithfulness, retrieval scores)"]
+            SF_FEED["Feedback events\n(ratings, sentiment, categories)"]
+            SF_SLO["SLO history\n(long-term compliance reporting)"]
         end
 
         S3["Amazon S3\nredacted-prompts/ redacted-responses/\nraw-traces/ rag-contexts/\naudit-evidence/ debug-bundles/\nrca-reports/ iac-dashboards/"]
@@ -171,7 +177,7 @@ flowchart TB
 
     %% Enrichment Consumer: raw → processed or dead-letter
     T_RAW --> TRACECTX --> REDACT --> ENRICH
-    ENRICH --> ERRMAP --> COSTCALC --> FAITH --> ROLLUP --> SLOEVAL --> ARCHIVER
+    ENRICH --> ERRMAP --> COSTCALC --> FAITH --> SLOEVAL --> ARCHIVER
     REDACT -. invalid .-> T_DLQ
 
     %% Enrichment Consumer produces to processed topic
@@ -181,45 +187,43 @@ flowchart TB
     T_PROC --> ANOMSVC
     MLMODEL --> BASELINE --> CORR --> ANOMOUT --> ES_ANOMALY
 
-    %% Storage Consumer reads from processed topic → Storage
-    FAITH --> ES_RAG & PG_RAGQ
+    %% Storage Consumer: processed → ES (hot) + Snowflake (all) + S3 (payloads)
+    FAITH --> ES_RAG
     T_PROC --> ES_REQ & ES_ERR & ES_AGENT & ES_LLM & ES_TOOL & ES_GUARD & ES_FEED & ES_TRACE
-    ROLLUP --> PG_AGG
+    T_PROC --> SF_EVENTS & SF_LLM & SF_AGENT & SF_RAG & SF_FEED
     COSTCALC --> PG_BUDGET
-    SLOEVAL --> PG_SLO
+    SLOEVAL --> PG_SLO & SF_SLO
     ARCHIVER --> S3
-    COSTCALC --> COSTGOV
 
     %% Anomaly → Custom Dashboard (direct from ES index)
     ES_ANOMALY --> ANOMDASH
 
     %% Vector health monitoring
     RAG -. index health .-> ES_VECTOR
-    ES_VECTOR --> PG_VECH
 
     %% IaC pipeline
     DASHCODE & IDXTMPL --> S3
 
-    %% Custom Dashboard Service
-    PG_AGG & PG_BUDGET --> COSTGOV
-    PG_AGG --> GFDASH
+    %% Custom Dashboard — ES for recent operational, Snowflake for analytics
+    ES_REQ & ES_ERR --> GFDASH
+    SF_LLM & PG_BUDGET --> COSTGOV
     ES_ANOMALY --> ANOMDASH
-    PG_RAGQ & PG_VECH --> RAGQUALITYDASH
+    SF_RAG --> RAGQUALITYDASH
 
     %% Presentation
     ES_REQ & ES_AGENT & ES_LLM & ES_TOOL --> KIBANA
     ES_TRACE --> TRACEVIEW
-    ES_RAG & PG_RAGQ & PG_VECH --> RAGDASH
-    ES_LLM & PG_AGG & PG_BUDGET --> LLMDASH
-    ES_FEED & PG_KPI --> FEEDDASH
+    ES_RAG & SF_RAG --> RAGDASH
+    ES_LLM & SF_LLM & PG_BUDGET --> LLMDASH
+    ES_FEED & SF_FEED & PG_KPI --> FEEDDASH
 
-    %% Batch RCA
-    ES_ERR & ES_TRACE & PG_AGG --> RCAJOIN --> RCARANK --> RCAREPORT --> S3 & ES_ANOMALY
+    %% Batch RCA — ES for recent, Snowflake for historical
+    ES_ERR & ES_TRACE & SF_EVENTS --> RCAJOIN --> RCARANK --> RCAREPORT --> S3 & ES_ANOMALY
 
     %% Chatbot
     CHATBOT --> INTENT --> SEM --> RBAC --> QP
-    QP --> PG_AGG & PG_KPI & ES_TRACE & S3 & CUSTOMDASH
-    PG_AGG & ES_TRACE & S3 & CUSTOMDASH --> ANSWER --> CHATBOT
+    QP --> SF_EVENTS & PG_KPI & ES_TRACE & S3 & CUSTOMDASH
+    SF_EVENTS & ES_TRACE & S3 & CUSTOMDASH --> ANSWER --> CHATBOT
 ```
 
 ---
@@ -230,10 +234,10 @@ flowchart TB
 |---|---|---|
 | **Langfuse (self-hosted)** | LLM + RAG + agent trace store; prompt management; LLM-as-judge evaluations; user feedback linking | GSSP GS, GSSP QS, GSSP RS, Agent Executor, Agentic Orchestration, User Feedback → Langfuse DB (PostgreSQL) |
 | **Anomaly Detection Service** | ML-based anomaly scoring per app/model with sliding P50/P95/P99 baselines | Reads `ai-obs-events-processed` → writes directly to Elasticsearch `ai-obs-anomalies-*` → Custom Dashboard Service Anomaly View |
-| **Faithfulness Scorer** | Computes RAG faithfulness (context overlap), entropy, retrieval precision at stream time — **delegate to Langfuse evaluators** | Langfuse scores API; PostgreSQL `daily_rag_quality` (aggregated from Langfuse) |
+| **Faithfulness Scorer** | Computes RAG faithfulness (context overlap), entropy, retrieval precision at stream time — **delegate to Langfuse evaluators** | Langfuse scores API; Snowflake `sf_rag` (queried on demand by dashboards) |
 | **Budget Accumulator** | Real-time spend counter in Redis; writes alerts when `max_spend_usd` threshold hit | PostgreSQL `budget_limits` → Custom Dashboard Service Cost Governance page |
 | **W3C TraceContext Extractor** | Reads `traceparent` Kafka headers; propagates full W3C trace through all enrichment steps | All downstream stores and Chatbot |
-| **Vector Health Monitor** | Tracks embedding drift score, index freshness, retrieval recall@k | Elasticsearch `ai-obs-vector-health-*`, PostgreSQL `vector_health_snapshots` → Custom Dashboard RAG Quality page |
+| **Vector Health Monitor** | Tracks embedding drift score, index freshness, retrieval recall@k | Elasticsearch `ai-obs-vector-health-*`, Snowflake `sf_rag` → Custom Dashboard RAG Quality page (queried on demand) |
 | **Per-LOB ES Namespacing** | Indices partitioned as `ai-obs-{lob}-*`; enables per-tenant retention + index-level RBAC | Kibana per-LOB orgs, multi-tenant isolation |
 | **Offline Batch RCA Engine** | Nightly job: joins errors ↔ traces ↔ aggregates; ranks root causes; writes weekly digest | S3 `rca-reports/`, Elasticsearch, Slack/Email |
 
@@ -287,35 +291,10 @@ CREATE TABLE daily_slo_compliance (
     PRIMARY KEY (compliance_date, application_id, slo_type)
 );
 
--- Daily RAG quality metrics (faithfulness, precision, recall)
-CREATE TABLE daily_rag_quality (
-    quality_date              DATE,
-    application_id            VARCHAR(64),
-    rag_id                    VARCHAR(64),
-    avg_faithfulness_score    NUMERIC(5,4),
-    avg_context_utilization   NUMERIC(5,4),
-    avg_retrieval_precision   NUMERIC(5,4),
-    retrieval_recall_at_k     NUMERIC(5,4),
-    sample_count              BIGINT,
-    PRIMARY KEY (quality_date, application_id, rag_id)
-);
-
--- Vector store health snapshots
-CREATE TABLE vector_health_snapshots (
-    snapshot_date             DATE,
-    rag_id                    VARCHAR(64),
-    knowledge_base            VARCHAR(256),
-    last_indexed_at           TIMESTAMP,
-    hours_since_indexed       NUMERIC(8,2),
-    embedding_drift_score     NUMERIC(6,4),
-    freshness_breach_flag     BOOLEAN DEFAULT FALSE,
-    PRIMARY KEY (snapshot_date, rag_id)
-);
-
--- RAG events quality columns (ALTER existing table or add to new index mapping)
--- faithfulness_score: overlap ratio between retrieved context and generated response
--- context_utilization_ratio: fraction of retrieved context actually referenced
--- retrieval_precision: relevant chunks / total retrieved chunks
+-- NOTE: daily_rag_quality and vector_health_snapshots removed from PostgreSQL.
+-- RAG quality and vector health data is stored in Snowflake (sf_rag table)
+-- and queried on demand by the Custom Dashboard and Chatbot.
+-- No pre-aggregation needed.
 ```
 
 ---
@@ -402,10 +381,10 @@ observability-iac/
 │   │   ├── feedback-trends.tsx
 │   │   └── anomaly-view.tsx
 │   └── api/
-│       ├── overview.py               ← FastAPI: queries agg_hourly_application_metrics
-│       ├── cost_governance.py        ← FastAPI: queries budget_limits + agg_hourly_llm_metrics
+│       ├── overview.py               ← FastAPI: queries Elasticsearch (recent) + Snowflake (trends)
+│       ├── cost_governance.py        ← FastAPI: queries budget_limits (PG) + Snowflake sf_llm_events
 │       ├── kafka_health.py           ← FastAPI: queries obs_metrics (kafka_consumer_lag)
-│       └── rag_quality.py            ← FastAPI: queries daily_rag_quality
+│       └── rag_quality.py            ← FastAPI: queries Snowflake sf_rag_events on demand
 ├── elasticsearch/
 │   ├── index-templates/
 │   │   ├── ai-obs-requests.json
@@ -419,9 +398,14 @@ observability-iac/
 ├── postgres/
 │   └── migrations/
 │       ├── 001_budget_limits.sql
-│       ├── 002_daily_slo_compliance.sql
-│       ├── 003_daily_rag_quality.sql
-│       └── 004_vector_health_snapshots.sql
+│       └── 002_daily_slo_compliance.sql
+├── snowflake/
+│   └── ddl/
+│       ├── 001_events.sql               ← all raw events table
+│       ├── 002_llm_events.sql
+│       ├── 003_agent_events.sql
+│       ├── 004_rag_events.sql
+│       └── 005_feedback_events.sql
 └── ci/
     └── deploy.yml                    ← applies templates on merge to main
 ```

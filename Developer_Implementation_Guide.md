@@ -77,12 +77,12 @@ Read this alongside the architecture document and the refined architecture diagr
 | Error Code Mapper | Translates raw exception types to standard error catalog codes |
 | Token Cost Calculator | Computes `estimated_cost` from token counts × model pricing; writes to Redis budget accumulator |
 | Faithfulness Scorer | Computes RAG faithfulness score from context/response overlap; writes to quality index |
-| Rollup Generator | Aggregates events into hourly/daily PostgreSQL aggregate tables |
+| SLO Evaluator | Computes burn-rate; writes one row/day to `daily_slo_compliance` in PostgreSQL |
 | SLO Evaluator | Computes burn rate for 1h and 6h windows; writes `daily_slo_compliance` |
 | S3 Archiver | Writes large payloads (prompts, responses, full traces, RAG contexts) to S3 |
 
 **Inputs:** Kafka topic `ai-obs-events-processed` (all event types via `event_type` field routing)
-**Outputs:** Elasticsearch indices, PostgreSQL tables, Amazon S3 objects
+**Outputs:** Elasticsearch indices (hot, 0–90 days), Snowflake tables (all events, forever), Amazon S3 objects (raw payloads), PostgreSQL `daily_slo_compliance` (one row/day from SLO Evaluator only)
 
 **Technology:** Python (Faust or custom consumer) or Java (Kafka Streams), Redis (budget accumulator), PostgreSQL (registry cache + aggregates), Elasticsearch client, boto3/S3 SDK
 
@@ -114,12 +114,12 @@ Read this alongside the architecture document and the refined architecture diagr
 
 **What it does:**
 - Joins `ai-obs-errors-*` with `ai-obs-traces-*` by `correlation_id`
-- Cross-references with `agg_daily_kpi_metrics` to correlate technical failures with business impact
+- Cross-references Snowflake `sf_events` to correlate technical failures with business impact
 - Scores root cause hypotheses (tool degradation, model drift, prompt change, RAG staleness)
 - Writes ranked results to Elasticsearch `ai-obs-anomalies-*` and S3 `rca-reports/`
 - Sends weekly digest to Slack webhook and/or email
 
-**Inputs:** Elasticsearch `ai-obs-errors-*`, `ai-obs-traces-*`, PostgreSQL `agg_daily_kpi_metrics`, `vector_health_snapshots`
+**Inputs:** Elasticsearch `ai-obs-errors-*`, `ai-obs-traces-*` (recent), Snowflake `sf_events` (historical trends)
 **Outputs:** S3 `rca-reports/`, Elasticsearch, Slack webhook / SES email
 
 **Technology:** Python, elasticsearch-py, psycopg2, boto3, requests (Slack), AWS SES
@@ -946,43 +946,27 @@ langfuse.create_llm_as_judge_eval(
 )
 ```
 
-These scores are stored in Langfuse, queryable via the Langfuse SDK, and can be exported to PostgreSQL `daily_rag_quality` via a nightly sync job.
+These scores are stored in Langfuse, queryable via the Langfuse SDK, and also written to Snowflake by the Storage Consumer for on-demand analytics queries.
 
-### 3a.10 Nightly Langfuse → PostgreSQL Sync (for Custom Dashboard)
+### 3a.10 RAG Quality — On-Demand from Snowflake
+
+RAG quality data (faithfulness scores, retrieval precision, chunk counts) flows from Langfuse → events → Snowflake via the standard pipeline. No nightly sync job needed. The Custom Dashboard and Chatbot query Snowflake directly at request time:
 
 ```python
-# aggregation/langfuse_to_postgres.py — run as K8s CronJob nightly
-from langfuse import Langfuse
-import psycopg2
-from datetime import date, timedelta
-
-langfuse = Langfuse()
-
-def sync_rag_quality(quality_date: date):
-    # Fetch all RAG traces from yesterday
-    traces = langfuse.get_traces(
-        from_timestamp=quality_date,
-        to_timestamp=quality_date + timedelta(days=1),
-        tags=["rag"],
-    )
-    # Aggregate faithfulness scores per rag_id
-    by_rag = {}
-    for trace in traces:
-        rag_id = trace.metadata.get("rag_id")
-        scores = [s.value for s in trace.scores if s.name == "faithfulness"]
-        if rag_id and scores:
-            by_rag.setdefault(rag_id, []).extend(scores)
-
-    # Upsert into PostgreSQL daily_rag_quality
-    with psycopg2.connect(PG_DSN) as conn:
-        for rag_id, scores in by_rag.items():
-            conn.execute("""
-                INSERT INTO daily_rag_quality (quality_date, rag_id, avg_faithfulness_score, sample_count)
-                VALUES (%s, %s, %s, %s)
-                ON CONFLICT (quality_date, rag_id) DO UPDATE
-                SET avg_faithfulness_score = EXCLUDED.avg_faithfulness_score,
-                    sample_count = EXCLUDED.sample_count
-            """, (quality_date, rag_id, mean(scores), len(scores)))
+# Custom Dashboard backend — rag_quality.py
+def get_rag_quality(rag_id: str, days: int = 30) -> dict:
+    return snowflake.execute("""
+        SELECT
+            DATE_TRUNC('day', timestamp)     AS day,
+            AVG(faithfulness_score)          AS avg_faithfulness,
+            AVG(retrieval_precision)         AS avg_precision,
+            COUNT(*)                         AS sample_count
+        FROM sf_rag
+        WHERE rag_id = %s
+          AND timestamp >= DATEADD('day', -%s, CURRENT_TIMESTAMP)
+        GROUP BY 1
+        ORDER BY 1
+    """, (rag_id, days))
 ```
 
 ---
@@ -1086,7 +1070,7 @@ telemetry-processor/
 │   │   ├── error_mapper.py      ← raw exception → error catalog code
 │   │   ├── cost_calculator.py   ← token cost + Redis budget accumulator
 │   │   ├── faithfulness.py      ← RAG faithfulness scoring
-│   │   ├── rollup.py            ← hourly/daily aggregate writes
+│   │   ├── snowflake_writer.py  ← writes all events to Snowflake for on-demand analytics
 │   │   ├── slo_evaluator.py     ← burn-rate computation
 │   │   └── archiver.py          ← S3 payload storage
 │   ├── sinks/
@@ -1371,54 +1355,58 @@ class ElasticsearchSink:
         self._es.index(index=index, document=event)
 ```
 
-### 5.9 Rollup Generator (PostgreSQL)
+### 5.9 Snowflake Writer
+
+All enriched events are written to Snowflake for permanent retention and on-demand analytics. No pre-aggregation — dashboards and the chatbot query Snowflake directly at request time.
 
 ```python
-class RollupGenerator:
-    # Writes to hourly aggregate tables on each event
-    # Uses INSERT ... ON CONFLICT DO UPDATE for idempotent upserts
+import snowflake.connector
+from snowflake.connector.pandas_tools import write_pandas
+
+class SnowflakeWriter:
+
+    # Maps event_type prefix → Snowflake target table
+    EVENT_TO_TABLE = {
+        "LLM_CALL":     "sf_llm_events",
+        "AGENT":        "sf_agent_events",
+        "RAG":          "sf_rag_events",
+        "TOOL_CALL":    "sf_tool_events",
+        "FEEDBACK":     "sf_feedback_events",
+        "GUARDRAIL":    "sf_guardrail_events",
+        "EMBEDDING":    "sf_rag_events",
+        "VECTOR":       "sf_rag_events",
+    }
+
+    def __init__(self):
+        self._conn = snowflake.connector.connect(
+            account=os.environ["SNOWFLAKE_ACCOUNT"],
+            user=os.environ["SNOWFLAKE_USER"],
+            password=os.environ["SNOWFLAKE_PASSWORD"],
+            database=os.environ.get("SNOWFLAKE_DB", "AI_OBSERVABILITY"),
+            schema=os.environ.get("SNOWFLAKE_SCHEMA", "EVENTS"),
+            warehouse=os.environ.get("SNOWFLAKE_WAREHOUSE", "OBS_WH"),
+        )
 
     def write(self, event: dict) -> None:
-        event_type = event.get("event_type")
-        if event_type in ("REQUEST_COMPLETED", "REQUEST_FAILED"):
-            self._upsert_hourly_application(event)
-        elif event_type in ("AGENT_COMPLETED", "AGENT_FAILED"):
-            self._upsert_hourly_agent(event)
-        elif event_type in ("TOOL_CALL_COMPLETED", "TOOL_CALL_FAILED"):
-            self._upsert_hourly_tool(event)
-        elif event_type in ("LLM_CALL_COMPLETED", "LLM_CALL_FAILED"):
-            self._upsert_hourly_llm(event)
-        elif event_type in ("RAG_RETRIEVAL_COMPLETED", "RAG_NO_RESULT"):
-            self._upsert_hourly_rag(event)
+        event_type = event.get("event_type", "")
 
-    def _upsert_hourly_application(self, event: dict):
-        hour = datetime.utcnow().replace(minute=0, second=0, microsecond=0)
-        sql = """
-            INSERT INTO agg_hourly_application_metrics
-                (hour_timestamp, application_id, request_count, success_count, error_count,
-                 avg_latency_ms, p95_latency_ms, total_tokens, estimated_cost)
-            VALUES (%s, %s, 1,
-                %s, %s, %s, %s, %s, %s)
-            ON CONFLICT (hour_timestamp, application_id)
-            DO UPDATE SET
-                request_count   = agg_hourly_application_metrics.request_count + 1,
-                success_count   = agg_hourly_application_metrics.success_count + EXCLUDED.success_count,
-                error_count     = agg_hourly_application_metrics.error_count + EXCLUDED.error_count,
-                avg_latency_ms  = (agg_hourly_application_metrics.avg_latency_ms *
-                                   agg_hourly_application_metrics.request_count + EXCLUDED.avg_latency_ms) /
-                                  (agg_hourly_application_metrics.request_count + 1),
-                total_tokens    = agg_hourly_application_metrics.total_tokens + EXCLUDED.total_tokens,
-                estimated_cost  = agg_hourly_application_metrics.estimated_cost + EXCLUDED.estimated_cost
-        """
-        is_success = 1 if event.get("status") == "success" else 0
-        with self._pg.cursor() as cur:
-            cur.execute(sql, (
-                hour, event["application_id"],
-                is_success, 1 - is_success,
-                event.get("latency_ms", 0), event.get("latency_ms", 0),
-                event.get("total_tokens", 0), event.get("estimated_cost", 0),
-            ))
-        self._pg.commit()
+        # Always write to master events table
+        self._insert("sf_events", event)
+
+        # Also write to signal-specific table for optimised queries
+        for prefix, table in self.EVENT_TO_TABLE.items():
+            if event_type.startswith(prefix):
+                self._insert(table, event)
+                break
+
+    def _insert(self, table: str, event: dict) -> None:
+        cols = ", ".join(event.keys())
+        vals = ", ".join(["%s"] * len(event))
+        with self._conn.cursor() as cur:
+            cur.execute(
+                f"INSERT INTO {table} ({cols}) VALUES ({vals})",
+                list(event.values())
+            )
 ```
 
 ---
@@ -1624,125 +1612,14 @@ CREATE TABLE feedback_case (
     created_at            TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- === HOURLY AGGREGATES ===
+-- === AGGREGATE TABLES REMOVED ===
+-- agg_hourly_*, agg_daily_*, daily_rag_quality, vector_health_snapshots
+-- are NOT stored in PostgreSQL.
+-- All raw events go to Snowflake (permanent) and Elasticsearch (hot, 0-90 days).
+-- Dashboards and the Chatbot compute aggregates on demand by querying
+-- Snowflake directly. No batch rollup jobs needed.
 
-CREATE TABLE agg_hourly_application_metrics (
-    hour_timestamp            TIMESTAMP,
-    application_id            VARCHAR(64),
-    request_count             BIGINT DEFAULT 0,
-    success_count             BIGINT DEFAULT 0,
-    error_count               BIGINT DEFAULT 0,
-    avg_latency_ms            NUMERIC(12,2),
-    p95_latency_ms            NUMERIC(12,2),
-    total_tokens              BIGINT DEFAULT 0,
-    estimated_cost            NUMERIC(12,6) DEFAULT 0,
-    budget_utilization_pct    NUMERIC(5,2),
-    positive_feedback_count   BIGINT DEFAULT 0,
-    negative_feedback_count   BIGINT DEFAULT 0,
-    PRIMARY KEY (hour_timestamp, application_id)
-);
-
-CREATE TABLE agg_hourly_agent_metrics (
-    hour_timestamp            TIMESTAMP,
-    application_id            VARCHAR(64),
-    agent_id                  VARCHAR(64),
-    request_count             BIGINT DEFAULT 0,
-    success_count             BIGINT DEFAULT 0,
-    error_count               BIGINT DEFAULT 0,
-    avg_latency_ms            NUMERIC(12,2),
-    p95_latency_ms            NUMERIC(12,2),
-    avg_step_count            NUMERIC(8,2),
-    loop_count                BIGINT DEFAULT 0,
-    handoff_count             BIGINT DEFAULT 0,
-    tool_call_count           BIGINT DEFAULT 0,
-    tool_failure_count        BIGINT DEFAULT 0,
-    rag_request_count         BIGINT DEFAULT 0,
-    rag_no_result_count       BIGINT DEFAULT 0,
-    total_tokens              BIGINT DEFAULT 0,
-    estimated_cost            NUMERIC(12,6) DEFAULT 0,
-    PRIMARY KEY (hour_timestamp, application_id, agent_id)
-);
-
-CREATE TABLE agg_hourly_tool_metrics (
-    hour_timestamp            TIMESTAMP,
-    application_id            VARCHAR(64),
-    agent_id                  VARCHAR(64),
-    tool_id                   VARCHAR(64),
-    call_count                BIGINT DEFAULT 0,
-    success_count             BIGINT DEFAULT 0,
-    failure_count             BIGINT DEFAULT 0,
-    timeout_count             BIGINT DEFAULT 0,
-    retry_count               BIGINT DEFAULT 0,
-    avg_latency_ms            NUMERIC(12,2),
-    p95_latency_ms            NUMERIC(12,2),
-    sla_breach_count          BIGINT DEFAULT 0,
-    PRIMARY KEY (hour_timestamp, application_id, agent_id, tool_id)
-);
-
-CREATE TABLE agg_hourly_llm_metrics (
-    hour_timestamp                      TIMESTAMP,
-    application_id                      VARCHAR(64),
-    agent_id                            VARCHAR(64),
-    model_provider                      VARCHAR(64),
-    model_name                          VARCHAR(128),
-    prompt_template_id                  VARCHAR(64),
-    llm_call_count                      BIGINT DEFAULT 0,
-    input_tokens                        BIGINT DEFAULT 0,
-    output_tokens                       BIGINT DEFAULT 0,
-    total_tokens                        BIGINT DEFAULT 0,
-    estimated_cost                      NUMERIC(12,6) DEFAULT 0,
-    alternative_model_estimated_cost    NUMERIC(12,6),
-    error_count                         BIGINT DEFAULT 0,
-    rate_limit_count                    BIGINT DEFAULT 0,
-    safety_block_count                  BIGINT DEFAULT 0,
-    avg_latency_ms                      NUMERIC(12,2),
-    p95_latency_ms                      NUMERIC(12,2),
-    PRIMARY KEY (hour_timestamp, application_id, agent_id, model_provider, model_name, prompt_template_id)
-);
-
-CREATE TABLE agg_hourly_rag_metrics (
-    hour_timestamp            TIMESTAMP,
-    application_id            VARCHAR(64),
-    agent_id                  VARCHAR(64),
-    rag_id                    VARCHAR(64),
-    retrieval_count           BIGINT DEFAULT 0,
-    no_result_count           BIGINT DEFAULT 0,
-    avg_relevance_score       NUMERIC(5,4),
-    avg_retrieval_latency_ms  NUMERIC(12,2),
-    citation_coverage_pct     NUMERIC(5,2),
-    context_truncation_count  BIGINT DEFAULT 0,
-    avg_faithfulness_score    NUMERIC(5,4),
-    PRIMARY KEY (hour_timestamp, application_id, agent_id, rag_id)
-);
-
--- === DAILY AGGREGATES ===
-
-CREATE TABLE agg_daily_feedback_metrics (
-    metric_date               DATE,
-    application_id            VARCHAR(64),
-    agent_id                  VARCHAR(64),
-    positive_feedback_count   BIGINT DEFAULT 0,
-    negative_feedback_count   BIGINT DEFAULT 0,
-    neutral_feedback_count    BIGINT DEFAULT 0,
-    avg_rating                NUMERIC(3,2),
-    top_feedback_category     VARCHAR(64),
-    PRIMARY KEY (metric_date, application_id, agent_id)
-);
-
-CREATE TABLE agg_daily_kpi_metrics (
-    metric_date               DATE,
-    kpi_id                    VARCHAR(64),
-    application_id            VARCHAR(64),
-    agent_id                  VARCHAR(64),
-    kpi_value                 NUMERIC(16,6),
-    target_value              NUMERIC(16,6),
-    status                    VARCHAR(16),   -- 'green' | 'yellow' | 'red'
-    threshold_breach_flag     BOOLEAN DEFAULT FALSE,
-    trend_direction           VARCHAR(8),    -- 'up' | 'down' | 'stable'
-    PRIMARY KEY (metric_date, kpi_id, application_id, agent_id)
-);
-
--- === NEW TABLES (Phase 3 Enhancements) ===
+-- === SLO COMPLIANCE (kept here — SLO Evaluator writes one row/day) ===
 
 CREATE TABLE daily_slo_compliance (
     compliance_date           DATE,
@@ -1757,29 +1634,8 @@ CREATE TABLE daily_slo_compliance (
     PRIMARY KEY (compliance_date, application_id, slo_type)
 );
 
-CREATE TABLE daily_rag_quality (
-    quality_date              DATE,
-    application_id            VARCHAR(64),
-    rag_id                    VARCHAR(64),
-    avg_faithfulness_score    NUMERIC(5,4),
-    avg_context_utilization   NUMERIC(5,4),
-    avg_retrieval_precision   NUMERIC(5,4),
-    retrieval_recall_at_k     NUMERIC(5,4),
-    sample_count              BIGINT,
-    PRIMARY KEY (quality_date, application_id, rag_id)
-);
-
-CREATE TABLE vector_health_snapshots (
-    snapshot_date             DATE,
-    rag_id                    VARCHAR(64),
-    knowledge_base            VARCHAR(256),
-    last_indexed_at           TIMESTAMP,
-    hours_since_indexed       NUMERIC(8,2),
-    embedding_drift_score     NUMERIC(6,4),
-    retrieval_recall_at_k     NUMERIC(5,4),
-    freshness_breach_flag     BOOLEAN DEFAULT FALSE,
-    PRIMARY KEY (snapshot_date, rag_id)
-);
+-- daily_rag_quality and vector_health_snapshots removed.
+-- RAG quality data lives in Snowflake sf_rag_events — queried on demand.
 ```
 
 ### 6.3 Amazon S3 Bucket Structure
@@ -2099,7 +1955,7 @@ All custom dashboards are built in the **Custom Dashboard Service** (FastAPI + R
 
 | Order | Dashboard | Technology | Primary Data Source | Note |
 |---|---|---|---|---|
-| 1 | Platform Overview | **Custom Dashboard Service** | PostgreSQL `agg_hourly_application_metrics` | React KPI cards + BarChart; COIN JWT auth |
+| 1 | Platform Overview | **Custom Dashboard Service** | Elasticsearch `ai-obs-*-requests-*` (last 24h aggregation) | React KPI cards + BarChart; COIN JWT auth |
 | 2 | Error Dashboard | Kibana | Elasticsearch `ai-obs-*-errors-*` | |
 | 3 | Application / CSI | Kibana + Custom Dashboard | Elasticsearch + PostgreSQL | |
 | 4 | **LLM Trace Explorer** | **Langfuse UI** (built-in) | **Langfuse DB** | **Free — no build needed** |
@@ -2108,13 +1964,13 @@ All custom dashboards are built in the **Custom Dashboard Service** (FastAPI + R
 | 7 | **Prompt Version Analytics** | **Langfuse UI** (built-in) | **Langfuse DB** | **Free — no build needed** |
 | 8 | Agent Observability (aggregate) | Kibana + Custom Dashboard | Elasticsearch + PostgreSQL | For aggregate trends; trace drill-down → Langfuse |
 | 9 | Tool Health | Kibana + Custom Dashboard | Elasticsearch + PostgreSQL | |
-| 10 | LLM / Token / Cost (aggregate) | **Custom Dashboard Service** | PostgreSQL `agg_hourly_llm_metrics` + nightly Langfuse sync | AreaChart + KPI cards; per-call detail → Langfuse |
-| 11 | RAG + Vector Health (aggregate) | **Custom Dashboard Service** | PostgreSQL `daily_rag_quality` (synced from Langfuse nightly) | |
+| 10 | LLM / Token / Cost | **Custom Dashboard Service** | Snowflake `sf_llm_events` (on-demand) + Redis budget accumulator | AreaChart + KPI cards; per-call detail → Langfuse |
+| 11 | RAG + Vector Health | **Custom Dashboard Service** | Snowflake `sf_rag_events` (on-demand) | Queried at request time — no pre-aggregation |
 | 12 | Feedback Trends | **Custom Dashboard Service** | PostgreSQL `feedback_case` + Langfuse scores | |
-| 13 | Cost Governance | **Custom Dashboard Service** | PostgreSQL `budget_limits` + `agg_hourly_llm_metrics` | AreaChart actual vs budget cap line |
+| 13 | Cost Governance | **Custom Dashboard Service** | PostgreSQL `budget_limits` + Snowflake `sf_llm_events` (on-demand) | AreaChart actual vs budget cap line |
 | 14 | Kafka Health | **Custom Dashboard Service** | PostgreSQL `obs_metrics` (kafka_consumer_lag) | |
 | 15 | Anomaly View | **Custom Dashboard Service** | Elasticsearch `ai-obs-anomalies-*` | |
-| 16 | Business KPI | **Custom Dashboard Service** | PostgreSQL `agg_daily_kpi_metrics` | |
+| 16 | Business KPI | **Custom Dashboard Service** | Snowflake `sf_events` (on-demand cross-signal query) | |
 
 ### 9.2 Required Panels per Dashboard
 
@@ -2220,7 +2076,7 @@ class HypothesisRanker:
         # model_drift: check if prompt_template_id changed recently
         scores["model_drift"] = self._score_model_drift(incident)
 
-        # rag_staleness: check vector_health_snapshots for freshness breach
+        # rag_staleness: check Snowflake sf_rag_events for freshness breach
         scores["rag_staleness"] = self._score_rag_staleness(incident)
 
         ranked = sorted(scores.items(), key=lambda x: x[1], reverse=True)
@@ -2280,15 +2136,15 @@ class HypothesisRanker:
 2. PII Redactor running before any writes
 3. Metadata Enricher with Redis registry cache (5-min TTL)
 4. Elasticsearch sink with per-LOB index routing
-5. PostgreSQL rollup generator for all 5 hourly aggregate tables
+5. Snowflake writer in Storage Consumer — all enriched events written to Snowflake for on-demand analytics
 6. S3 Archiver for prompts, responses, RAG contexts, full traces
 7. Token Cost Calculator + Budget Accumulator
 8. SLO Evaluator (burn-rate computation)
 9. ~~Faithfulness Scorer for RAG events~~ → **Replaced by Langfuse LLM-as-judge evaluators** (Section 3a.9)
 10. **Configure Langfuse evaluators** — faithfulness, hallucination, answer relevance (Section 3a.9)
-11. **Build nightly Langfuse → PostgreSQL sync job** for `daily_rag_quality` aggregates (Section 3a.10)
+11. **RAG quality queried on demand from Snowflake** — no nightly sync job needed (Section 3a.10)
 
-**Acceptance criteria:** Elasticsearch shows indexed events; PostgreSQL `agg_hourly_application_metrics` has rows; S3 has redacted prompt objects; **Langfuse shows faithfulness scores on RAG traces; `daily_rag_quality` is populated from nightly sync**.
+**Acceptance criteria:** Elasticsearch shows indexed events; Snowflake `sf_events` has rows; S3 has redacted prompt objects; PostgreSQL `daily_slo_compliance` has one row per app per day; **Langfuse shows faithfulness scores on RAG traces; Custom Dashboard RAG Quality page returns data from Snowflake on-demand query**.
 
 ---
 
