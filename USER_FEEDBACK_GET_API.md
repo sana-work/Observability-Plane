@@ -8,16 +8,16 @@ logging. This doc closes the 10 gaps found against the Java CAAR service, in pri
 
 | # | Gap (vs CAAR) | Fix in this doc |
 |---|---|---|
-| 1 | No structured error codes | §2 Error code catalog + envelope |
-| 2 | No uniform API response envelope | §1 `ApiResponse[T]` wrapper on every route |
-| 3 | No feedback retrieval API (write-only) | §6 `GET /feedback`, `/feedback/{id}` |
-| 4 | No status lifecycle | §3 `status` column (open→reviewed→fixed) + PATCH |
-| 5 | No PII redaction | §8 redact `prompt`/`comments` in logs (`soe_id` retained per requirement) |
-| 6 | No duplicate detection | §3 unique `(soe_id, correlation_id)` + §5 409 handling |
-| 7 | No metrics endpoint | §7 Prometheus `/metrics` |
-| 8 | No audit trail | §9 structured audit events (success + failure) |
-| 9 | No analytics layer (`/getFeedBackSummary`, `/getReportProblemDetails`) | §6 `/feedback/summary`, `/feedback/problems` |
-| 10 | Unstructured log messages | §8 all logs via `extra={}` key-values, not f-strings |
+| 1 | No structured error codes | Section 2 Error code catalog + envelope |
+| 2 | No uniform API response envelope | Section 1 `ApiResponse[T]` wrapper on every route |
+| 3 | No feedback retrieval API (write-only) | Section 6 `GET /feedback`, `/feedback/{id}` |
+| 4 | No status lifecycle | Section 3 `status` column (open→reviewed→fixed) + PATCH |
+| 5 | No PII redaction | Section 8 redact `prompt`/`comments` in logs (`soe_id` retained per requirement) |
+| 6 | No duplicate detection | Section 3 unique `(soe_id, correlation_id)` + Section 5 409 handling |
+| 7 | No metrics endpoint | Section 7 Prometheus `/metrics` |
+| 8 | No audit trail | Section 9 structured audit events (success + failure) |
+| 9 | No analytics layer (`/getFeedBackSummary`, `/getReportProblemDetails`) | Section 6 `/feedback/summary`, `/feedback/problems` |
+| 10 | Unstructured log messages | Section 8 all logs via `extra={}` key-values, not f-strings |
 
 ---
 
@@ -28,42 +28,42 @@ the capability matrix. Effort: XS ≈ <2h, S ≈ ½–1 day, M ≈ 1–2 days, L
 
 ### P0 — must fix (basic observability + safety)
 
-| ID | Capability | § | Risk | Migration | Effort |
+| ID | Capability | Section  | Risk | Migration | Effort |
 |---|---|---|---|---|---|
-| E-P0-1 | `feedback_id` in logs | §9 filter + §6 audit | None | No | XS |
-| E-P0-2 | Auth failures logged | §8 `auth.py` | None | No | XS |
-| E-P0-3 | DB errors logged | §6 `create()` except | None | No | XS |
-| E-P0-4 | Uniform response envelope | §1 | **Medium** (changes success shape) | No | S |
-| E-P0-5 | Structured error codes | §2 | Low | No | S |
-| E-P0-6 | PII redaction in logs | §8 `_redact()` | None | No | S |
-| E-P0-7 | Global exception handler | §8 handlers | Low | No | S |
+| E-P0-1 | `feedback_id` in logs | Section 9 filter + Section 6 audit | None | No | XS |
+| E-P0-2 | Auth failures logged | Section 8 `auth.py` | None | No | XS |
+| E-P0-3 | DB errors logged | Section 6 `create()` except | None | No | XS |
+| E-P0-4 | Uniform response envelope | Section 1 | **Medium** (changes success shape) | No | S |
+| E-P0-5 | Structured error codes | Section 2 | Low | No | S |
+| E-P0-6 | PII redaction in logs | Section 8 `_redact()` | None | No | S |
+| E-P0-7 | Global exception handler | Section 8 handlers | Low | No | S |
 
 ### P1 — production readiness
 
-| ID | Capability | § | Risk | Migration | Effort |
+| ID | Capability | Section  | Risk | Migration | Effort |
 |---|---|---|---|---|---|
-| E-P1-1 | `feedback_type` enum constraint | **§11 (new)** | **Medium** (rejects previously valid) | No | S |
-| E-P1-2 | Duplicate prevention `(soe_id, correlation_id)` | §3 unique constraint | Low | Yes (unique idx) | S |
-| E-P1-3 | `status` lifecycle field | §3 + §7 PATCH | None | Yes (column) | S |
-| E-P1-4 | Feedback retrieval API | §7 GET routes | None | No | S |
-| E-P1-5 | `trace_id` in logs | §9 filter | None | No | XS |
-| E-P1-6 | `latency_ms` structured field | §8 middleware | None | No | XS |
-| E-P1-7 | HTTP `status_code` in log | §8 middleware | None | No | XS |
-| E-P1-8 | `environment` + `service_name` in logs | §9 filter | None | No | XS |
-| E-P1-9 | Prometheus `/metrics` | §4 + §8 | None | No | S |
-| E-P1-10 | Audit log on submission | §6 + §9 `audit` logger | None | No | S |
+| E-P1-1 | `feedback_type` enum constraint | **Section 11 (new)** | **Medium** (rejects previously valid) | No | S |
+| E-P1-2 | Duplicate prevention `(soe_id, correlation_id)` | Section 3 unique constraint | Low | Yes (unique idx) | S |
+| E-P1-3 | `status` lifecycle field | Section 3 + Section 7 PATCH | None | Yes (column) | S |
+| E-P1-4 | Feedback retrieval API | Section 7 GET routes | None | No | S |
+| E-P1-5 | `trace_id` in logs | Section 9 filter | None | No | XS |
+| E-P1-6 | `latency_ms` structured field | Section 8 middleware | None | No | XS |
+| E-P1-7 | HTTP `status_code` in log | Section 8 middleware | None | No | XS |
+| E-P1-8 | `environment` + `service_name` in logs | Section 9 filter | None | No | XS |
+| E-P1-9 | Prometheus `/metrics` | Section 4 + Section 8 | None | No | S |
+| E-P1-10 | Audit log on submission | Section 6 + Section 9 `audit` logger | None | No | S |
 
 ### P2 — nice-to-have
 
-| ID | Capability | § | Risk | Migration | Effort |
+| ID | Capability | Section  | Risk | Migration | Effort |
 |---|---|---|---|---|---|
-| E-P2-1 | Analytics endpoints (`/summary`, `/by-type`) | §7 summary + **§12 (new)** | None | No | M |
-| E-P2-2 | 1–5 Likert `rating` field | **§13 (new)** | None | Yes (column) | S |
-| E-P2-3 | OpenTelemetry span export | **§14 (new, deferred)** | None | No | M |
-| E-P2-4 | RBAC roles (admin vs submitter) | **§15 (new)** | **High** (changes auth) | No | L |
-| E-P2-5 | OpenAPI contact/server metadata | **§16 (new)** | None | No | XS |
+| E-P2-1 | Analytics endpoints (`/summary`, `/by-type`) | Section 7 summary + **Section 12 (new)** | None | No | M |
+| E-P2-2 | 1–5 Likert `rating` field | **Section 13 (new)** | None | Yes (column) | S |
+| E-P2-3 | OpenTelemetry span export | **Section 14 (new, deferred)** | None | No | M |
+| E-P2-4 | RBAC roles (admin vs submitter) | **Section 15 (new)** | **High** (changes auth) | No | L |
+| E-P2-5 | OpenAPI contact/server metadata | **Section 16 (new)** | None | No | XS |
 | E-P2-6 | ~~`user_hash` pseudonym~~ — **dropped** (raw `soe_id` retained per requirement, no hashing) | — | — | — | — |
-| E-P2-7 | Deletion / anonymisation endpoint | **§17 (new)** | None | No | M |
+| E-P2-7 | Deletion / anonymisation endpoint | **Section 17 (new)** | None | No | M |
 
 > **Sequencing note:** do all P0 first (XS/S, mostly additive) — only E-P0-4 (envelope)
 > is a breaking response-shape change, so coordinate it with the Custom Dashboard team.
@@ -89,7 +89,7 @@ alembic/versions/002_*.py    ← migration
 
 ---
 
-## §1 — `feedback/responses.py` — uniform response envelope (Gap #2)
+## Section 1 — `feedback/responses.py` — uniform response envelope (Gap #2)
 
 Every endpoint returns the **same shape** on success and error.
 
@@ -140,7 +140,7 @@ def failure(code: str, message: str, correlation_id: str, detail: str | None = N
 
 ---
 
-## §2 — `feedback/errors.py` — structured error codes (Gap #1)
+## Section 2 — `feedback/errors.py` — structured error codes (Gap #1)
 
 ```python
 # feedback/errors.py
@@ -188,7 +188,7 @@ def db_error(detail: str | None = None) -> AppException:
 
 ---
 
-## §3 — `feedback/schemas.py` — new columns + duplicate constraint (Gaps #4, #6)
+## Section 3 — `feedback/schemas.py` — new columns + duplicate constraint (Gaps #4, #6)
 
 ```python
 # feedback/schemas.py
@@ -247,7 +247,7 @@ class UserFeedback(Base):
 
 ---
 
-## §4 — `feedback/metrics.py` — Prometheus counters (Gap #7)
+## Section 4 — `feedback/metrics.py` — Prometheus counters (Gap #7)
 
 ```python
 # feedback/metrics.py
@@ -282,7 +282,7 @@ DB_LATENCY = Histogram(
 
 ---
 
-## §5 — `feedback/models.py` — read-side Pydantic models
+## Section 5 — `feedback/models.py` — read-side Pydantic models
 
 **First, make `correlation_id` mandatory on the inbound request model:**
 ```python
@@ -379,7 +379,7 @@ class FeedbackStatusUpdate(BaseModel):
 
 ---
 
-## §6 — `feedback/repositories.py` — read methods + duplicate detection + audit (Gaps #3, #6, #8)
+## Section 6 — `feedback/repositories.py` — read methods + duplicate detection + audit (Gaps #3, #6, #8)
 
 ```python
 # feedback/repositories.py
@@ -572,7 +572,7 @@ class UserFeedbackRepo:
 
 ---
 
-## §7 — `feedback/api/v1/api.py` — all routes wrapped in envelope
+## Section 7 — `feedback/api/v1/api.py` — all routes wrapped in envelope
 
 ```python
 # feedback/api/v1/api.py
@@ -707,7 +707,7 @@ async def update_status(feedback_id: str, body: FeedbackStatusUpdate,
 
 ---
 
-## §8 — `feedback/main.py` — exception handlers, /metrics, PII redaction (Gaps #1, #5, #7, #10)
+## Section 8 — `feedback/main.py` — exception handlers, /metrics, PII redaction (Gaps #1, #5, #7, #10)
 
 ```python
 # feedback/main.py  (additions)
@@ -804,7 +804,7 @@ raise AppException(ErrorCode.INVALID_TOKEN, "Unauthorized", 401)
 
 ---
 
-## §9 — logging: `AppInfoFilter` + `logconfig.yaml` (E-P0-1, E-P1-5, E-P1-8, E-P1-10)
+## Section 9 — logging: `AppInfoFilter` + `logconfig.yaml` (E-P0-1, E-P1-5, E-P1-8, E-P1-10)
 
 ### `feedback/log_filters.py` — guarantee static + context fields on every record
 
@@ -878,7 +878,7 @@ route them to a dedicated Elasticsearch index (`ai-obs-feedback-audit-*`) separa
 
 ---
 
-## §10 — `alembic/versions/002_feedback_readiness.py`
+## Section 10 — `alembic/versions/002_feedback_readiness.py`
 
 ```python
 """correlation_id, status, timestamps, unique(soe_id,correlation_id), indexes"""
@@ -1025,7 +1025,7 @@ Duplicate (HTTP 409):
 
 ---
 
-## §11 — `feedback_type` enum constraint (E-P1-1)
+## Section 11 — `feedback_type` enum constraint (E-P1-1)
 
 Free-text `feedback_type` fragments analytics (`"wrong"`, `"Wrong"`, `"incorrect_response"`
 all count separately). Constrain it to a controlled vocabulary — but roll out **permissively**
@@ -1070,7 +1070,7 @@ if body.feedback_type not in {e.value for e in FeedbackType}:
 
 ---
 
-## §12 — `GET /feedback/by-type` analytics endpoint (E-P2-1)
+## Section 12 — `GET /feedback/by-type` analytics endpoint (E-P2-1)
 
 The dashboard "feedback by category" bar chart wants a flat per-type rollup. `/summary`
 already returns `feedback_type_breakdown`, but `/by-type` adds correctness split per type.
@@ -1112,7 +1112,7 @@ async def feedback_by_type(
 
 ---
 
-## §13 — optional 1–5 Likert `rating` field (E-P2-2)
+## Section 13 — optional 1–5 Likert `rating` field (E-P2-2)
 
 Boolean `correctness` is coarse. Add an **optional** `rating` (1–5) — nullable so existing
 clients are unaffected.
@@ -1137,7 +1137,7 @@ dashboard wants a CSAT-style trend.
 
 ---
 
-## §14 — OpenTelemetry span export (E-P2-3 — deferred)
+## Section 14 — OpenTelemetry span export (E-P2-3 — deferred)
 
 Deferred until the platform OTel collector endpoint is confirmed. When ready it's a drop-in:
 
@@ -1155,7 +1155,7 @@ committed to yet.
 
 ---
 
-## §15 — RBAC roles (E-P2-4 — High risk, gate carefully)
+## Section 15 — RBAC roles (E-P2-4 — High risk, gate carefully)
 
 Today every authenticated caller can read and submit. The dashboard's review actions
 (`PATCH /status`, list-all) should require an admin role; submit stays open to all callers.
@@ -1187,7 +1187,7 @@ async def update_status(..., _t = Depends(_ADMIN)): ...
 
 ---
 
-## §16 — OpenAPI contact / server metadata (E-P2-5)
+## Section 16 — OpenAPI contact / server metadata (E-P2-5)
 
 Trivial DX improvement — no behaviour change.
 
@@ -1209,7 +1209,7 @@ app = FastAPI(
 
 ---
 
-## §17 — deletion / anonymisation endpoint (E-P2-7 — GDPR / retention)
+## Section 17 — deletion / anonymisation endpoint (E-P2-7 — GDPR / retention)
 
 Right to erasure: anonymise rather than hard-delete, to preserve aggregate analytics.
 
@@ -1245,7 +1245,7 @@ hard-delete variant, swap the body for `db.delete(r)`.
 
 ---
 
-## §18 — startup/shutdown events + route-level request logging
+## Section 18 — startup/shutdown events + route-level request logging
 
 Two structured-logging niceties (no Kafka, no SDK — plain `logging`).
 
@@ -1274,15 +1274,15 @@ async def lifespan(app: FastAPI):
     log.info("service_stopped", extra={
         "event_type": "service_stopped", "component": "lifespan"})
 
-# already wired in §16: app = FastAPI(..., lifespan=lifespan)
+# already wired in Section 16: app = FastAPI(..., lifespan=lifespan)
 ```
 > Add `SERVICE_VERSION` (e.g. the image tag / chart appVersion) to Helm `env:` so the
 > startup line records the running build. `event_type` flows to the `audit`/app log stream
-> via the §9 filter + formatter.
+> via the Section 9 filter + formatter.
 
 ### 18b — route-level request logging in `api.py`
 
-Repo-layer audit (§6) records the *persisted* event; this adds a thin route-layer
+Repo-layer audit (Section 6) records the *persisted* event; this adds a thin route-layer
 `received` / `completed` pair so a request is traceable even if it never reaches the DB
 (e.g. validation rejects it). Wrap the existing POST handler:
 
@@ -1311,7 +1311,7 @@ async def submit_feedback(body: UserFeedbackModel,
         {"feedback_id": str(record.feedback_id), "correlation_id": record.correlation_id},
         _cid())
 ```
-> Failures don't need a separate `try/except` here — the global handlers in §8 already log
+> Failures don't need a separate `try/except` here — the global handlers in Section 8 already log
 > every `AppException` and unhandled exception with the correlation_id and error_code.
 
 ---
@@ -1334,17 +1334,17 @@ existing Fluent Bit log pipeline.
 
 | Sprint | Backlog IDs | Sections | Effort | Notes |
 |---|---|---|---|---|
-| **P0-a** | E-P0-1, E-P0-2, E-P0-3, E-P0-6 | §6, §8, §9 | ~1 day | Pure-additive logging + PII redaction; ship first, zero client impact |
-| **P0-b** | E-P0-5, E-P0-7 | §2, §8 | ~1 day | Error codes + global handler (stops traceback leaks) |
-| **P0-c** | E-P0-4 | §1, §7 | ~1 day | Envelope — **breaking response shape**, coordinate with dashboard team |
-| **P1-a** | E-P1-3, E-P1-4 | §3, §7, §10 | ~1.5 days | `status` column + GET retrieval API (unblocks dashboard reads) |
-| **P1-b** | E-P1-2 | §3, §6 | ~0.5 day | Duplicate prevention (dedup existing rows in migration) |
-| **P1-c** | E-P1-5…E-P1-8 | §8, §9 | ~0.5 day | trace_id / latency_ms / status_code / env / service_name in logs |
-| **P1-d** | E-P1-9, E-P1-10 | §4, §8, §9 | ~1 day | Prometheus `/metrics` + audit logger |
-| **P1-f** | (extras) | §18 | ~0.25 day | Startup/shutdown events + route-level request logging |
-| **P1-e** | E-P1-1 | §11 | ~0.5 day | `feedback_type` enum — ship permissive, flip strict after 2 weeks |
-| **P2** | E-P2-1, E-P2-2, E-P2-5, E-P2-7 | §12, §13, §16, §17 | ~2 days | by-type analytics, Likert rating, OpenAPI metadata, anonymisation |
-| **P2-deferred** | E-P2-3, E-P2-4 | §14, §15 | — | OTel (needs collector), RBAC (High risk — gate). E-P2-6 `user_hash` dropped — raw `soe_id` retained |
+| **P0-a** | E-P0-1, E-P0-2, E-P0-3, E-P0-6 | Section 6, Section 8, Section 9 | ~1 day | Pure-additive logging + PII redaction; ship first, zero client impact |
+| **P0-b** | E-P0-5, E-P0-7 | Section 2, Section 8 | ~1 day | Error codes + global handler (stops traceback leaks) |
+| **P0-c** | E-P0-4 | Section 1, Section 7 | ~1 day | Envelope — **breaking response shape**, coordinate with dashboard team |
+| **P1-a** | E-P1-3, E-P1-4 | Section 3, Section 7, Section 10 | ~1.5 days | `status` column + GET retrieval API (unblocks dashboard reads) |
+| **P1-b** | E-P1-2 | Section 3, Section 6 | ~0.5 day | Duplicate prevention (dedup existing rows in migration) |
+| **P1-c** | E-P1-5…E-P1-8 | Section 8, Section 9 | ~0.5 day | trace_id / latency_ms / status_code / env / service_name in logs |
+| **P1-d** | E-P1-9, E-P1-10 | Section 4, Section 8, Section 9 | ~1 day | Prometheus `/metrics` + audit logger |
+| **P1-f** | (extras) | Section 18 | ~0.25 day | Startup/shutdown events + route-level request logging |
+| **P1-e** | E-P1-1 | Section 11 | ~0.5 day | `feedback_type` enum — ship permissive, flip strict after 2 weeks |
+| **P2** | E-P2-1, E-P2-2, E-P2-5, E-P2-7 | Section 12, Section 13, Section 16, Section 17 | ~2 days | by-type analytics, Likert rating, OpenAPI metadata, anonymisation |
+| **P2-deferred** | E-P2-3, E-P2-4 | Section 14, Section 15 | — | OTel (needs collector), RBAC (High risk — gate). E-P2-6 `user_hash` dropped — raw `soe_id` retained |
 
 **Total P0+P1 ≈ 7–8 engineering days.** P0 is mostly XS/S additive work; the only change
 needing cross-team coordination is E-P0-4 (the response envelope).
