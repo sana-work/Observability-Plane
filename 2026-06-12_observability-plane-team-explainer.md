@@ -16,7 +16,7 @@ Today our 8 AI services each log to their own JSON files and a few audit tables.
 We are building a **two-layer Observability Plane:**
 
 - **Layer 1 — AI Quality** *(tool not yet decided — Langfuse or custom build, see §5.3)*: LLM traces, RAG spans, agent step trees, prompt versions, evaluations, user-feedback linkage.
-- **Layer 2 — Platform/Infra (OIS + Kafka):** structured events, metrics, Kafka health, cost governance, anomalies, business KPIs.
+- **Layer 2 — Platform/Infra (Kafka-direct pipeline):** structured events, metrics, Kafka health, cost governance, anomalies, business KPIs.
 
 Both layers share a **`correlation_id`** so any request can be reconstructed across both. Data is captured by an OpenTelemetry SDK, streamed through **3 Kafka topics**, enriched (PII-redacted, cost-calculated, trace-stitched), then fanned out to **four stores** tuned for different jobs (Elasticsearch = hot search, PostgreSQL = control plane, Snowflake = analytics/forever, S3 = payload archive). It is presented through a **Custom Dashboard Service**, Kibana, and the AI-quality trace UI (Langfuse or custom — §5.3), and consumed by **SLO alerting, a nightly RCA engine, and an Observability Chatbot.**
 
@@ -197,11 +197,11 @@ One thing the diagram **does not draw explicitly:** the diagram is the **platfor
 │  Store: self-hosted PostgreSQL inside our boundary (either way)      │
 │  UI:    trace explorer, prompt mgmt, evals (Langfuse Web or ours)    │
 ├──────────────────────────────────────────────────────────────────────┤
-│  LAYER 2 — Platform / Infrastructure  (OIS + Kafka)                  │
+│  LAYER 2 — Platform / Infrastructure  (Kafka-direct pipeline)        │
 │  What:  Kafka lag, service health, document ingestion, business      │
 │         KPIs, budget governance, anomaly events, guardrails          │
-│  Who:   All 8 services via OpenTelemetry SDK / OIS HTTP emitter      │
-│  How:   POST /v1/ingest — fire-and-forget                            │
+│  Who:   All 8 services via shared confluent-kafka emitter (SDK)      │
+│  How:   emit_event() → ai-obs-events-raw (fire-and-forget)           │
 │  Store: Elasticsearch, PostgreSQL, Snowflake, S3, Redis             │
 │  UI:    Custom Dashboard Service, Kibana, Observability Chatbot      │
 └──────────────────────────────────────────────────────────────────────┘
@@ -223,7 +223,7 @@ This is the heart of the design. Follow one event from emission to consumption.
 Each service emits to **both layers in parallel**:
 
 - **Layer 1:** a single decorator on LLM/RAG/agent functions (Langfuse's `@observe`, or our custom equivalent — §5.3) — it auto-captures tokens, cost, latency, model, finish_reason, prompt hash.
-- **Layer 2:** an **OpenTelemetry SDK** wrapper plus a fire-and-forget `POST /v1/ingest` to the **Observability Ingestion Service (OIS)**. There are **38 standardized event types** (LLM call, agent step, tool call, RAG retrieval, guardrail decision, document parse, feedback, Kafka lag, etc.), all sharing one mandatory field envelope (`event_id`, `event_type`, `schema_version`, `timestamp`, `correlation_id`, `span_id`, `service_name`, `environment`, `application_id`, `lob`, `status`, `latency_ms`, …).
+- **Layer 2:** an **OpenTelemetry SDK** wrapper plus a fire-and-forget `emit_event()` that produces **directly to the `ai-obs-events-raw` Kafka topic** (no HTTP ingestion service — durable from produce time). There are **50 standardized event types** (LLM call, agent step, tool call, RAG retrieval, guardrail decision, document parse, feedback, Kafka lag, etc.; full catalog in `2026-05-21_phase1-foundation-schema-catalogs-storage.md`), all sharing one mandatory field envelope (`event_id`, `event_type`, `schema_version`, `timestamp`, `correlation_id`, `span_id`, `service_name`, `environment`, `application_id`, `lob`, `status`, `latency_ms`, …).
 
 Auto-instrumentation does most of the work: FastAPI server spans, outbound `httpx` spans (service→service), and `asyncpg` query spans come for free, and **W3C `traceparent` is injected on every outbound call and Kafka message** — this is what finally makes a request traceable across all 8 services.
 
@@ -268,6 +268,8 @@ We deliberately use **four** storage systems because "one database for everythin
 | **Redis / ElastiCache** | **Runtime state** | Real-time cost accumulator, dedup, rate limits | Sub-millisecond counters for live budget enforcement |
 
 **Tiering logic:** hot search → Elasticsearch (days), authoritative config → PostgreSQL, everything forever for analytics → Snowflake, raw payloads → S3. The Storage Consumer fans `processed` events out to ES (hot) + Snowflake (all) + S3 (payloads); the Anomaly Detection Service reads `processed` and writes anomalies straight to Elasticsearch.
+
+> **⚠️ Interim (2026-06-12):** Snowflake isn't onboarded yet. Until it is, **PostgreSQL stands in for Snowflake** as the event firehose/analytics store, in a dedicated `obs_events` schema (bounded ~90-day window instead of forever). Read "Snowflake" below as "Postgres `obs_events` for now." Swap-back path: `plan.md` §5.9/§15.6.
 
 ### 3.5 DISPLAY — where humans look
 
@@ -342,12 +344,12 @@ For every signal we asked: *is there a best-in-class tool, or do we build?* The 
 | HTTP latency / error metrics | **prometheus-fastapi-instrumentator** | Custom `/metrics` per service | One line per service → p50/p95/p99 histograms automatically |
 | Kafka consumer lag | **kminion → Prometheus** | **JMX Exporter** (complex), **Burrow** (abandoned, no Prom-native), **Confluent Control Center** (needs Confluent Platform) | kminion is modern, Prometheus-native, single container |
 | PII detection / redaction | **GLiNER** (in-process NER) | **Presidio** (2 sidecars + HTTP hop), custom regex | GLiNER runs *in-process* — no sidecar, no network failure mode; zero-shot labels are plain English strings; add an entity type = add a string |
-| Error aggregation | **Sentry** (self-hosted) | Raw Elasticsearch errors index | ES can't fingerprint/dedupe; Sentry gives grouping, "seen 847×, up 40% today", breadcrumbs, release tracking |
+| Error aggregation | **Elasticsearch fingerprinting** | Sentry (self-hosted) | Latest stack groups errors via ES fingerprint fields — no extra service; Sentry (grouping, "seen 847×", release tracking) is the heavier optional upgrade |
 | Cost / budget governance | **Pipeline cost calculator + Redis + PostgreSQL** | Custom standalone cost engine | Enrichment stage 6 prices every call (Langfuse adds per-trace pricing for free *if* adopted); Redis sub-ms accumulator; PostgreSQL caps |
 | K8s / infra metrics | **kube-prometheus-stack** (`grafana.enabled=false`) | Building infra metrics | Industry-standard; we just disable its Grafana and scrape from our own dashboard |
 | Platform dashboards | **Custom Dashboard Service** (FastAPI + React + Tremor) | **Grafana** | We need COIN-JWT auth, per-LOB RBAC, and business-KPI pages Grafana can't model cleanly; one auth/UX surface for the whole org |
 | Anomaly detection | **Custom Isolation Forest + Kibana ML** | All-custom anomaly stack | Kibana ML (already in our ES cluster) handles log anomalies for free; custom Isolation Forest/LSTM only for metric-level |
-| Guardrail / ingestion / vector-health events | **OIS custom events / OTEL spans / pgvector CronJob** | Off-the-shelf | Domain-specific — no commodity tool exists, so we emit structured events ourselves |
+| Guardrail / ingestion / vector-health events | **SDK custom events / OTEL spans / pgvector CronJob** | Off-the-shelf | Domain-specific — no commodity tool exists, so we emit structured events ourselves |
 
 ### 5.2 The decisions worth defending in the room
 
@@ -355,13 +357,13 @@ For every signal we asked: *is there a best-in-class tool, or do we build?* The 
 
 - **Grafana Tempo over Jaeger (traces).** Same trace quality, but Tempo's object-storage backend (S3) is roughly an order of magnitude cheaper than Jaeger on Cassandra/Elasticsearch at our span volume, with native Grafana integration and TraceQL.
 
-- **GLiNER over Presidio (PII).** Presidio needs two sidecar services and an HTTP call per event — a network hop that can time out and block the pipeline. GLiNER loads one ~300 MB model *inside* the OIS process; no new deployment, no failure mode, and new entity types are added as plain-English strings with no retraining.
+- **GLiNER over Presidio (PII).** Presidio needs two sidecar services and an HTTP call per event — a network hop that can time out and block the pipeline. GLiNER loads one ~300 MB model *inside* the Enrichment Consumer; no per-event network hop, no failure mode, and new entity types are added as plain-English strings with no retraining.
 
 - **Custom Dashboard Service over Grafana (presentation).** This is the one place we chose to **build rather than adopt**, on purpose. We need COIN-JWT auth, per-LOB index-level RBAC, business-KPI and agent-success pages, and an Observability Chatbot integration that Grafana can't model cleanly. The trade-off (a few weeks of React + Tremor) buys one consistent, governed surface for the whole org — so we run `kube-prometheus-stack` with `grafana.enabled=false` and scrape Prometheus from our own backend.
 
 - **kminion over JMX Exporter / Burrow / Confluent.** JMX is fiddly to configure, Burrow is abandoned and not Prometheus-native, and Confluent Control Center would force us onto Confluent Platform. kminion is a single modern container that speaks Prometheus.
 
-- **Sentry over an Elasticsearch errors index.** Elasticsearch stores every error occurrence separately; it can't tell you "this `ReadTimeoutError` spiked 3× today." Sentry fingerprints and dedupes, tracks first/last seen, and ties an error to the release that introduced it — and we scrub PII in a `before_send` hook so nothing sensitive leaves our boundary.
+- **Error grouping via Elasticsearch fingerprinting (Sentry de-scoped).** A raw errors index stores every occurrence separately and can't say "this `ReadTimeoutError` spiked 3× today." The latest stack instead adds fingerprint fields in the Enrichment Consumer so identical errors group in Kibana — no extra service. Sentry (richer grouping, first/last-seen, release tracking, breadcrumbs) stays the optional upgrade if ES-side grouping proves insufficient.
 
 - **Four stores, not one.** Elasticsearch is fast but expensive to retain; Snowflake is cheap and analytical but not sub-second; PostgreSQL is transactional but not a firehose sink; S3 is cheapest but not queryable. Routing each kind of data to the store built for it is what keeps the system both fast *and* affordable.
 
@@ -392,7 +394,7 @@ For every signal we asked: *is there a best-in-class tool, or do we build?* The 
 | **Week 1** | AI-quality tracing spike on GSSP GS (the §5.3 bake-off: Langfuse trial vs thin custom decorator); `prometheus-fastapi-instrumentator` on all 8; kminion | LLM traces, p95 latency, and Kafka lag visible day one — and the §5.3 decision gets real data |
 | **Week 2** | kube-prometheus-stack; structlog migration (1 service first) | Infra metrics + consistent log schema |
 | **Week 3** | OpenTelemetry + Grafana Tempo; AI-quality tracing extended to GSSP QS + Agent Executor (whichever tool §5.3 picks) | Cross-service trace tree; RAG + agent traces |
-| **Week 4** | GLiNER into OIS; Sentry + SDK everywhere | PII redaction (no new service) + error grouping |
+| **Week 4** | GLiNER into Enrichment Consumer; ES error-fingerprinting | PII redaction + error grouping (no extra service) |
 | **Week 5** | Custom Dashboard Service (FastAPI backend + React/Tremor frontend) | Platform Overview, Kafka Health, Cost Governance, RAG Quality live |
 | **Week 6–8** | Kibana ML; custom Isolation Forest; vector-health CronJob | Anomaly detection + embedding-freshness monitoring |
 
