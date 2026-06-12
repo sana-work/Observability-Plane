@@ -8,7 +8,7 @@ This document describes the alternative observability ingestion architecture whe
 
 ## Context: Why Consider Kafka Direct?
 
-The OIS + Kafka hybrid architecture (documented in `INGESTION_ARCHITECTURE_DECISION.md`) routes events through an HTTP endpoint first, then to Kafka. This means:
+The OIS + Kafka hybrid architecture (documented in `2026-05-28_ingestion-architecture-decision.md`) routes events through an HTTP endpoint first, then to Kafka. This means:
 
 - If the OIS pod is down, events are lost at the HTTP layer before reaching Kafka
 - Every event adds an async HTTP call to the emitting service

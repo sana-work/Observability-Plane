@@ -2382,7 +2382,7 @@ Incident 2: IntentIQ RAG — Faithfulness Score Drop (Wed)
 
 The following diagram shows the complete enhanced architecture with all 10 new capability layers integrated into the existing pipeline.
 
-> See `Refined_Observability_Architecture.md` for the full interactive Mermaid diagram.
+> See `2026-06-01_observability-plane-architecture_v2-refined.md` for the full interactive Mermaid diagram.
 
 ```text
 ┌─────────────────────────────────────────────────────────────────────────────────────┐

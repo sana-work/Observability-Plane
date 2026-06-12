@@ -1,11 +1,11 @@
 # Copilot Build Prompts — genai-user-feedback
 
-Copy-paste prompts to build every feature in `USER_FEEDBACK_GET_API.md` with GitHub Copilot
+Copy-paste prompts to build every feature in `2026-06-02_user-feedback-read-api-enhancements.md` with GitHub Copilot
 in VS Code. Run them **in order** — each step compiles on its own (dependency-safe).
 
 ## Before you start
-1. Copy `USER_FEEDBACK_GET_API.md` into the repo at `docs/USER_FEEDBACK_GET_API.md`.
-2. Copy `copilot-instructions.md` to `.github/copilot-instructions.md`.
+1. Copy `2026-06-02_user-feedback-read-api-enhancements.md` into the repo at `docs/USER_FEEDBACK_GET_API.md`.
+2. Copy `2026-06-02_copilot-instructions-genai-user-feedback.md` to `.github/copilot-instructions.md`.
 3. Open Copilot Chat → set mode to **Agent** (preferred) or **Edit**.
 4. Pick a large-context model (GPT-4o / Claude Sonnet) in the model dropdown.
 5. **Commit after every step** so you can revert one bad generation.

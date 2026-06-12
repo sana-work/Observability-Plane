@@ -32,7 +32,7 @@
 ## 1. LLM Call Traces — Tokens, Cost, Latency, Model
 
 **Tool: Langfuse (self-hosted)**
-> Already covered in detail in `OBSERVABILITY_INGESTION_SERVICE_PLAN.md` Section 13 and `Developer_Implementation_Guide.md` Section 3a. Summarised here for completeness.
+> Already covered in detail in `2026-05-28_observability-ingestion-service-plan.md` Section 13 and `2026-06-01_developer-implementation-guide.md` Section 3a. Summarised here for completeness.
 
 **What it captures:**
 - `input_tokens`, `output_tokens`, `total_tokens` — auto from SDK
@@ -761,7 +761,7 @@ with sentry_sdk.configure_scope() as scope:
 ## 10. Cost and Budget Governance
 
 **Tool: Langfuse (per-call) + Redis (real-time accumulator) + PostgreSQL (budget caps) + Custom Dashboard Service**
-> This combination is already detailed in `Developer_Implementation_Guide.md` Section 3a and the `OBSERVABILITY_INGESTION_SERVICE_PLAN.md`. Summary here:
+> This combination is already detailed in `2026-06-01_developer-implementation-guide.md` Section 3a and the `2026-05-28_observability-ingestion-service-plan.md`. Summary here:
 
 | Layer | Tool | What it does |
 |---|---|---|
@@ -1148,7 +1148,7 @@ import { Card, Title, AreaChart, BarChart, Grid } from "@tremor/react";
 
 ## 16. Anomaly Detection
 
-**Tool: Custom Isolation Forest (already designed in `Developer_Implementation_Guide.md` Section 7)**
+**Tool: Custom Isolation Forest (already designed in `2026-06-01_developer-implementation-guide.md` Section 7)**
 
 The Custom Anomaly Detection Service uses scikit-learn Isolation Forest + LSTM for temporal anomalies. Results flow:
 
