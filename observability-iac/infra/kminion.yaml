@@ -1,0 +1,30 @@
+# kminion — Kafka + consumer-lag metrics for Prometheus. Watches all 3 obs consumer groups.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kminion
+  namespace: ai-platform
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: kminion } }
+  template:
+    metadata:
+      labels: { app: kminion }
+    spec:
+      containers:
+        - name: kminion
+          image: redpandadata/kminion:latest
+          ports: [{ containerPort: 8080, name: metrics }]
+          env:
+            - name: KAFKA_BROKERS
+              value: "kafka.kafka.svc.cluster.local:9092"
+            # consumer groups to track: obs-enrichment-consumer, obs-storage-consumer, obs-eval-consumer
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kminion
+  namespace: ai-platform
+spec:
+  selector: { app: kminion }
+  ports: [{ port: 8080, targetPort: 8080, name: metrics }]

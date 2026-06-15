@@ -1,0 +1,31 @@
+{
+  "template": {
+    "mappings": {
+      "dynamic": true,
+      "properties": {
+        "event_id":          { "type": "keyword" },
+        "event_type":        { "type": "keyword" },
+        "telemetry_type":    { "type": "keyword" },
+        "correlation_id":    { "type": "keyword" },
+        "trace_id":          { "type": "keyword" },
+        "span_id":           { "type": "keyword" },
+        "parent_span_id":    { "type": "keyword" },
+        "service_name":      { "type": "keyword" },
+        "component":         { "type": "keyword" },
+        "environment":       { "type": "keyword" },
+        "application_id":    { "type": "keyword" },
+        "lob":               { "type": "keyword" },
+        "tenant_id":         { "type": "keyword" },
+        "user_hash":         { "type": "keyword" },
+        "status":            { "type": "keyword" },
+        "error_code":        { "type": "keyword" },
+        "error_fingerprint": { "type": "keyword" },
+        "http_status":       { "type": "integer" },
+        "latency_ms":        { "type": "float" },
+        "timestamp":         { "type": "date" },
+        "emitted_at":        { "type": "date" }
+      }
+    }
+  },
+  "_meta": { "description": "Shared envelope mappings; payload.* is dynamic. error_fingerprint backs ES-side error grouping." }
+}

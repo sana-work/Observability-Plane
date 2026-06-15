@@ -1,0 +1,11 @@
+# Grafana Tempo — cross-service trace backend (S3-backed). Helm: grafana/tempo
+tempo:
+  storage:
+    trace:
+      backend: s3
+      s3:
+        bucket: ai-obs-traces-${ENV}
+        endpoint: s3.amazonaws.com
+        region: us-east-1
+  retention: 720h        # 30 days
+# OTLP receiver on :4317 (gRPC) — the SDK init_tracing() exporter points here.

@@ -1,0 +1,55 @@
+# Phase 0 / Task 0.9 — apply every IaC artifact idempotently on merge to main.
+# Snowflake is intentionally NOT applied (deferred); the Postgres obs_events firehose is.
+name: deploy-observability-iac
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: ${{ github.ref_name }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Contract test (must pass before any infra is touched)
+        run: |
+          pip install pydantic pytest
+          PYTHONPATH=. pytest contracts/ -q
+
+      - name: Kafka topics
+        run: bash kafka/create_topics.sh
+        env:
+          KAFKA_BROKERS: ${{ secrets.KAFKA_BROKERS }}
+
+      - name: Postgres control-plane (observability.*) migrations + seed
+        run: |
+          for f in postgres/migrations/*.sql postgres/seed/*.sql; do
+            echo ">> $f"; psql "$PG_DSN" -v ON_ERROR_STOP=1 -f "$f"
+          done
+        env:
+          PG_DSN: ${{ secrets.PG_DSN }}
+
+      - name: Postgres event firehose (obs_events.*) — interim Snowflake stand-in
+        run: |
+          for f in postgres-events/migrations/*.sql; do
+            echo ">> $f"; psql "$PG_DSN" -v ON_ERROR_STOP=1 -f "$f"
+          done
+        env:
+          PG_DSN: ${{ secrets.PG_DSN }}
+        # NOTE: snowflake/ddl/* is deferred — applied at Snowflake onboarding (swap-back).
+
+      - name: Elasticsearch templates + ILM
+        run: bash elasticsearch/apply.sh
+        env:
+          ES: ${{ secrets.ES_URL }}
+
+      - name: S3 buckets + lifecycle
+        run: bash s3/apply.sh
+        env:
+          ENV: ${{ github.ref_name }}
+          KMS_KEY: ${{ secrets.KMS_KEY }}
+          AWS_REGION: ${{ secrets.AWS_REGION }}
+
+      # Supporting infra (Tempo / kube-prometheus-stack / kminion / Fluent Bit) is applied
+      # via Helm/kubectl in a separate cluster-scoped workflow (infra/), gated on cluster creds.

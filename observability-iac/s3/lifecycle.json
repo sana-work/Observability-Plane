@@ -1,0 +1,13 @@
+{
+  "Rules": [
+    {
+      "ID": "tier-down",
+      "Status": "Enabled",
+      "Filter": { "Prefix": "" },
+      "Transitions": [
+        { "Days": 30,  "StorageClass": "STANDARD_IA" },
+        { "Days": 180, "StorageClass": "GLACIER" }
+      ]
+    }
+  ]
+}

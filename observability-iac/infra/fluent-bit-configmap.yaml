@@ -1,0 +1,38 @@
+# Fluent Bit DaemonSet config — ships structlog JSON container logs to Elasticsearch.
+# Also captures the SDK's Kafka-emit fallback lines (obs_fallback_event) so events are recoverable.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: fluent-bit-config
+  namespace: ai-platform
+data:
+  fluent-bit.conf: |
+    [INPUT]
+        Name              tail
+        Path              /var/log/containers/*.log
+        Parser            docker
+        Tag               kube.*
+        Mem_Buf_Limit     5MB
+
+    [FILTER]
+        Name              kubernetes
+        Match             kube.*
+        Merge_Log         On
+        Keep_Log          Off
+        K8S-Logging.Parser On
+
+    [FILTER]
+        Name              parser
+        Match             kube.*
+        Key_Name          log
+        Parser            json
+
+    [OUTPUT]
+        Name              es
+        Match             kube.*
+        Host              ${ELASTICSEARCH_HOST}
+        Port              9200
+        Index             ai-obs-${service_name}-logs-%Y.%m
+        tls               On
+        tls.verify        Off
+        Retry_Limit       5

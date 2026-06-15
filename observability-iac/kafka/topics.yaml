@@ -1,0 +1,30 @@
+# Declarative record of the observability topics (source of truth for create_topics.sh).
+# Partition key on produce = correlation_id (ordered per-request processing).
+topics:
+  - name: ai-obs-events-raw
+    partitions: 12
+    replication_factor: 3
+    configs:
+      retention.ms: 604800000        # 7 days
+      compression.type: lz4
+      min.insync.replicas: 2
+    producers: [the 8 services via ai-observability-sdk]
+    consumers: [obs-enrichment-consumer]
+
+  - name: ai-obs-events-processed
+    partitions: 12
+    replication_factor: 3
+    configs:
+      retention.ms: 259200000        # 3 days
+      compression.type: lz4
+      min.insync.replicas: 2
+    producers: [obs-enrichment-consumer]
+    consumers: [obs-storage-consumer, obs-eval-consumer]
+
+  - name: ai-obs-dead-letter
+    partitions: 3
+    replication_factor: 3
+    configs:
+      retention.ms: 1209600000       # 14 days
+    producers: [obs-enrichment-consumer]
+    consumers: [dlq-replay (scripts/replay_dead_letter.py)]

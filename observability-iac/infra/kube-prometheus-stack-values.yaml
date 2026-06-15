@@ -1,0 +1,17 @@
+# kube-prometheus-stack — infra metrics. Grafana DISABLED; the Custom Dashboard Service
+# scrapes Prometheus directly. Helm: prometheus-community/kube-prometheus-stack
+grafana:
+  enabled: false
+prometheus:
+  enabled: true
+  prometheusSpec:
+    retention: 15d
+    # extra scrape targets: the 8 services' /metrics + kminion :8080
+    additionalScrapeConfigs:
+      - job_name: kminion
+        static_configs:
+          - targets: ["kminion.ai-platform.svc:8080"]
+kube-state-metrics:
+  enabled: true
+nodeExporter:
+  enabled: true
