@@ -1,20 +1,20 @@
 Objective:
-Deploy the OPS UI Octobot BFF application on the DEV server and perform initial testing to ensure the service is working as expected.
+Integrate the OPS UI Octobot BFF service with the MFE application and validate the end-to-end communication between UI and backend services.
 
 Scope of Work:
 
-Deploy the latest OPS UI Octobot BFF build/package on the DEV server.
-Validate application startup and service availability.
-Verify required configurations, environment variables, and connectivity.
-Perform basic API/service testing after deployment.
-Capture and fix any deployment or testing issues identified during validation.
+Connect OPS UI Octobot BFF APIs with the MFE application.
+Configure required API endpoints, request/response mappings, and environment settings.
+Validate authentication, routing, and connectivity between MFE and BFF.
+Perform integration testing for the expected user flows.
+Identify and fix any integration issues found during testing.
 
 Expected Outcome:
-OPS UI Octobot BFF should be successfully deployed on the DEV server and validated for basic functionality.
+OPS UI Octobot BFF should be successfully integrated with the MFE application and validated on the required environment.
 
 Acceptance Criteria:
 
-Application is deployed successfully on DEV.
-Service starts without errors.
-Required endpoints/APIs are accessible.
-Basic testing is completed and results are shared/updated in the task.
+MFE is able to call the required BFF APIs successfully.
+API responses are displayed/handled correctly in the UI.
+No major integration or connectivity errors are observed.
+Integration testing is completed and results are updated in the task
