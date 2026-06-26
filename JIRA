@@ -1,0 +1,20 @@
+Objective:
+Deploy the OPS UI Octobot BFF application on the DEV server and perform initial testing to ensure the service is working as expected.
+
+Scope of Work:
+
+Deploy the latest OPS UI Octobot BFF build/package on the DEV server.
+Validate application startup and service availability.
+Verify required configurations, environment variables, and connectivity.
+Perform basic API/service testing after deployment.
+Capture and fix any deployment or testing issues identified during validation.
+
+Expected Outcome:
+OPS UI Octobot BFF should be successfully deployed on the DEV server and validated for basic functionality.
+
+Acceptance Criteria:
+
+Application is deployed successfully on DEV.
+Service starts without errors.
+Required endpoints/APIs are accessible.
+Basic testing is completed and results are shared/updated in the task.
