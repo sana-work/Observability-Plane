@@ -14,7 +14,7 @@
 4. Phased Delivery Plan (0–7)
 5. Detailed Implementation — How It Actually Gets Built
    - 5.1 Kafka topics · 5.2 Event contract · 5.3 Shared SDK · 5.4 Per-service instrumentation
-   - 5.5 Enrichment Consumer · 5.6 Storage Consumer · 5.7 PostgreSQL · 5.8 Elasticsearch · 5.9 Event firehose (Postgres `obs_events`; Snowflake deferred) · 5.10 S3 · 5.11 Redis
+   - 5.5 Enrichment Consumer · 5.6 Storage Consumer · 5.7 PostgreSQL · 5.8 Elasticsearch · 5.9 Event firehose (Postgres `obs_events`; Snowflake deferred) · 5.10 S3 · 5.11 Runtime state (no Redis — interim)
    - 5.12 **Custom AI Quality & Trace Layer** (replaces Langfuse) · 5.13 Supporting telemetry · 5.14 Custom Dashboard · 5.15 Chatbot
 6. Capacity & Cost Planning
 7. Testing & Validation
@@ -43,6 +43,7 @@ A platform-wide Observability Plane for the 8 AI services. It is **one Kafka-nat
 - ❌ **No Langfuse (for now).** The AI-quality/trace layer is **custom-built on the same pipeline + stores** (§5.12). Langfuse remains an open decision (§15) — nothing here depends on it.
 - ❌ **No Sentry.** Error grouping = **Elasticsearch fingerprinting**.
 - ⚠️ **Event firehose: PostgreSQL `obs_events` schema (interim).** The target state is Snowflake = firehose / Postgres = control-plane-only, but **Snowflake isn't onboarded yet**, so for now Postgres holds *both* — control plane in `observability.*` and the event firehose/analytics in a **separate `obs_events.*` schema** (bounded retention, see §5.9). Swap to Snowflake later (§15.6).
+- ⚠️ **No Redis yet.** Runtime-state uses interim stand-ins: budget accumulator → Postgres `observability.budget_accumulator`, registry cache → in-process TTL cache, dedup → store-level idempotency (§5.11). Swap to Redis later (§15.7).
 
 ### Guiding principles
 1. **Buy the commodity, build the domain glue.** Adopt OTEL, kminion, GLiNER, kube-prometheus-stack, structlog, Fluent Bit, Grafana Tempo. Build the Enrichment Consumer, Storage Consumer, Eval Service, Custom Dashboard (incl. Trace Explorer), Chatbot.
@@ -67,7 +68,7 @@ A platform-wide Observability Plane for the 8 AI services. It is **one Kafka-nat
         │ OTEL spans                              →enrich→errmap→cost→S3                              ├─► obs-eval-service ─► ES quality-scores + obs_events.quality_scores
         ▼                                         →SLO→quality-hook)                                  │
    Grafana Tempo                                         │ invalid                                    └─► control-plane rows ─► PostgreSQL observability.*
-                                                         ▼                                               live counters ──────► Redis
+                                                         ▼                                               budget accumulator ─► PostgreSQL (no Redis yet)
                                                   ai-obs-dead-letter (14d, replayable)
 ```
 
@@ -94,7 +95,7 @@ Supporting: **structlog→Fluent Bit→ES** · **OTEL→Grafana Tempo** · **pro
 | I4 | prometheus-fastapi-instrumentator | Adopt | 1 line/service | `/metrics` |
 | I5 | kminion | Adopt | 1 container | Kafka + consumer lag |
 | I6 | kube-prometheus-stack (`grafana.enabled=false`) | Adopt | Helm | infra metrics |
-| I7 | Elasticsearch/Kibana, S3, Redis, PostgreSQL (`observability` + `obs_events`) | Provision | existing + new schemas | Snowflake deferred (§5.9) |
+| I7 | Elasticsearch/Kibana, S3, PostgreSQL (`observability` + `obs_events`) | Provision | existing + new schemas | Snowflake + Redis deferred (§5.9, §5.11) |
 | A1 | Anomaly Detection (Isolation Forest + Kibana ML) | Build (P7) | `obs-anomaly` | advanced |
 | A2 | Offline Batch RCA | Build (P7) | CronJob | advanced |
 
@@ -140,7 +141,7 @@ Tasks:
 - [ ] Apply Elasticsearch index templates + ILM via IaC (§5.8).
 - [ ] Apply the `obs_events` schema DDL (§5.9 — interim event store; Snowflake deferred).
 - [ ] Create S3 buckets + lifecycle (§5.10).
-- [ ] Stand up Redis namespace/keys (§5.11).
+- [ ] (No Redis) confirm interim stand-ins: `observability.budget_accumulator` applied, in-process registry cache in the consumer, store-level dedup (§5.11).
 - [ ] Scaffold `observability-iac` repo with `ci/deploy.yml` (applies templates/DDL/prompts on merge to main).
 - [ ] Provision Grafana Tempo (S3 backend) + Prometheus + kminion + Fluent Bit DaemonSet (§5.13).
 
@@ -166,7 +167,7 @@ Per service (§5.4): add SDK; wire `main.py`; add middleware; emit the events in
 **Acceptance:** raw→processed within SLA; malformed → dead-letter with reason; redaction verified on adversarial payloads; `estimated_cost` on `LLM_CALL_COMPLETED`; one `daily_slo_compliance` row/app/day; GLiNER loads once/pod.
 
 ### Phase 4 — Storage Consumer + stores (Weeks 8–12) · WS-E
-**Exit:** processed → ES (hot, per-LOB) + PostgreSQL `obs_events.*` (interim event store) + S3 (payloads); control-plane rows → `observability.*`; counters → Redis (§5.6).
+**Exit:** processed → ES (hot, per-LOB) + PostgreSQL `obs_events.*` (interim event store) + S3 (payloads); control-plane rows + budget accumulator → `observability.*` (no Redis, §5.11); §5.6.
 
 **Acceptance:** ES indices searchable in Kibana; `obs_events.events` row counts match throughput; S3 has redacted payloads; idempotent on `event_id` (dedup verified); kminion shows both consumer groups; dead-letter replay verified.
 
@@ -324,13 +325,13 @@ Drive from the gap matrix in `2026-05-26_observability-coverage-master.md`. `@tr
 | **User Feedback** | `FEEDBACK_SUBMITTED`, `FEEDBACK_REVIEWED`, `FEEDBACK_INCIDENT_TRIGGERED` | — (links via `correlation_id`) | n/a | feedback→fix loop, redaction, category |
 
 ### 5.5 Enrichment Consumer (`obs-enrichment-consumer`)
-**Pipeline order** (latest diagram): validate → trace-context extract → PII redact (GLiNER) → metadata enrich → error-code map → token/cost calc (+Redis budget accumulator) → S3 archive → SLO evaluate → quality hook (mark RAG/LLM events for eval).
+**Pipeline order** (latest diagram): validate → trace-context extract → PII redact (GLiNER) → metadata enrich → error-code map → token/cost calc (+ Postgres `budget_accumulator`; no Redis yet, §5.11) → S3 archive → SLO evaluate → quality hook (mark RAG/LLM events for eval).
 ```
 obs-enrichment-consumer/
 ├── main.py            # consume loop, manual commit, DLQ on failure
 ├── validator.py       # Pydantic ObsEvent
 ├── pii_redactor.py    # GLiNER (loads once at startup, ~512Mi)
-├── enricher.py        # registry join (Redis cache 5-min TTL) + cost calc
+├── enricher.py        # registry join (in-process TTLCache 5-min; no Redis) + cost calc
 ├── error_mapper.py    # error_code_catalog
 ├── slo_evaluator.py   # burn-rate 1h+6h → observability.daily_slo_compliance
 ├── s3_archiver.py     # large payloads/prompts/contexts → S3
@@ -338,11 +339,11 @@ obs-enrichment-consumer/
 ```
 - Consumer: `group.id=obs-enrichment-consumer, enable.auto.commit=false, auto.offset.reset=earliest, max.poll.interval.ms=300000`. **Commit only after produce to processed succeeds.**
 - Invalid → `ai-obs-dead-letter` with `{raw_event, validation_error, source_partition, source_offset, failed_at}`.
-- Budget accumulator: `INCRBYFLOAT obs:budget:{app}:{model}:{date}`; on crossing `budget_limits.max_spend_usd * alert_at_pct/100` → emit `BUDGET_THRESHOLD_EXCEEDED`.
+- Budget accumulator (no Redis): atomic upsert into `observability.budget_accumulator` returning the running total; on crossing `budget_limits.max_spend_usd * alert_at_pct/100` → emit `BUDGET_THRESHOLD_EXCEEDED`.
 - K8s: 3 replicas, `requests cpu 500m/mem 1Gi`, `limits 2000m/2Gi`, readiness delay 30s (GLiNER load).
 
 ### 5.6 Storage Consumer (`obs-storage-consumer`)
-- Reads `ai-obs-events-processed` (`group.id=obs-storage-consumer`). Per event: resolve per-LOB ES index from `event_type` → `es.index(index=..., id=event_id, document=event)`; upsert into the **`obs_events.*` analytics tables** (interim Snowflake stand-in, §5.9); archive payload to S3; bump Redis counters; write control-plane rows (budget/SLO) to `observability.*`.
+- Reads `ai-obs-events-processed` (`group.id=obs-storage-consumer`). Per event: resolve per-LOB ES index from `event_type` → `es.index(index=..., id=event_id, document=event)`; upsert into the **`obs_events.*` analytics tables** (interim Snowflake stand-in, §5.9); archive payload to S3; write control-plane rows (budget/SLO) to `observability.*`. *(Live budget accumulation happens in the Enrichment Consumer cost stage, §5.5 — no Redis.)*
 - **Idempotent:** ES `_id=event_id`; PG `ON CONFLICT (event_id) DO NOTHING` (both `observability.*` and `obs_events.*`).
 - `obs_events` writer batches inserts (e.g., 5s / 1000 rows via `COPY` into a staging table then `INSERT … ON CONFLICT`) to avoid per-row latency; monthly partitions keep writes and queries fast.
 - Index routing:
@@ -443,8 +444,14 @@ GRANT SELECT ON ALL TABLES IN SCHEMA obs_events TO dashboard_ro;
 ### 5.10 S3 — payload archive
 Bucket `ai-obs-payloads-{env}`, SSE-KMS, prefixes: `redacted-prompts/ redacted-responses/ raw-traces/ rag-contexts/ audit-evidence/ debug-bundles/ rca-reports/ iac-dashboards/`. Lifecycle: Standard→IA @30d, →Glacier @180d, expire per LOB compliance.
 
-### 5.11 Redis — runtime state
-Keys: `obs:corr:{id}` (active context, TTL 1h), `obs:budget:{app}:{model}:{date}` (INCRBYFLOAT accumulator), `obs:dedup:{event_id}` (SETNX, TTL 24h), `obs:registry:{type}:{id}` (5-min TTL cache), rate-limit counters. **Cache, not source of truth.**
+### 5.11 Runtime state — interim (no Redis yet)
+**Redis/ElastiCache isn't available yet**, so the runtime-state uses in the design are replaced for now:
+- **Registry metadata cache** → in-process `cachetools.TTLCache` (5-min TTL) inside each Enrichment Consumer pod (per-pod rather than shared — slightly more DB load on a cold cache, otherwise equivalent).
+- **Budget accumulator** → PostgreSQL `observability.budget_accumulator` with an atomic upsert (`… ON CONFLICT … DO UPDATE SET spend_usd = spend_usd + EXCLUDED.spend_usd RETURNING spend_usd`); the running total is compared to `budget_limits` to fire `BUDGET_THRESHOLD_EXCEEDED`. ms-latency, transactional — fine for budget tracking.
+- **Dedup** → store-level idempotency only (ES `_id=event_id`, PG `ON CONFLICT (event_id,event_ts) DO NOTHING`); the Redis `SETNX` fast-path is dropped (it was an optimization, not required for correctness).
+- **Active correlation context / session cache / rate limits** → not needed by the pipeline now (`correlation_id` rides the event + W3C headers); deferred.
+
+**§15.7 swap-back when Redis lands:** accumulator → `INCRBYFLOAT` (sub-ms), registry cache → shared Redis (cross-pod consistency), add the `SETNX` dedup fast-path. Contained to the enrichment/storage consumers — no contract change.
 
 ### 5.12 Custom AI Quality & Trace Layer (replaces Langfuse)
 This layer is **not a separate system** — it reuses the pipeline and stores, adding three pieces:
@@ -608,6 +615,7 @@ obs-eval-service/
 4. **PostgreSQL role (interim).** Target = control-plane only with Snowflake as the firehose; **but Snowflake isn't onboarded**, so Postgres currently holds *both* — `observability.*` (control plane) and `obs_events.*` (firehose, §5.9). Revisit on Snowflake onboarding (→ decision 6).
 5. **Internal LLM for judges/chatbot** — route via GSSP GS (Vertex/Claude) and which model/cost tier.
 6. **Snowflake onboarding & swap-back.** When does Snowflake become available? Until then Postgres `obs_events.*` is the event store (§5.9) with a bounded ~90-day window (vs Snowflake's forever) — watch Postgres size/cost. On onboarding, run the §5.9 swap-back: apply `sf_*`, dual-write for a cutover window, backfill from `obs_events.*` + S3, retarget dashboard/chatbot queries, then shrink/drop the Postgres firehose.
+7. **Redis availability & swap-back.** No Redis yet (§5.11): budget accumulator runs on Postgres `budget_accumulator` (ms, not sub-ms), registry cache is per-pod in-process, dedup is store-level only. When Redis lands, move the accumulator to `INCRBYFLOAT`, the registry cache to shared Redis, and add the `SETNX` dedup fast-path. Watch for accumulator write contention under high LLM-call volume as the trigger to prioritize Redis.
 
 ---
 

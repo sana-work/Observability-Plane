@@ -1,0 +1,1154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Services Platform — Observability Plane</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #09090f;
+    --surface: #111118;
+    --surface2: #16161f;
+    --border: rgba(255,255,255,0.07);
+    --primary: #6C63FF;
+    --primary-glow: rgba(108,99,255,0.35);
+    --accent: #00D4AA;
+    --accent2: #FF6B6B;
+    --accent3: #FFD93D;
+    --accent4: #4ECDC4;
+    --text: #F0EFF8;
+    --muted: rgba(240,239,248,0.5);
+    --muted2: rgba(240,239,248,0.25);
+    --card-bg: rgba(22,22,31,0.85);
+    --gradient1: linear-gradient(135deg, #6C63FF 0%, #00D4AA 100%);
+    --gradient2: linear-gradient(135deg, #FF6B6B 0%, #FFD93D 100%);
+    --gradient3: linear-gradient(135deg, #4ECDC4 0%, #6C63FF 100%);
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html { scroll-behavior:smooth; }
+  body { font-family:'Inter',sans-serif; background:var(--bg); color:var(--text); }
+  ::-webkit-scrollbar { width:6px; }
+  ::-webkit-scrollbar-track { background:var(--bg); }
+  ::-webkit-scrollbar-thumb { background:var(--primary); border-radius:3px; }
+
+  /* NAV */
+  nav {
+    position:fixed; top:0; left:0; right:0; z-index:100;
+    background:rgba(9,9,15,0.9); backdrop-filter:blur(20px);
+    border-bottom:1px solid var(--border);
+    padding:0 2rem; height:60px;
+    display:flex; align-items:center;
+  }
+  nav::-webkit-scrollbar { height:2px; }
+  .nav-brand {
+    font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:0.95rem;
+    color:var(--text); white-space:nowrap; margin-right:2rem;
+    display:flex; align-items:center; gap:0.5rem;
+  }
+  .nav-brand span { background:var(--gradient1); -webkit-background-clip:text; -webkit-text-fill-color:transparent; }
+  .nav-links { display:flex; gap:0.2rem; align-items:center; overflow-x:auto; }
+  .nav-links::-webkit-scrollbar { height:2px; }
+  .nav-links a {
+    text-decoration:none; color:var(--muted); font-size:0.76rem; font-weight:500;
+    padding:0.38rem 0.8rem; border-radius:6px; white-space:nowrap; transition:all 0.2s;
+  }
+  .nav-links a:hover { color:var(--text); background:rgba(108,99,255,0.12); }
+  .nav-links a.active { color:var(--primary); background:rgba(108,99,255,0.15); }
+
+  /* SECTIONS */
+  section { padding:100px 2rem 60px; max-width:1400px; margin:0 auto; }
+
+  /* HERO */
+  .hero {
+    min-height:100vh; display:flex; flex-direction:column;
+    justify-content:center; align-items:center; text-align:center;
+    position:relative; padding:120px 2rem 80px; max-width:100%;
+  }
+  .hero-bg {
+    position:fixed; inset:0; z-index:-1; pointer-events:none;
+    background:
+      radial-gradient(ellipse 80% 60% at 20% 20%, rgba(108,99,255,0.12) 0%, transparent 60%),
+      radial-gradient(ellipse 60% 50% at 80% 80%, rgba(0,212,170,0.08) 0%, transparent 55%),
+      radial-gradient(ellipse 40% 40% at 50% 50%, rgba(255,107,107,0.05) 0%, transparent 50%);
+  }
+  .hero-eyebrow {
+    font-family:'JetBrains Mono',monospace; font-size:0.78rem;
+    letter-spacing:0.15em; text-transform:uppercase; color:var(--accent);
+    background:rgba(0,212,170,0.1); border:1px solid rgba(0,212,170,0.25);
+    padding:0.4rem 1.2rem; border-radius:100px; margin-bottom:1.8rem; display:inline-block;
+  }
+  .hero h1 {
+    font-family:'Space Grotesk',sans-serif;
+    font-size:clamp(2.8rem,6vw,5.5rem);
+    font-weight:800; line-height:1.08; letter-spacing:-0.03em; margin-bottom:1.5rem;
+  }
+  .hero h1 .line1 { display:block; color:var(--text); }
+  .hero h1 .line2 { display:block; background:var(--gradient1); -webkit-background-clip:text; -webkit-text-fill-color:transparent; }
+  .hero-sub { font-size:1.1rem; color:var(--muted); max-width:640px; line-height:1.7; margin:0 auto 3rem; }
+  .hero-stats { display:flex; gap:3rem; justify-content:center; flex-wrap:wrap; margin-bottom:4rem; }
+  .hero-stat { text-align:center; }
+  .hero-stat .num { font-family:'Space Grotesk',sans-serif; font-size:2.4rem; font-weight:700; background:var(--gradient1); -webkit-background-clip:text; -webkit-text-fill-color:transparent; }
+  .hero-stat .label { font-size:0.78rem; color:var(--muted); letter-spacing:0.05em; margin-top:0.2rem; }
+
+  /* SECTION HEADINGS */
+  .section-tag { font-family:'JetBrains Mono',monospace; font-size:0.72rem; letter-spacing:0.15em; text-transform:uppercase; color:var(--primary); margin-bottom:0.75rem; }
+  .section-title { font-family:'Space Grotesk',sans-serif; font-size:clamp(1.8rem,3vw,2.8rem); font-weight:700; letter-spacing:-0.02em; margin-bottom:0.6rem; }
+  .section-desc { color:var(--muted); font-size:1rem; max-width:700px; line-height:1.7; margin-bottom:3rem; }
+
+  /* FLOW DIAGRAM */
+  .flow-outer {
+    width:100%; overflow:hidden;
+    background:var(--card-bg); border:1px solid var(--border); border-radius:20px;
+    backdrop-filter:blur(10px);
+  }
+  .flow-wrap {
+    display:flex; flex-direction:row; flex-wrap:nowrap; align-items:center; gap:0;
+    justify-content:space-evenly; padding:2rem 1.5rem;
+    width:100%;
+  }
+  .flow-node {
+    background:linear-gradient(135deg,rgba(108,99,255,0.15) 0%,rgba(0,212,170,0.08) 100%);
+    border:1px solid rgba(108,99,255,0.35); border-radius:12px;
+    padding:0.9rem 0.75rem; text-align:center; flex:1 1 0; min-width:0; max-width:160px;
+    transition:all 0.3s; cursor:default;
+  }
+  .flow-node:hover { border-color:var(--primary); background:linear-gradient(135deg,rgba(108,99,255,0.28) 0%,rgba(0,212,170,0.15) 100%); transform:translateY(-3px); box-shadow:0 8px 32px var(--primary-glow); }
+  .flow-node .icon { font-size:1.5rem; margin-bottom:0.5rem; }
+  .flow-node .name { font-size:0.75rem; font-weight:600; color:var(--text); line-height:1.35; }
+  .flow-arrow { color:var(--primary); font-size:1.3rem; opacity:0.6; flex-shrink:0; }
+
+  /* GRID CARDS */
+  .cards-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:1.25rem; }
+  .cards-grid-3 { display:grid; grid-template-columns:repeat(auto-fill,minmax(320px,1fr)); gap:1.25rem; }
+
+  .card {
+    background:var(--card-bg); border:1px solid var(--border); border-radius:16px;
+    padding:1.5rem; transition:all 0.3s; position:relative; overflow:hidden;
+  }
+  .card::before { content:''; position:absolute; top:0; left:0; right:0; height:2px; background:var(--gradient1); opacity:0; transition:opacity 0.3s; }
+  .card:hover { border-color:rgba(108,99,255,0.3); transform:translateY(-3px); box-shadow:0 12px 40px rgba(0,0,0,0.4); }
+  .card:hover::before { opacity:1; }
+  .card-icon { font-size:2rem; margin-bottom:1rem; }
+  .card-title { font-family:'Space Grotesk',sans-serif; font-size:1.05rem; font-weight:600; margin-bottom:0.4rem; }
+  .card-tech { display:inline-block; font-size:0.7rem; font-weight:600; padding:0.2rem 0.6rem; border-radius:4px; margin-bottom:0.75rem; font-family:'JetBrains Mono',monospace; letter-spacing:0.03em; }
+  .tech-es { background:rgba(255,214,0,0.12); color:#FFD940; border:1px solid rgba(255,214,0,0.2); }
+  .tech-pg { background:rgba(51,103,255,0.12); color:#6B9EFF; border:1px solid rgba(51,103,255,0.2); }
+  .tech-s3 { background:rgba(255,153,0,0.12); color:#FFB340; border:1px solid rgba(255,153,0,0.2); }
+  .tech-grafana { background:rgba(255,111,0,0.12); color:#FF8C40; border:1px solid rgba(255,111,0,0.2); }
+  .tech-kibana { background:rgba(0,212,170,0.12); color:#00D4AA; border:1px solid rgba(0,212,170,0.2); }
+  .tech-kafka { background:rgba(108,99,255,0.12); color:#9B94FF; border:1px solid rgba(108,99,255,0.2); }
+  .tech-sf { background:rgba(41,182,246,0.12); color:#29B6F6; border:1px solid rgba(41,182,246,0.2); }
+  .tech-redis { background:rgba(220,38,38,0.12); color:#F87171; border:1px solid rgba(220,38,38,0.2); }
+  .tech-custom { background:rgba(108,99,255,0.12); color:#A78BFA; border:1px solid rgba(108,99,255,0.2); }
+  .card-desc { font-size:0.83rem; color:var(--muted); line-height:1.65; }
+
+  /* TABLE */
+  .table-wrap { background:var(--card-bg); border:1px solid var(--border); border-radius:16px; overflow:hidden; margin-bottom:2rem; }
+  .table-header { padding:1.2rem 1.5rem; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:0.75rem; }
+  .table-header h3 { font-family:'Space Grotesk',sans-serif; font-size:1rem; font-weight:600; }
+  table { width:100%; border-collapse:collapse; }
+  th { text-align:left; font-size:0.72rem; font-weight:600; letter-spacing:0.08em; text-transform:uppercase; color:var(--muted); padding:0.85rem 1.25rem; background:rgba(255,255,255,0.02); border-bottom:1px solid var(--border); }
+  td { padding:0.8rem 1.25rem; font-size:0.83rem; border-bottom:1px solid rgba(255,255,255,0.04); vertical-align:top; line-height:1.6; }
+  tr:last-child td { border-bottom:none; }
+  tr:hover td { background:rgba(108,99,255,0.04); }
+  td.mono { font-family:'JetBrains Mono',monospace; font-size:0.78rem; color:var(--accent); }
+  td.muted { color:var(--muted); }
+
+  /* PILL */
+  .pill { display:inline-block; padding:0.18rem 0.55rem; border-radius:4px; font-size:0.68rem; font-weight:600; font-family:'JetBrains Mono',monospace; letter-spacing:0.02em; white-space:nowrap; }
+  .pill-purple { background:rgba(108,99,255,0.15); color:#9B94FF; }
+  .pill-green  { background:rgba(0,212,170,0.12); color:#00D4AA; }
+  .pill-yellow { background:rgba(255,217,61,0.12); color:#FFD93D; }
+  .pill-red    { background:rgba(255,107,107,0.12); color:#FF6B6B; }
+  .pill-blue   { background:rgba(78,205,196,0.12); color:#4ECDC4; }
+  .pill-orange { background:rgba(255,179,0,0.12); color:#FFB340; }
+  .pill-gray   { background:rgba(255,255,255,0.06); color:var(--muted); }
+
+  /* TELEMETRY */
+  .telem-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(340px,1fr)); gap:1.25rem; }
+  .telem-card { background:var(--card-bg); border:1px solid var(--border); border-radius:16px; overflow:hidden; transition:all 0.3s; }
+  .telem-card:hover { border-color:rgba(108,99,255,0.3); transform:translateY(-2px); box-shadow:0 8px 32px rgba(0,0,0,0.3); }
+  .telem-head { padding:1.1rem 1.3rem; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:0.75rem; background:linear-gradient(90deg,rgba(108,99,255,0.08) 0%,transparent 100%); }
+  .telem-head .icon { font-size:1.35rem; }
+  .telem-head h3 { font-family:'Space Grotesk',sans-serif; font-size:0.95rem; font-weight:600; }
+  .telem-fields { padding:1rem 1.3rem; display:flex; flex-wrap:wrap; gap:0.4rem; }
+  .telem-field { font-family:'JetBrains Mono',monospace; font-size:0.72rem; padding:0.25rem 0.6rem; background:rgba(255,255,255,0.04); border:1px solid var(--border); border-radius:5px; color:var(--accent); transition:all 0.2s; }
+  .telem-field:hover { background:rgba(108,99,255,0.12); border-color:rgba(108,99,255,0.3); color:var(--text); }
+  .telem-metrics { padding:0 1.3rem 1rem; }
+  .telem-metrics .label { font-size:0.7rem; text-transform:uppercase; letter-spacing:0.1em; color:var(--muted2); margin-bottom:0.5rem; }
+  .telem-kpi-list { display:flex; flex-wrap:wrap; gap:0.35rem; }
+  .telem-kpi { font-size:0.73rem; padding:0.2rem 0.55rem; background:rgba(0,212,170,0.07); border:1px solid rgba(0,212,170,0.15); border-radius:4px; color:var(--accent); }
+
+  /* DASHBOARD */
+  .dash-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); gap:1.25rem; }
+  .dash-card { background:var(--card-bg); border:1px solid var(--border); border-radius:16px; overflow:hidden; transition:all 0.3s; }
+  .dash-card:hover { border-color:rgba(108,99,255,0.3); transform:translateY(-3px); box-shadow:0 12px 40px rgba(0,0,0,0.4); }
+  .dash-head { padding:1.1rem 1.3rem; border-bottom:1px solid var(--border); }
+  .dash-head h3 { font-family:'Space Grotesk',sans-serif; font-size:0.92rem; font-weight:600; display:flex; align-items:center; gap:0.5rem; }
+  .dash-body { padding:1rem 1.3rem; }
+  .metric-row { display:flex; justify-content:space-between; align-items:flex-start; padding:0.5rem 0; border-bottom:1px solid rgba(255,255,255,0.04); gap:1rem; }
+  .metric-row:last-child { border-bottom:none; }
+  .metric-name { font-size:0.8rem; color:var(--muted); flex:1; }
+  .metric-badge { font-family:'JetBrains Mono',monospace; font-size:0.68rem; padding:0.15rem 0.45rem; border-radius:3px; background:rgba(108,99,255,0.12); color:#9B94FF; white-space:nowrap; }
+
+  /* ROADMAP TIMELINE */
+  .timeline { position:relative; padding-left:2rem; }
+  .timeline::before { content:''; position:absolute; left:7px; top:0; bottom:0; width:2px; background:linear-gradient(to bottom, rgba(108,99,255,0.4), rgba(108,99,255,0.1), transparent); }
+  .tl-item { position:relative; margin-bottom:2rem; }
+  .tl-dot { position:absolute; left:-2rem; top:0.15rem; width:16px; height:16px; border-radius:50%; background:var(--bg); border:2px solid var(--muted2); display:flex; align-items:center; justify-content:center; }
+  .tl-dot.planned { border-color:rgba(108,99,255,0.4); }
+  .tl-dot.optional { border-color:rgba(255,217,61,0.4); }
+
+  .tl-content { background:var(--card-bg); border:1px solid var(--border); border-radius:14px; padding:1.25rem 1.4rem; transition:all 0.3s; }
+  .tl-content:hover { border-color:rgba(108,99,255,0.25); }
+  .tl-phase { font-family:'JetBrains Mono',monospace; font-size:0.7rem; letter-spacing:0.1em; text-transform:uppercase; margin-bottom:0.4rem; }
+  .tl-phase.planned { color:var(--muted2); }
+  .tl-phase.optional { color:var(--accent3); }
+  .tl-title { font-family:'Space Grotesk',sans-serif; font-size:1.05rem; font-weight:600; margin-bottom:0.5rem; }
+  .tl-weeks { font-size:0.75rem; color:var(--muted2); margin-bottom:0.75rem; font-family:'JetBrains Mono',monospace; }
+  .tl-items { list-style:none; display:flex; flex-wrap:wrap; gap:0.4rem; }
+  .tl-items li { font-size:0.78rem; padding:0.2rem 0.6rem; background:rgba(255,255,255,0.04); border:1px solid var(--border); border-radius:5px; color:var(--muted); }
+
+  /* HIGHLIGHT BOX */
+  .highlight-box { background:linear-gradient(135deg,rgba(108,99,255,0.08) 0%,rgba(0,212,170,0.05) 100%); border:1px solid rgba(108,99,255,0.2); border-radius:16px; padding:1.5rem 2rem; margin-bottom:2rem; display:flex; align-items:flex-start; gap:1rem; }
+  .highlight-box.warn { background:linear-gradient(135deg,rgba(255,217,61,0.07) 0%,rgba(255,107,107,0.04) 100%); border-color:rgba(255,217,61,0.2); }
+  .highlight-box .icon { font-size:1.8rem; flex-shrink:0; }
+  .highlight-box h3 { font-family:'Space Grotesk',sans-serif; font-size:1rem; font-weight:600; margin-bottom:0.4rem; }
+  .highlight-box p { font-size:0.85rem; color:var(--muted); line-height:1.65; }
+
+  /* TABS */
+  .tab-nav { display:flex; gap:0.5rem; margin-bottom:1.5rem; flex-wrap:wrap; }
+  .tab-btn { padding:0.5rem 1.1rem; border:1px solid var(--border); background:transparent; color:var(--muted); border-radius:8px; font-size:0.82rem; font-weight:500; cursor:pointer; transition:all 0.2s; font-family:'Inter',sans-serif; }
+  .tab-btn:hover { color:var(--text); border-color:rgba(108,99,255,0.3); }
+  .tab-btn.active { background:rgba(108,99,255,0.15); color:var(--primary); border-color:rgba(108,99,255,0.4); }
+  .tab-content { display:none; }
+  .tab-content.active { display:block; }
+
+  /* TWO COL */
+  .two-col { display:grid; grid-template-columns:1fr 1fr; gap:1.25rem; }
+  @media (max-width:900px) { .two-col { grid-template-columns:1fr; } }
+
+  /* EVENT FLOW */
+  .event-flow { display:flex; flex-direction:column; gap:0; }
+  .event-step { display:flex; align-items:stretch; gap:1rem; }
+  .event-step-left { display:flex; flex-direction:column; align-items:center; }
+  .event-num { width:32px; height:32px; border-radius:50%; flex-shrink:0; background:rgba(108,99,255,0.15); border:1px solid rgba(108,99,255,0.4); display:flex; align-items:center; justify-content:center; font-family:'JetBrains Mono',monospace; font-size:0.72rem; font-weight:600; color:var(--primary); }
+  .event-line { flex:1; width:1px; background:rgba(108,99,255,0.2); margin:4px 0; }
+  .event-step:last-child .event-line { display:none; }
+  .event-body { padding-bottom:1.2rem; flex:1; }
+  .event-name { font-family:'JetBrains Mono',monospace; font-size:0.82rem; font-weight:600; color:var(--accent); margin-bottom:0.25rem; }
+  .event-desc { font-size:0.8rem; color:var(--muted); }
+
+  /* ENRICHMENT PIPELINE */
+  .pipeline { display:flex; flex-direction:column; gap:0.5rem; }
+  .pipeline-step { display:flex; align-items:center; gap:1rem; padding:0.85rem 1.25rem; background:rgba(255,255,255,0.03); border:1px solid var(--border); border-radius:10px; transition:all 0.2s; }
+  .pipeline-step:hover { border-color:rgba(108,99,255,0.25); background:rgba(108,99,255,0.05); }
+  .pipeline-num { font-family:'JetBrains Mono',monospace; font-size:0.72rem; color:var(--primary); width:22px; flex-shrink:0; }
+  .pipeline-name { font-family:'Space Grotesk',sans-serif; font-size:0.88rem; font-weight:600; min-width:200px; }
+  .pipeline-desc { font-size:0.8rem; color:var(--muted); }
+
+  /* S3 ITEM */
+  .s3-item { display:flex; gap:1rem; align-items:flex-start; padding:1rem 0; border-bottom:1px solid var(--border); }
+  .s3-item:last-child { border-bottom:none; }
+  .s3-path { font-family:'JetBrains Mono',monospace; font-size:0.73rem; color:var(--accent3); word-break:break-all; flex:1; }
+  .s3-desc { font-size:0.82rem; color:var(--muted); flex:1.5; }
+
+  /* GRAFANA SECTION */
+  .grafana-split { display:grid; grid-template-columns:1fr 1fr; gap:1.25rem; margin-bottom:2rem; }
+  @media (max-width:900px) { .grafana-split { grid-template-columns:1fr; } }
+
+  /* DEFERRED BANNER */
+  .deferred-banner {
+    background:linear-gradient(90deg,rgba(255,217,61,0.07) 0%,rgba(255,107,107,0.04) 100%);
+    border:1px solid rgba(255,217,61,0.2); border-radius:10px;
+    padding:0.75rem 1.25rem; font-size:0.82rem; color:var(--accent3);
+    display:flex; align-items:center; gap:0.75rem; margin-bottom:1.25rem;
+    font-family:'JetBrains Mono',monospace;
+  }
+
+  /* FOOTER */
+  footer { border-top:1px solid var(--border); padding:2rem; text-align:center; color:var(--muted2); font-size:0.8rem; font-family:'JetBrains Mono',monospace; }
+
+  /* ANIMATIONS */
+  @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.5; } }
+  @keyframes fadeUp { from { opacity:0; transform:translateY(24px); } to { opacity:1; transform:translateY(0); } }
+  .anim-1 { animation:fadeUp 0.6s ease both; }
+  .anim-2 { animation:fadeUp 0.6s 0.12s ease both; }
+  .anim-3 { animation:fadeUp 0.6s 0.24s ease both; }
+  .anim-4 { animation:fadeUp 0.6s 0.36s ease both; }
+  .glow-dot { display:inline-block; width:8px; height:8px; border-radius:50%; animation:pulse 2s infinite; }
+  .glow-dot.yellow { background:var(--accent3); box-shadow:0 0 8px var(--accent3); }
+  .glow-dot.purple { background:var(--primary); box-shadow:0 0 8px var(--primary); }
+
+  @media (max-width:768px) {
+    .flow-wrap { flex-direction:row; }
+    nav { padding:0 1rem; }
+    section { padding:80px 1rem 40px; }
+  }
+</style>
+</head>
+<body>
+<div class="hero-bg"></div>
+
+<!-- NAV -->
+<nav>
+  <div class="nav-brand">⬡ <span>Observability Plane</span></div>
+  <div class="nav-links">
+    <a href="#overview" class="active">Overview</a>
+    <a href="#arch-diagram">Arch Diagram</a>
+    <a href="#architecture">Storage</a>
+    <a href="#pipeline">Pipeline</a>
+    <a href="#elasticsearch">Elasticsearch</a>
+    <a href="#postgresql">PostgreSQL</a>
+    <a href="#s3">Amazon S3</a>
+    <a href="#grafana">Grafana</a>
+    <a href="#kibana">Kibana</a>
+    <a href="#telemetry">Telemetry</a>
+    <a href="#dashboards">Dashboards</a>
+    <a href="#roadmap">Roadmap</a>
+  </div>
+</nav>
+
+<!-- HERO -->
+<section class="hero" id="overview">
+  <div class="hero-eyebrow anim-1">AI Services Platform · Internal Engineering</div>
+  <h1 class="anim-2">
+    <span class="line1">Observability Plane</span>
+    <span class="line2">Storage Component</span>
+  </h1>
+  <p class="hero-sub anim-3">
+    A Kafka-native two-layer observability pipeline for 8 AI services — capturing every request, agent step, LLM call, tool invocation, guardrail decision, and user feedback across a unified, governed storage fabric.
+  </p>
+
+  <div class="hero-stats anim-4">
+    <div class="hero-stat"><div class="num">8</div><div class="label">AI Services</div></div>
+    <div class="hero-stat"><div class="num">50</div><div class="label">Event Types</div></div>
+    <div class="hero-stat"><div class="num">5</div><div class="label">Storage Layers</div></div>
+    <div class="hero-stat"><div class="num">9</div><div class="label">Enrichment Stages</div></div>
+    <div class="hero-stat"><div class="num">8</div><div class="label">Delivery Phases</div></div>
+  </div>
+
+  <!-- DATA FLOW -->
+  <div class="flow-outer anim-4" style="width:min(100%,1160px)">
+    <div class="flow-wrap">
+      <div class="flow-node"><div class="icon">🤖</div><div class="name">8 AI Services (Producers)</div></div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-node"><div class="icon">📡</div><div class="name">Observability SDK</div></div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-node"><div class="icon">📨</div><div class="name">Kafka: ai-obs-events-raw</div></div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-node"><div class="icon">⚙️</div><div class="name">Enrichment Consumer (9 stages)</div></div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-node"><div class="icon">📨</div><div class="name">Kafka: ai-obs-events-processed</div></div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-node"><div class="icon">🗄️</div><div class="name">ES + PostgreSQL + S3</div></div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-node"><div class="icon">📊</div><div class="name">Custom Dashboard + Kibana + Chatbot</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- FULL ARCHITECTURE DIAGRAM -->
+<section id="arch-diagram">
+  <div class="section-tag">00 · Full Architecture</div>
+  <h2 class="section-title">Detailed Architecture Overview</h2>
+  <p class="section-desc">End-to-end view of the AI Services Platform Observability Plane — producers, Kafka topics, enrichment pipeline, storage layers, and presentation surface.</p>
+  <div style="width:100%;border-radius:20px;overflow:hidden;border:1px solid var(--border);background:var(--card-bg);backdrop-filter:blur(10px);padding:1.5rem;">
+    <img src="Observability Arch Latest.png" alt="AI Services Platform Observability Plane — Detailed Architecture" style="width:100%;height:auto;border-radius:12px;display:block;" />
+  </div>
+</section>
+
+<!-- ARCHITECTURE -->
+<section id="architecture">
+  <div class="section-tag">01 · Storage Architecture</div>
+  <h2 class="section-title">Five-Store Storage Design</h2>
+  <p class="section-desc">
+    Five purpose-built storage layers, each tuned for a specific job — no single database does all of them well.
+    Snowflake and Redis are under active evaluation for onboarding — decisions are not yet finalised. PostgreSQL <code style="font-size:0.85em;color:var(--accent)">obs_events</code> and in-process TTL cache serve as interim stand-ins until either is confirmed.
+  </p>
+
+  <div class="deferred-banner" style="border-color:rgba(108,99,255,0.35);background:rgba(108,99,255,0.08);">
+    🔎 &nbsp;Snowflake &amp; Redis are <strong>under evaluation</strong> — onboarding is being discussed but not yet approved. The current interim (PostgreSQL <code>obs_events.*</code> + in-process TTL cache) is production-ready and the swap path is contained.
+  </div>
+
+  <div class="cards-grid">
+    <div class="card">
+      <div class="card-icon">🔍</div>
+      <div class="card-title">Elasticsearch — Hot Operational</div>
+      <span class="card-tech tech-es">Elasticsearch / Kibana</span>
+      <p class="card-desc">Per-LOB namespaced indices for requests, errors, agent steps, LLM calls, tool calls, RAG events, guardrail decisions, feedback, traces, anomalies, quality scores. Sub-second full-text search. ILM: 30-day default, 180-day for regulated LOBs.</p>
+    </div>
+    <div class="card">
+      <div class="card-icon">🗂️</div>
+      <div class="card-title">PostgreSQL — Control Plane Only</div>
+      <span class="card-tech tech-pg">PostgreSQL <code>observability.*</code></span>
+      <p class="card-desc">Registries (app/agent/tool/rag/prompt), KPI &amp; metric catalog, budget limits, daily SLO compliance, alert thresholds, dashboard config, feedback cases. Transactional integrity for small authoritative config — <strong>not</strong> a firehose sink.</p>
+    </div>
+    <div class="card">
+      <div class="card-icon">📊</div>
+      <div class="card-title">PostgreSQL — Event Firehose (Interim)</div>
+      <span class="card-tech tech-pg">PostgreSQL <code>obs_events.*</code></span>
+      <p class="card-desc">Interim while Snowflake evaluation is ongoing. Monthly partitioned tables for all enriched events with JSONB payload. ~90-day hot window; old partitions archived to S3. Swap to Snowflake if/when approved — identical <code>event_id</code>/<code>correlation_id</code> model.</p>
+    </div>
+    <div class="card">
+      <div class="card-icon">☁️</div>
+      <div class="card-title">Snowflake — Analytics / Forever</div>
+      <span class="card-tech tech-sf">Snowflake · Under Evaluation</span>
+      <p class="card-desc">Target analytics store: all events, forever retention, on-demand heavy queries for chatbot and trend dashboards. No pre-aggregation. Per-LOB RBAC. Onboarding in discussion — PostgreSQL <code>obs_events.*</code> bridges the gap until confirmed.</p>
+    </div>
+    <div class="card">
+      <div class="card-icon">📦</div>
+      <div class="card-title">Amazon S3 — Payload Archive</div>
+      <span class="card-tech tech-s3">Amazon S3</span>
+      <p class="card-desc">Redacted prompts/responses, full trace JSON, RAG contexts, audit evidence, multimodal document artifacts, debug bundles, RCA reports, IaC dashboards. S3 Standard → IA @ 30d → Glacier @ 180d. SSE-KMS encrypted.</p>
+    </div>
+    <div class="card">
+      <div class="card-icon">⚡</div>
+      <div class="card-title">Redis — Runtime State</div>
+      <span class="card-tech tech-redis">Redis / ElastiCache · Under Evaluation</span>
+      <p class="card-desc">Target: sub-ms budget accumulator (<code>INCRBYFLOAT</code>), shared registry cache (cross-pod), dedup fast-path (<code>SETNX</code>), rate limits, active correlation context. Onboarding in discussion — interim: Postgres <code>budget_accumulator</code> + in-process TTL cache.</p>
+    </div>
+  </div>
+</section>
+
+<!-- PIPELINE -->
+<section id="pipeline">
+  <div class="section-tag">02 · Enrichment Pipeline &amp; Event Flow</div>
+  <h2 class="section-title">9-Stage Enrichment Consumer</h2>
+  <p class="section-desc">Raw events from all 8 services flow through a single 9-stage pipeline before reaching any storage. Every stage runs centrally — services never repeat this work.</p>
+
+  <div class="two-col" style="margin-bottom:2rem">
+    <div>
+      <div class="table-wrap">
+        <div class="table-header"><span>📨</span><h3>Kafka Topics</h3></div>
+        <table>
+          <thead><tr><th>Topic</th><th>Retention</th><th>Purpose</th></tr></thead>
+          <tbody>
+            <tr><td class="mono">ai-obs-events-raw</td><td><span class="pill pill-yellow">7 days</span></td><td class="muted">All 8 services, all 50 event types — unvalidated, unredacted</td></tr>
+            <tr><td class="mono">ai-obs-events-processed</td><td><span class="pill pill-green">3 days</span></td><td class="muted">Enriched, validated, PII-redacted — consumed by Storage + Eval consumers</td></tr>
+            <tr><td class="mono">ai-obs-dead-letter</td><td><span class="pill pill-red">14 days</span></td><td class="muted">Failed validation/enrichment — quarantined for debug and replay</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="table-wrap">
+        <div class="table-header"><span>📨</span><h3>Orchestration Event Sequence</h3></div>
+        <div style="padding:1.25rem">
+          <div class="event-flow">
+            <div class="event-step"><div class="event-step-left"><div class="event-num">1</div><div class="event-line"></div></div><div class="event-body"><div class="event-name">REQUEST_RECEIVED</div><div class="event-desc">Platform gateway receives inbound API call</div></div></div>
+            <div class="event-step"><div class="event-step-left"><div class="event-num">2</div><div class="event-line"></div></div><div class="event-body"><div class="event-name">AUTH_COMPLETED</div><div class="event-desc">Authentication success or failure recorded</div></div></div>
+            <div class="event-step"><div class="event-step-left"><div class="event-num">3</div><div class="event-line"></div></div><div class="event-body"><div class="event-name">CONFIG_LOADED</div><div class="event-desc">Agent config, model, tools resolved</div></div></div>
+            <div class="event-step"><div class="event-step-left"><div class="event-num">4</div><div class="event-line"></div></div><div class="event-body"><div class="event-name">PLAN_CREATED</div><div class="event-desc">Static/dynamic execution plan built</div></div></div>
+            <div class="event-step"><div class="event-step-left"><div class="event-num">5</div><div class="event-line"></div></div><div class="event-body"><div class="event-name">AGENT_EXECUTION_REQUEST_PRODUCED</div><div class="event-desc">Kafka event produced for agent execution</div></div></div>
+            <div class="event-step"><div class="event-step-left"><div class="event-num">6</div><div class="event-line"></div></div><div class="event-body"><div class="event-name">FINAL_RESPONSE_CONSUMED</div><div class="event-desc">Final response consumed from Kafka</div></div></div>
+            <div class="event-step"><div class="event-step-left"><div class="event-num">7</div><div class="event-line"></div></div><div class="event-body"><div class="event-name">FINAL_RESPONSE_BUILT</div><div class="event-desc">Response assembled for delivery</div></div></div>
+            <div class="event-step"><div class="event-step-left"><div class="event-num">8</div><div class="event-line"></div></div><div class="event-body"><div class="event-name">RESPONSE_DELIVERED</div><div class="event-desc">Response returned to calling application</div></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <div class="table-wrap" style="height:fit-content">
+        <div class="table-header"><span>⚙️</span><h3>9-Stage Enrichment Pipeline</h3></div>
+        <div style="padding:1.25rem">
+          <div class="pipeline">
+            <div class="pipeline-step"><div class="pipeline-num">01</div><div class="pipeline-name">Schema Validator</div><div class="pipeline-desc">Validate structure; invalid → dead-letter</div></div>
+            <div class="pipeline-step"><div class="pipeline-num">02</div><div class="pipeline-name">Trace Context Extractor</div><div class="pipeline-desc">Extract &amp; propagate <code style="font-size:0.8em;color:var(--accent)">correlation_id</code> + W3C <code style="font-size:0.8em;color:var(--accent)">traceparent</code></div></div>
+            <div class="pipeline-step"><div class="pipeline-num">03</div><div class="pipeline-name">PII / Data Redactor</div><div class="pipeline-desc">GLiNER in-process NER — hash SOE_ID, redact names/cards/emails</div></div>
+            <div class="pipeline-step"><div class="pipeline-num">04</div><div class="pipeline-name">Metadata Enricher</div><div class="pipeline-desc">Join app/agent/tool/rag registries (in-process 5-min TTL cache)</div></div>
+            <div class="pipeline-step"><div class="pipeline-num">05</div><div class="pipeline-name">Error Code Mapper</div><div class="pipeline-desc">Normalize errors to standard catalog taxonomy</div></div>
+            <div class="pipeline-step"><div class="pipeline-num">06</div><div class="pipeline-name">Token / Cost Calculator</div><div class="pipeline-desc">Compute <code style="font-size:0.8em;color:var(--accent)">estimated_cost_usd</code>; upsert Postgres budget accumulator</div></div>
+            <div class="pipeline-step"><div class="pipeline-num">07</div><div class="pipeline-name">S3 Archiver</div><div class="pipeline-desc">Off-load large prompts/responses/contexts to S3</div></div>
+            <div class="pipeline-step"><div class="pipeline-num">08</div><div class="pipeline-name">SLO Evaluator</div><div class="pipeline-desc">Multi-window burn-rate (1h + 6h); writes <code style="font-size:0.8em;color:var(--accent)">daily_slo_compliance</code></div></div>
+            <div class="pipeline-step"><div class="pipeline-num">09</div><div class="pipeline-name">RAG / Quality Hook</div><div class="pipeline-desc">Mark RAG/LLM events for sampling by eval service</div></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="table-wrap">
+        <div class="table-header"><span>🔑</span><h3>Platform Request Fields</h3></div>
+        <table>
+          <thead><tr><th>Field</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td class="mono">trace_id</td><td class="muted">End-to-end correlation ID</td></tr>
+            <tr><td class="mono">correlation_id</td><td class="muted">Parcel-tracking ID across all 8 services</td></tr>
+            <tr><td class="mono">span_id / parent_span_id</td><td class="muted">OTEL span for trace tree assembly</td></tr>
+            <tr><td class="mono">usecase_id</td><td class="muted">Application / CSI ID</td></tr>
+            <tr><td class="mono">tenant_id / lob</td><td class="muted">Tenant or line of business (per-LOB RBAC)</td></tr>
+            <tr><td class="mono">request_type</td><td class="muted">prompt, RAG, single-agent, multi-agent, loop-agent</td></tr>
+            <tr><td class="mono">status</td><td class="muted">success, failed, partial, timeout</td></tr>
+            <tr><td class="mono">latency_ms</td><td class="muted">End-to-end latency (numeric, not a log string)</td></tr>
+            <tr><td class="mono">estimated_cost_usd</td><td class="muted">Computed by pipeline cost stage</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="highlight-box">
+    <div class="icon">🔒</div>
+    <div>
+      <h3>Two-Layer Architecture</h3>
+      <p><strong>Layer 1 — AI Quality &amp; Trace</strong> (Langfuse vs custom build — open decision): LLM traces, RAG spans, agent step trees, prompt versioning, faithfulness evals, feedback linkage.<br>
+      <strong>Layer 2 — Platform / Infrastructure</strong> (Kafka-direct pipeline): structured events, metrics, Kafka health, cost governance, SLO, business KPIs, anomalies.<br>
+      Both layers share a single <code style="color:var(--accent)">correlation_id</code> — any request is reconstructable across both.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ELASTICSEARCH -->
+<section id="elasticsearch">
+  <div class="section-tag">03 · Elasticsearch</div>
+  <h2 class="section-title">Index Strategy</h2>
+  <p class="section-desc">Per-LOB namespaced indices: <code style="font-size:0.9em;color:var(--accent)">ai-obs-{lob}-{category}-{YYYY.MM.dd}</code>. One document per event, keyed by <code style="font-size:0.9em;color:var(--accent)">event_id</code>. ILM: hot-warm-30d default; compliance-180d for regulated LOBs.</p>
+
+  <div class="table-wrap">
+    <div class="table-header"><span>🔍</span><h3>Elasticsearch Indices</h3></div>
+    <table>
+      <thead><tr><th>Index Pattern</th><th>Level</th><th>Purpose</th><th>Consumers</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">ai-obs-{lob}-requests-*<br>ai-obs-{lob}-errors-*</td><td><span class="pill pill-green">1 doc / event</span></td><td class="muted">Searchable operational telemetry and troubleshooting</td><td class="muted">Kibana dashboards, trace explorer, chatbot drill-down</td></tr>
+        <tr><td class="mono">ai-obs-{lob}-agent-steps-*</td><td><span class="pill pill-purple">1 doc / step</span></td><td class="muted">Failures, loop analysis, step-level visibility</td><td class="muted">Agent dashboard, RCA workflow, chatbot</td></tr>
+        <tr><td class="mono">ai-obs-{lob}-llm-calls-*</td><td><span class="pill pill-blue">1 doc / model call</span></td><td class="muted">Latency, model errors, token traces, prompt-template failures</td><td class="muted">LLM dashboard, token/cost analysis, chatbot</td></tr>
+        <tr><td class="mono">ai-obs-{lob}-tool-calls-*</td><td><span class="pill pill-yellow">1 doc / tool call</span></td><td class="muted">Tool success/failure, timeouts, retries, dependency health</td><td class="muted">Tool dashboard, incident analysis, chatbot</td></tr>
+        <tr><td class="mono">ai-obs-{lob}-rag-events-*</td><td><span class="pill pill-green">1 doc / retrieval</span></td><td class="muted">Retrieval quality, no-result rate, citation coverage, vector search</td><td class="muted">RAG dashboard, knowledge base owners, chatbot</td></tr>
+        <tr><td class="mono">ai-obs-{lob}-guardrail-events-*</td><td><span class="pill pill-red">1 doc / decision</span></td><td class="muted">Safety, policy, PII redaction, blocked-stage analysis</td><td class="muted">Guardrail dashboard, compliance review, chatbot</td></tr>
+        <tr><td class="mono">ai-obs-{lob}-feedback-*</td><td><span class="pill pill-green">1 doc / feedback</span></td><td class="muted">Fast search of feedback linked to traces and responses</td><td class="muted">Feedback dashboard, quality review, chatbot</td></tr>
+        <tr><td class="mono">ai-obs-{lob}-traces-*</td><td><span class="pill pill-purple">1 doc / span / trace</span></td><td class="muted">End-to-end trace drill-down by <code>correlation_id</code></td><td class="muted">Trace Explorer, RCA chatbot</td></tr>
+        <tr><td class="mono">ai-obs-quality-scores-*</td><td><span class="pill pill-blue">1 doc / eval</span></td><td class="muted">Faithfulness, hallucination, answer-relevance scores from eval service</td><td class="muted">Trace Explorer, RAG dashboard</td></tr>
+        <tr><td class="mono">ai-obs-anomalies-*</td><td><span class="pill pill-red">1 doc / anomaly</span></td><td class="muted">Isolation Forest + Kibana ML anomaly signals</td><td class="muted">Anomaly View dashboard (Phase 7)</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="highlight-box">
+    <div class="icon">💡</div>
+    <div>
+      <h3>Sample Queries the System Enables</h3>
+      <p>Show all failed traces for application 1234 · What errors occurred in the last 15 days? · Which requests failed with A0001? · Which tool calls timed out today? · Show the full trace for this request · Which model cost the most this week?</p>
+    </div>
+  </div>
+</section>
+
+<!-- POSTGRESQL -->
+<section id="postgresql">
+  <div class="section-tag">04 · PostgreSQL</div>
+  <h2 class="section-title">Control Plane + Event Firehose (Interim)</h2>
+  <p class="section-desc">Two separate schemas with distinct roles: <code style="color:var(--accent)">observability.*</code> is the authoritative control plane; <code style="color:var(--accent)">obs_events.*</code> is the interim event firehose (Snowflake onboarding under evaluation).</p>
+
+  <div class="deferred-banner" style="border-color:rgba(108,99,255,0.35);background:rgba(108,99,255,0.08);">
+    🔎 &nbsp;Snowflake onboarding is <strong>under evaluation</strong>. <code>obs_events.*</code> is production-ready as a bounded ~90-day window. The swap path is contained — identical <code>event_id</code>/<code>correlation_id</code> model means only the Storage Consumer + dashboard queries change.
+  </div>
+
+  <div class="tab-nav" id="pg-tabs">
+    <button class="tab-btn active" onclick="switchTab('pg','registries')">Registries</button>
+    <button class="tab-btn" onclick="switchTab('pg','metrics')">Aggregate Metrics</button>
+    <button class="tab-btn" onclick="switchTab('pg','governance')">Governance &amp; Config</button>
+    <button class="tab-btn" onclick="switchTab('pg','firehose')">obs_events (Interim)</button>
+  </div>
+
+  <div id="pg-registries" class="tab-content active">
+    <div class="table-wrap">
+      <div class="table-header"><span>📋</span><h3>Registry Tables — <code>observability.*</code></h3></div>
+      <table>
+        <thead><tr><th>Table</th><th>Level</th><th>Purpose</th><th>Consumers</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">application_registry</td><td><span class="pill pill-blue">1 row / app</span></td><td class="muted">Application ownership, filtering, access control, type classification</td><td class="muted">Dashboards, chatbot, alert routing</td></tr>
+          <tr><td class="mono">agent_registry</td><td><span class="pill pill-blue">1 row / agent</span></td><td class="muted">Agent ownership, version tracking, type classification</td><td class="muted">Agent dashboard, RCA chatbot</td></tr>
+          <tr><td class="mono">tool_registry</td><td><span class="pill pill-blue">1 row / tool/version</span></td><td class="muted">Tool metadata, SLA endpoint, SOE mapping</td><td class="muted">Tool dashboard, RCA chatbot</td></tr>
+          <tr><td class="mono">prompt_template_registry</td><td><span class="pill pill-blue">1 row / template/version</span></td><td class="muted">Prompt governance, version control, prompt_hash, A/B traffic split, status (draft/active/archived)</td><td class="muted">LLM dashboard, SDK get_prompt(), Trace Explorer</td></tr>
+          <tr><td class="mono">rag_registry</td><td><span class="pill pill-blue">1 row / knowledge base</span></td><td class="muted">Knowledge-base ownership, embedding model mapping, index name</td><td class="muted">RAG dashboard, chatbot, governance</td></tr>
+          <tr><td class="mono">error_code_catalog</td><td><span class="pill pill-blue">1 row / error pattern</span></td><td class="muted">Normalize error taxonomy; used by Enrichment stage 5</td><td class="muted">Error dashboard, chatbot</td></tr>
+          <tr><td class="mono">metric_catalog</td><td><span class="pill pill-blue">1 row / metric</span></td><td class="muted">Metric formula, source table, LOB, unit — semantic layer for chatbot</td><td class="muted">Chatbot NL queries, KPI dashboard</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div id="pg-metrics" class="tab-content">
+    <div class="table-wrap">
+      <div class="table-header"><span>📊</span><h3>Aggregate Metric Tables — <code>observability.*</code></h3></div>
+      <table>
+        <thead><tr><th>Table</th><th>Level</th><th>Purpose</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">agg_hourly_application_metrics</td><td><span class="pill pill-yellow">1 row / app / hour</span></td><td class="muted">Fast application-level rollups</td></tr>
+          <tr><td class="mono">agg_hourly_agent_metrics</td><td><span class="pill pill-yellow">1 row / agent / hour</span></td><td class="muted">Fast agent-level rollups</td></tr>
+          <tr><td class="mono">agg_hourly_tool_metrics</td><td><span class="pill pill-yellow">1 row / tool / hour</span></td><td class="muted">Fast tool health and dependency rollups</td></tr>
+          <tr><td class="mono">agg_hourly_llm_metrics</td><td><span class="pill pill-yellow">1 row / model / prompt / agent / hour</span></td><td class="muted">Token, cost, latency, model reliability rollups</td></tr>
+          <tr><td class="mono">agg_hourly_rag_metrics</td><td><span class="pill pill-yellow">1 row / RAG source / hour</span></td><td class="muted">Retrieval quality and no-result rollups</td></tr>
+          <tr><td class="mono">agg_daily_feedback_metrics</td><td><span class="pill pill-orange">1 row / agent / day</span></td><td class="muted">Feedback sentiment and quality trend rollups</td></tr>
+          <tr><td class="mono">agg_daily_kpi_metric</td><td><span class="pill pill-orange">1 row / KPI / app / agent / day</span></td><td class="muted">Business KPI values, trends, threshold status</td></tr>
+          <tr><td class="mono">daily_slo_compliance</td><td><span class="pill pill-orange">1 row / app / SLO / day</span></td><td class="muted">Burn-rate 1h + 6h, error budget consumed %, breach flag</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div id="pg-governance" class="tab-content">
+    <div class="table-wrap">
+      <div class="table-header"><span>🔐</span><h3>Governance &amp; Configuration Tables — <code>observability.*</code></h3></div>
+      <table>
+        <thead><tr><th>Table</th><th>Level</th><th>Purpose</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">budget_limits</td><td><span class="pill pill-purple">1 row / app / model / period</span></td><td class="muted">Max spend USD, alert-at percentage; triggers BUDGET_THRESHOLD_EXCEEDED</td></tr>
+          <tr><td class="mono">budget_accumulator</td><td><span class="pill pill-purple">live counter</span></td><td class="muted">Interim stand-in while Redis evaluation is pending — atomic upsert running spend. Designed to swap to Redis INCRBYFLOAT once confirmed.</td></tr>
+          <tr><td class="mono">alert_threshold</td><td><span class="pill pill-purple">1 row / alert rule</span></td><td class="muted">Metric, comparator, threshold, window for Grafana / custom alert routing</td></tr>
+          <tr><td class="mono">dashboard_config</td><td><span class="pill pill-purple">1 row / widget config</span></td><td class="muted">Dashboard metadata, filters, ownership, visibility</td></tr>
+          <tr><td class="mono">feedback_case</td><td><span class="pill pill-purple">1 row / feedback item</span></td><td class="muted">Feedback workflow (open → reviewed → fixed), linked incident, resolution status</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div id="pg-firehose" class="tab-content">
+    <div class="deferred-banner" style="border-color:rgba(108,99,255,0.35);background:rgba(108,99,255,0.08);">🔎 &nbsp;This schema bridges while Snowflake onboarding is under evaluation. Bounded ~90-day retention (monthly partitions via pg_partman). Identical event_id/correlation_id model — swap is contained to Storage Consumer + dashboard queries.</div>
+    <div class="table-wrap">
+      <div class="table-header"><span>🔥</span><h3>Event Firehose Tables — <code>obs_events.*</code></h3></div>
+      <table>
+        <thead><tr><th>Table</th><th>Partitioning</th><th>Purpose</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">obs_events.events</td><td><span class="pill pill-gray">RANGE (event_ts) monthly</span></td><td class="muted">All enriched events — JSONB payload (VARIANT stand-in). Indexed by app_id, correlation_id, event_type, GIN on payload.</td></tr>
+          <tr><td class="mono">obs_events.llm_events</td><td><span class="pill pill-gray">monthly</span></td><td class="muted">Domain columns promoted out of payload: model, tokens, cost, latency, finish_reason</td></tr>
+          <tr><td class="mono">obs_events.agent_events</td><td><span class="pill pill-gray">monthly</span></td><td class="muted">Agent-specific fields: step_count, loop_count, handoff, termination_reason</td></tr>
+          <tr><td class="mono">obs_events.rag_events</td><td><span class="pill pill-gray">monthly</span></td><td class="muted">Retrieval fields: chunk_count, relevance, no_result_flag, citation_coverage</td></tr>
+          <tr><td class="mono">obs_events.feedback_events</td><td><span class="pill pill-gray">monthly</span></td><td class="muted">Feedback fields: rating, thumbs, sentiment, category, resolution_status</td></tr>
+          <tr><td class="mono">obs_events.quality_scores</td><td><span class="pill pill-gray">monthly</span></td><td class="muted">Eval service output: faithfulness, hallucination_flag, relevance_score, judge_model</td></tr>
+          <tr><td class="mono">obs_events.slo_history</td><td><span class="pill pill-gray">monthly</span></td><td class="muted">Historical SLO compliance: burn_rate_1h, burn_rate_6h, error_budget_consumed_pct</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- S3 -->
+<section id="s3">
+  <div class="section-tag">05 · Amazon S3</div>
+  <h2 class="section-title">Object Store</h2>
+  <p class="section-desc">S3 holds large, semi-structured, or sensitive artifacts that would bloat Elasticsearch or PostgreSQL. Bucket: <code style="color:var(--accent)">ai-obs-payloads-{env}</code> — SSE-KMS, per-LOB lifecycle.</p>
+
+  <div class="table-wrap">
+    <div class="table-header"><span>📦</span><h3>S3 Prefix Catalog</h3></div>
+    <div style="padding:1rem 1.5rem">
+      <div class="s3-item"><div style="flex-shrink:0">🔒</div><div class="s3-path">redacted-prompts/<br>redacted-responses/</div><div class="s3-desc">Secure archive of large or sensitive model payloads. Complete end-to-archive beyond searchable metadata.</div><span class="pill pill-red">1 obj / request</span></div>
+      <div class="s3-item"><div style="flex-shrink:0">📄</div><div class="s3-path">raw-traces/</div><div class="s3-desc">Full trace JSON payloads. Complete end-to-end archive beyond Elasticsearch. Also receives dropped Postgres obs_events partitions (after ~90 days).</div><span class="pill pill-purple">1 obj / trace</span></div>
+      <div class="s3-item"><div style="flex-shrink:0">📚</div><div class="s3-path">rag-contexts/<br>uploaded-documents/<br>audit-evidence/</div><div class="s3-desc">Store retrieved context and multimodal artifacts without bloating ES/PG. Audit review, compliance, chatbot with access checks.</div><span class="pill pill-green">1 obj / RAG request</span></div>
+      <div class="s3-item"><div style="flex-shrink:0">🔎</div><div class="s3-path">debug-bundles/<br>rca-reports/</div><div class="s3-desc">Exportable investigation packages, nightly RCA report output, weekly digest source.</div><span class="pill pill-yellow">1 obj / incident</span></div>
+      <div class="s3-item"><div style="flex-shrink:0">📊</div><div class="s3-path">iac-dashboards/</div><div class="s3-desc">Version-controlled dashboard definitions deployed by observability-iac CI.</div><span class="pill pill-blue">IaC artifacts</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- GRAFANA -->
+<section id="grafana">
+  <div class="section-tag">06 · Grafana Ecosystem</div>
+  <h2 class="section-title">Grafana Tempo &amp; Prometheus Stack</h2>
+  <p class="section-desc">
+    Grafana is used for <strong>distributed tracing (Tempo)</strong> and <strong>infrastructure metrics (Prometheus/kube-prometheus-stack)</strong> — but <strong>not</strong> for the primary platform dashboards.
+    The custom Dashboard Service is built instead (COIN-JWT auth, per-LOB RBAC, business KPI pages that Grafana cannot model cleanly).
+  </p>
+
+  <div class="highlight-box warn">
+    <div class="icon">⚠️</div>
+    <div>
+      <h3>Grafana Dashboards are OFF — by design</h3>
+      <p>kube-prometheus-stack is deployed with <code style="color:var(--accent3)">grafana.enabled=false</code>. Prometheus metrics are scraped by the Custom Dashboard Service backend via PromQL. Grafana's visualization layer is replaced by the custom FastAPI + React + Tremor dashboard (§Custom Dashboard Service). The choice: COIN-JWT auth + per-LOB RBAC + business-KPI pages + Observability Chatbot integration don't fit Grafana's model.</p>
+    </div>
+  </div>
+
+  <div class="grafana-split">
+
+    <div class="card">
+      <div class="card-icon">🔭</div>
+      <div class="card-title">Grafana Tempo — Distributed Traces</div>
+      <span class="card-tech tech-grafana">Grafana Tempo · OTEL → S3 backend</span>
+      <p class="card-desc" style="margin-bottom:1rem">Receives OTEL spans from all 8 services via auto-instrumentation (FastAPI/httpx/asyncpg). S3 backend at ~$5/mo per million spans/day. Cross-service span view via TraceQL. Keyed by the same <code style="color:var(--accent)">correlation_id</code> as the event pipeline.</p>
+      <div style="display:flex;flex-direction:column;gap:0.4rem">
+        <div class="pipeline-step" style="background:rgba(255,111,0,0.05);border-color:rgba(255,111,0,0.2)"><div class="pipeline-name" style="font-size:0.82rem">OTEL Auto-Instrumentation</div><div class="pipeline-desc">FastAPI server spans, outbound httpx spans, asyncpg query spans</div></div>
+        <div class="pipeline-step" style="background:rgba(255,111,0,0.05);border-color:rgba(255,111,0,0.2)"><div class="pipeline-name" style="font-size:0.82rem">W3C traceparent propagation</div><div class="pipeline-desc">Injected on every outbound call + Kafka message header</div></div>
+        <div class="pipeline-step" style="background:rgba(255,111,0,0.05);border-color:rgba(255,111,0,0.2)"><div class="pipeline-name" style="font-size:0.82rem">Grafana Tempo (720h retention)</div><div class="pipeline-desc">Cross-service infra spans — complementary to the AI-quality Trace Explorer</div></div>
+        <div class="pipeline-step" style="background:rgba(255,111,0,0.05);border-color:rgba(255,111,0,0.2)"><div class="pipeline-name" style="font-size:0.82rem">Chosen over Jaeger</div><div class="pipeline-desc">S3 backend ~10× cheaper than Jaeger/Cassandra at our span volume + native TraceQL</div></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-icon">📈</div>
+      <div class="card-title">kube-prometheus-stack — Infra Metrics</div>
+      <span class="card-tech tech-grafana">kube-prometheus-stack · grafana.enabled=false</span>
+      <p class="card-desc" style="margin-bottom:1rem">Industry-standard Helm chart for K8s infrastructure metrics. Grafana visualization disabled — Prometheus is scraped directly by the Custom Dashboard backend via PromQL queries.</p>
+      <div style="display:flex;flex-direction:column;gap:0.4rem">
+        <div class="pipeline-step" style="background:rgba(255,111,0,0.05);border-color:rgba(255,111,0,0.2)"><div class="pipeline-name" style="font-size:0.82rem">prometheus-fastapi-instrumentator</div><div class="pipeline-desc">One line per service → auto p50/p95/p99 HTTP latency histograms</div></div>
+        <div class="pipeline-step" style="background:rgba(255,111,0,0.05);border-color:rgba(255,111,0,0.2)"><div class="pipeline-name" style="font-size:0.82rem">kminion → Prometheus</div><div class="pipeline-desc">Kafka consumer lag per topic/partition/group — watches all 3 consumer groups</div></div>
+        <div class="pipeline-step" style="background:rgba(255,111,0,0.05);border-color:rgba(255,111,0,0.2)"><div class="pipeline-name" style="font-size:0.82rem">Pod CPU / memory / restarts</div><div class="pipeline-desc">Crash-loop detection, GLiNER memory pressure, DB pool gauges</div></div>
+        <div class="pipeline-step" style="background:rgba(255,111,0,0.05);border-color:rgba(255,111,0,0.2)"><div class="pipeline-name" style="font-size:0.82rem">Alert thresholds</div><div class="pipeline-desc">Consumer lag > 1000 sustained 10m → page. DLQ rate > 1% → runbook trigger.</div></div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="table-wrap">
+    <div class="table-header"><span>🌡️</span><h3>Grafana Tempo vs Trace Explorer — Two Complementary Views</h3></div>
+    <table>
+      <thead><tr><th>Dimension</th><th>Grafana Tempo</th><th>Custom Trace Explorer (Phase Q)</th></tr></thead>
+      <tbody>
+        <tr><td class="muted">What it shows</td><td class="muted">Cross-service infra spans (HTTP, DB, outbound calls)</td><td class="muted">AI-quality business trace tree (tokens, cost, prompt version, eval scores, feedback)</td></tr>
+        <tr><td class="muted">Data source</td><td class="muted">OTEL auto-instrumentation → Tempo (S3)</td><td class="muted">ES event indices + obs_events.quality_scores + observability.feedback_case</td></tr>
+        <tr><td class="muted">Key identifier</td><td class="muted"><code style="color:var(--accent)">correlation_id</code> / W3C trace_id</td><td class="muted"><code style="color:var(--accent)">correlation_id</code> (same value)</td></tr>
+        <tr><td class="muted">Best for</td><td class="muted">Latency breakdown, DB slow queries, service-to-service hop timing</td><td class="muted">Why did the LLM respond this way? What prompt version? Was the RAG retrieval faithful?</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- KIBANA -->
+<section id="kibana">
+  <div class="section-tag">07 · Kibana</div>
+  <h2 class="section-title">Dashboard Catalog</h2>
+  <p class="section-desc">Kibana is the operational search and event analytics interface, backed directly by Elasticsearch indices. Handles error drill-down, Kibana ML log anomalies, and error fingerprint grouping.</p>
+
+  <div class="cards-grid">
+    <div class="card"><div class="card-icon">🌐</div><div class="card-title">Platform Overview Dashboard</div><div style="margin-bottom:0.75rem;display:flex;gap:0.4rem;flex-wrap:wrap"><span class="pill pill-purple">requests-*</span><span class="pill pill-red">errors-*</span></div><p class="card-desc">Request count, response code, error count, error trend. Platform team &amp; app owners.</p></div>
+    <div class="card"><div class="card-icon">📱</div><div class="card-title">Application Dashboard</div><div style="margin-bottom:0.75rem;display:flex;gap:0.4rem;flex-wrap:wrap"><span class="pill pill-purple">requests-*</span><span class="pill pill-yellow">feedback-*</span></div><p class="card-desc">Application/CSI-level health — errors by app, request-to-error ratio, processing time.</p></div>
+    <div class="card"><div class="card-icon">🕵️</div><div class="card-title">Agent Dashboard</div><div style="margin-bottom:0.75rem"><span class="pill pill-green">agent-steps-*</span></div><p class="card-desc">Agent failures, loop counts, handoff latency. Step-level execution visibility.</p></div>
+    <div class="card"><div class="card-icon">🧠</div><div class="card-title">LLM Dashboard</div><div style="margin-bottom:0.75rem"><span class="pill pill-blue">llm-calls-*</span></div><p class="card-desc">Model usage, latency, tokens, provider errors, prompt-template failure rate.</p></div>
+    <div class="card"><div class="card-icon">🔧</div><div class="card-title">Tool Dashboard</div><div style="margin-bottom:0.75rem"><span class="pill pill-yellow">tool-calls-*</span></div><p class="card-desc">Tool failures, timeout rate, retry rate, p95 latency. Dependency health.</p></div>
+    <div class="card"><div class="card-icon">📖</div><div class="card-title">RAG Dashboard</div><div style="margin-bottom:0.75rem"><span class="pill pill-green">rag-events-*</span></div><p class="card-desc">No-result rate, relevance score, citation coverage. Retrieval and grounding quality.</p></div>
+    <div class="card"><div class="card-icon">🛡️</div><div class="card-title">Guardrail Dashboard</div><div style="margin-bottom:0.75rem"><span class="pill pill-red">guardrail-events-*</span></div><p class="card-desc">Blocks, redactions, policy violations. Policy and safety decisions.</p></div>
+    <div class="card"><div class="card-icon">🔗</div><div class="card-title">Trace Explorer</div><div style="margin-bottom:0.75rem"><span class="pill pill-purple">traces-*</span></div><p class="card-desc">End-to-end drill-down — timeline of request → agent → tool/LLM/RAG → response.</p></div>
+  </div>
+</section>
+
+<!-- TELEMETRY -->
+<section id="telemetry">
+  <div class="section-tag">08 · Telemetry Data Model</div>
+  <h2 class="section-title">8 Telemetry Streams</h2>
+  <p class="section-desc">50 event types across 8 telemetry schemas. All share one mandatory envelope: <code style="color:var(--accent)">event_id, event_type, schema_version, timestamp, correlation_id, span_id, service_name, environment, usecase_id, lob, status, latency_ms</code>.</p>
+
+  <div class="telem-grid">
+
+    <div class="telem-card">
+      <div class="telem-head"><div class="icon">📨</div><h3>Kafka Telemetry</h3></div>
+      <div class="telem-fields">
+        <span class="telem-field">topic</span><span class="telem-field">partition</span><span class="telem-field">offset</span><span class="telem-field">consumer_group</span><span class="telem-field">producer_latency_ms</span><span class="telem-field">consumer_latency_ms</span><span class="telem-field">kafka_lag</span><span class="telem-field">message_size_bytes</span><span class="telem-field">retry_count</span><span class="telem-field">dlq_flag</span>
+      </div>
+    </div>
+
+    <div class="telem-card">
+      <div class="telem-head"><div class="icon">🕵️</div><h3>Agent Telemetry</h3></div>
+      <div class="telem-fields">
+        <span class="telem-field">agent_id</span><span class="telem-field">agent_version</span><span class="telem-field">agent_type</span><span class="telem-field">agent_execution_mode</span><span class="telem-field">step_count</span><span class="telem-field">loop_count</span><span class="telem-field">handoff_count</span><span class="telem-field">planner_decision</span><span class="telem-field">agent_status</span><span class="telem-field">agent_latency</span><span class="telem-field">termination_reason</span><span class="telem-field">tools_used</span><span class="telem-field">models_used</span><span class="telem-field">rag_knowledge_bases</span><span class="telem-field">feedback_score</span>
+      </div>
+      <div class="telem-metrics">
+        <div class="label">KPIs</div>
+        <div class="telem-kpi-list"><span class="telem-kpi">Agent success rate</span><span class="telem-kpi">Failure rate</span><span class="telem-kpi">Avg steps / request</span><span class="telem-kpi">Multi-agent handoff %</span><span class="telem-kpi">Cost per agent run</span></div>
+      </div>
+    </div>
+
+    <div class="telem-card">
+      <div class="telem-head"><div class="icon">🧠</div><h3>LLM Telemetry</h3></div>
+      <div class="telem-fields">
+        <span class="telem-field">model_provider</span><span class="telem-field">model_name</span><span class="telem-field">model_version</span><span class="telem-field">prompt_template_id</span><span class="telem-field">prompt_version</span><span class="telem-field">prompt_hash</span><span class="telem-field">temperature</span><span class="telem-field">input_tokens</span><span class="telem-field">output_tokens</span><span class="telem-field">total_tokens</span><span class="telem-field">estimated_cost_usd</span><span class="telem-field">latency_ms</span><span class="telem-field">time_to_first_token_ms</span><span class="telem-field">retry_count</span><span class="telem-field">rate_limit_hit</span><span class="telem-field">safety_blocked</span><span class="telem-field">finish_reason</span><span class="telem-field">llm_error_code</span>
+      </div>
+    </div>
+
+    <div class="telem-card">
+      <div class="telem-head"><div class="icon">🔧</div><h3>Tool-Call Telemetry</h3></div>
+      <div class="telem-fields">
+        <span class="telem-field">tool_id</span><span class="telem-field">tool_name</span><span class="telem-field">tool_version</span><span class="telem-field">tool_type</span><span class="telem-field">input_schema_valid</span><span class="telem-field">status</span><span class="telem-field">http_status</span><span class="telem-field">error_code</span><span class="telem-field">latency_ms</span><span class="telem-field">retry_count</span><span class="telem-field">response_size_bytes</span><span class="telem-field">called_by_agent_id</span>
+      </div>
+      <div class="telem-metrics">
+        <div class="label">Tool Types</div>
+        <div class="telem-kpi-list"><span class="telem-kpi">REST</span><span class="telem-kpi">DB</span><span class="telem-kpi">ServiceNow</span><span class="telem-kpi">RAG</span><span class="telem-kpi">Internal API</span></div>
+      </div>
+    </div>
+
+    <div class="telem-card">
+      <div class="telem-head"><div class="icon">📖</div><h3>RAG Telemetry</h3></div>
+      <div class="telem-fields">
+        <span class="telem-field">query_hash</span><span class="telem-field">embedding_model</span><span class="telem-field">vector_db_index</span><span class="telem-field">top_k</span><span class="telem-field">chunk_count</span><span class="telem-field">reranker_score</span><span class="telem-field">latency</span><span class="telem-field">citation_coverage</span><span class="telem-field">source_docs_used</span><span class="telem-field">context_tokens</span><span class="telem-field">truncation_flag</span><span class="telem-field">answer_relevance</span><span class="telem-field">faithfulness</span><span class="telem-field">access_filter</span><span class="telem-field">no_result_flag</span>
+      </div>
+      <div class="telem-metrics">
+        <div class="label">KPIs</div>
+        <div class="telem-kpi-list"><span class="telem-kpi">RAG hit rate</span><span class="telem-kpi">No-result rate</span><span class="telem-kpi">Avg relevance score</span><span class="telem-kpi">Citation coverage %</span><span class="telem-kpi">Context truncation rate</span><span class="telem-kpi">RAG feedback score</span></div>
+      </div>
+    </div>
+
+    <div class="telem-card">
+      <div class="telem-head"><div class="icon">🛡️</div><h3>Guardrail Telemetry</h3></div>
+      <div class="telem-fields">
+        <span class="telem-field">policy_id</span><span class="telem-field">policy_version</span><span class="telem-field">decision</span><span class="telem-field">risk_score</span><span class="telem-field">violation_type</span><span class="telem-field">redaction_applied</span><span class="telem-field">blocked_stage</span><span class="telem-field">guardrail_latency</span><span class="telem-field">false_positive_feedback</span>
+      </div>
+      <div class="telem-metrics">
+        <div class="label">Decision Types</div>
+        <div class="telem-kpi-list"><span class="telem-kpi">allow</span><span class="telem-kpi">block</span><span class="telem-kpi">redact</span><span class="telem-kpi">escalate</span></div>
+      </div>
+    </div>
+
+    <div class="telem-card">
+      <div class="telem-head"><div class="icon">🧩</div><h3>Memory Telemetry</h3></div>
+      <div class="telem-fields">
+        <span class="telem-field">memory_read_count</span><span class="telem-field">memory_write_count</span><span class="telem-field">retrieval_latency</span><span class="telem-field">memory_hit_rate</span><span class="telem-field">memory_miss_rate</span><span class="telem-field">memory_source</span><span class="telem-field">memory_update_status</span><span class="telem-field">deletion_audit_events</span>
+      </div>
+      <div class="telem-metrics">
+        <div class="label">Memory Sources</div>
+        <div class="telem-kpi-list"><span class="telem-kpi">session</span><span class="telem-kpi">long-term</span><span class="telem-kpi">episodic</span></div>
+      </div>
+    </div>
+
+    <div class="telem-card">
+      <div class="telem-head"><div class="icon">⭐</div><h3>User Feedback Telemetry</h3></div>
+      <div class="telem-fields">
+        <span class="telem-field">feedback_id</span><span class="telem-field">correlation_id</span><span class="telem-field">usecase_id</span><span class="telem-field">agent_id</span><span class="telem-field">response_id</span><span class="telem-field">rating (1-5)</span><span class="telem-field">thumbs (up/down)</span><span class="telem-field">sentiment</span><span class="telem-field">feedback_category</span><span class="telem-field">free_text_redacted</span><span class="telem-field">resolution_status</span>
+      </div>
+      <div class="telem-metrics">
+        <div class="label">Categories</div>
+        <div class="telem-kpi-list"><span class="telem-kpi">wrong answer</span><span class="telem-kpi">slow</span><span class="telem-kpi">tool failed</span><span class="telem-kpi">irrelevant</span><span class="telem-kpi">unsafe</span></div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- DASHBOARDS -->
+<section id="dashboards">
+  <div class="section-tag">09 · Dashboard Design</div>
+  <h2 class="section-title">Custom Dashboard Service + Kibana</h2>
+  <p class="section-desc">The Custom Dashboard Service (FastAPI + React + Tremor, COIN-JWT auth, per-LOB RBAC) is the primary surface. Kibana handles operational search. Neither uses Grafana's visualization layer.</p>
+
+  <div class="dash-grid">
+    <div class="dash-card">
+      <div class="dash-head" style="background:linear-gradient(90deg,rgba(108,99,255,0.1) 0%,transparent 100%)"><h3>🌐 Usecase / Overview Dashboard</h3></div>
+      <div class="dash-body">
+        <div class="metric-row"><span class="metric-name">Total requests / Successful responses</span><span class="metric-badge">Request count</span></div>
+        <div class="metric-row"><span class="metric-name">Total errors / Error rate</span><span class="metric-badge">Error count</span></div>
+        <div class="metric-row"><span class="metric-name">Average latency / P95 / P99</span><span class="metric-badge">Processing time</span></div>
+        <div class="metric-row"><span class="metric-name">Token usage / Cost over time</span><span class="metric-badge">Cost governance</span></div>
+        <div class="metric-row"><span class="metric-name">Top failing agents / tools</span><span class="metric-badge">Requests by SOEID</span></div>
+        <div class="metric-row"><span class="metric-name">Application success rate</span><span class="metric-badge">Errors by application</span></div>
+      </div>
+    </div>
+    <div class="dash-card">
+      <div class="dash-head" style="background:linear-gradient(90deg,rgba(0,212,170,0.1) 0%,transparent 100%)"><h3>🕵️ Agent Observability</h3></div>
+      <div class="dash-body">
+        <div class="metric-row"><span class="metric-name">Agent request count</span><span class="metric-badge">Trace timeline</span></div>
+        <div class="metric-row"><span class="metric-name">Agent success / failure rate</span><span class="metric-badge">Planner decision</span></div>
+        <div class="metric-row"><span class="metric-name">Steps per request</span><span class="metric-badge">Tool / LLM calls</span></div>
+        <div class="metric-row"><span class="metric-name">Loop count / handoffs</span><span class="metric-badge">RAG calls</span></div>
+        <div class="metric-row"><span class="metric-name">Multi-agent handoff %</span><span class="metric-badge">Feedback → trace</span></div>
+        <div class="metric-row"><span class="metric-name">Avg agent latency</span><span class="metric-badge">Cost per agent run</span></div>
+      </div>
+    </div>
+    <div class="dash-card">
+      <div class="dash-head" style="background:linear-gradient(90deg,rgba(255,217,61,0.08) 0%,transparent 100%)"><h3>💰 LLM / Token / Cost Dashboard</h3></div>
+      <div class="dash-body">
+        <div class="metric-row"><span class="metric-name">Total LLM calls</span><span class="metric-badge">Calls by model/app</span></div>
+        <div class="metric-row"><span class="metric-name">Input / Output / Total tokens</span><span class="metric-badge">Cost by model</span></div>
+        <div class="metric-row"><span class="metric-name">Cost by application</span><span class="metric-badge">Cost per response</span></div>
+        <div class="metric-row"><span class="metric-name">LLM errors / Safety blocks</span><span class="metric-badge">Rate-limit errors</span></div>
+        <div class="metric-row"><span class="metric-name">Prompt template failure rate</span><span class="metric-badge">LLM p50/p90/p99</span></div>
+      </div>
+    </div>
+    <div class="dash-card">
+      <div class="dash-head" style="background:linear-gradient(90deg,rgba(78,205,196,0.1) 0%,transparent 100%)"><h3>📖 RAG Observability</h3></div>
+      <div class="dash-body">
+        <div class="metric-row"><span class="metric-name">RAG hit rate</span><span class="metric-badge">No-result rate</span></div>
+        <div class="metric-row"><span class="metric-name">Avg relevance score</span><span class="metric-badge">Citation coverage %</span></div>
+        <div class="metric-row"><span class="metric-name">Context truncation rate</span><span class="metric-badge">Retrieval latency</span></div>
+        <div class="metric-row"><span class="metric-name">Faithfulness score (LLM-as-judge)</span><span class="metric-badge">RAG feedback score</span></div>
+        <div class="metric-row"><span class="metric-name">Top knowledge bases</span><span class="metric-badge">Top failed queries</span></div>
+      </div>
+    </div>
+    <div class="dash-card">
+      <div class="dash-head" style="background:linear-gradient(90deg,rgba(255,107,107,0.1) 0%,transparent 100%)"><h3>🚨 Error Dashboard</h3></div>
+      <div class="dash-body">
+        <div class="metric-row"><span class="metric-name">Error count / Error rate</span><span class="metric-badge">HTTP 400/500 split</span></div>
+        <div class="metric-row"><span class="metric-name">Error code distribution</span><span class="metric-badge">Top error descriptions</span></div>
+        <div class="metric-row"><span class="metric-name">Errors by application / agent</span><span class="metric-badge">Errors by tool</span></div>
+        <div class="metric-row"><span class="metric-name">Errors by SOEID</span><span class="metric-badge">Errors by model</span></div>
+        <div class="metric-row"><span class="metric-name">Error fingerprint grouping (ES)</span><span class="metric-badge">Errors by time</span></div>
+      </div>
+    </div>
+    <div class="dash-card">
+      <div class="dash-head" style="background:linear-gradient(90deg,rgba(255,179,0,0.08) 0%,transparent 100%)"><h3>📊 Business KPI Dashboard</h3></div>
+      <div class="dash-body">
+        <div class="metric-row"><span class="metric-name">KPI name / Formula</span><span class="metric-badge">Source system</span></div>
+        <div class="metric-row"><span class="metric-name">Decision status</span><span class="metric-badge">Business objective</span></div>
+        <div class="metric-row"><span class="metric-name">Threshold alerts</span><span class="metric-badge">Trend rollups</span></div>
+        <div class="metric-row"><span class="metric-name">Required attributes</span><span class="metric-badge">Evidence</span></div>
+        <div class="metric-row"><span class="metric-name">Dashboard visualization</span><span class="metric-badge">Budget vs actuals</span></div>
+      </div>
+    </div>
+    <div class="dash-card">
+      <div class="dash-head" style="background:linear-gradient(90deg,rgba(108,99,255,0.1) 0%,transparent 100%)"><h3>⭐ User Feedback Dashboard</h3></div>
+      <div class="dash-body">
+        <div class="metric-row"><span class="metric-name">Total / Positive / Negative feedback</span><span class="metric-badge">Rating average</span></div>
+        <div class="metric-row"><span class="metric-name">Feedback by application / tool</span><span class="metric-badge">Feedback by model</span></div>
+        <div class="metric-row"><span class="metric-name">Fix-cycle time</span><span class="metric-badge">Feedback by RAG KB</span></div>
+        <div class="metric-row"><span class="metric-name">Negative feedback categories</span><span class="metric-badge">Resolution status</span></div>
+      </div>
+    </div>
+    <div class="dash-card">
+      <div class="dash-head" style="background:linear-gradient(90deg,rgba(0,212,170,0.08) 0%,transparent 100%)"><h3>🔧 Tool Observability</h3></div>
+      <div class="dash-body">
+        <div class="metric-row"><span class="metric-name">Total tool calls</span><span class="metric-badge">Tool success rate</span></div>
+        <div class="metric-row"><span class="metric-name">Tool failure rate / timeout rate</span><span class="metric-badge">Latency p95</span></div>
+        <div class="metric-row"><span class="metric-name">Retry rate</span><span class="metric-badge">Last Failed Trace</span></div>
+        <div class="metric-row"><span class="metric-name">Most used tools</span><span class="metric-badge">Tools by agent</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ROADMAP -->
+<section id="roadmap">
+  <div class="section-tag">10 · Delivery Roadmap</div>
+  <h2 class="section-title">8 Phases — All Planned</h2>
+  <p class="section-desc">Weeks are indicative effort, not committed dates. Phases 2–4 and Phase Q overlap. Nothing is marked complete — all work is ahead of us.</p>
+
+  <div class="deferred-banner">
+    ⚠️ &nbsp;No phase is complete. All checkboxes are open. Status = Planned. Weeks are relative effort, not calendar dates.
+  </div>
+
+  <div class="timeline">
+
+    <div class="tl-item">
+      <div class="tl-dot planned"></div>
+      <div class="tl-content">
+        <div class="tl-phase planned">Phase 0 · Planned</div>
+        <div class="tl-title">Foundation — Infrastructure &amp; Contract</div>
+        <div class="tl-weeks">Weeks 1–3 · WS-A, WS-X</div>
+        <ul class="tl-items">
+          <li>Freeze ObsEvent model + 50-type EventType enum</li>
+          <li>Create Kafka topics (raw / processed / dead-letter)</li>
+          <li>Apply PostgreSQL <code>observability</code> schema + seed catalogs</li>
+          <li>Apply PostgreSQL <code>obs_events</code> schema (interim Snowflake)</li>
+          <li>Apply Elasticsearch index templates + ILM via IaC</li>
+          <li>Create S3 buckets + lifecycle (SSE-KMS)</li>
+          <li>Confirm interim Redis stand-ins (Postgres budget_accumulator + in-process TTL cache)</li>
+          <li>Scaffold <code>observability-iac</code> CI pipeline</li>
+          <li>Provision Grafana Tempo (S3 backend) + Prometheus + kminion + Fluent Bit DaemonSet</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="tl-item">
+      <div class="tl-dot planned"></div>
+      <div class="tl-content">
+        <div class="tl-phase planned">Phase 1 · Planned</div>
+        <div class="tl-title">Shared SDK — ai-observability-sdk</div>
+        <div class="tl-weeks">Weeks 3–6 · WS-B</div>
+        <ul class="tl-items">
+          <li><code>emit_event()</code> confluent-kafka fire-and-forget producer</li>
+          <li><code>init_tracing()</code> OTEL + W3C traceparent + Grafana Tempo OTLP</li>
+          <li><code>configure_logging()</code> structlog JSON + contextvars</li>
+          <li>ObservabilityMiddleware (binds correlation_id, exposes /metrics)</li>
+          <li><code>@trace_llm / @trace_rag / @trace_agent / @trace_tool</code> decorators</li>
+          <li><code>get_prompt()</code> prompt registry fetch + prompt_hash</li>
+          <li>Unit + contract tests; CI gate on schema validation</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="tl-item">
+      <div class="tl-dot planned"></div>
+      <div class="tl-content">
+        <div class="tl-phase planned">Phase 2 · Planned</div>
+        <div class="tl-title">Per-Service Instrumentation — All 8 Services</div>
+        <div class="tl-weeks">Weeks 4–8 · WS-C</div>
+        <ul class="tl-items">
+          <li>Agentic Orchestration — LLM cost/tokens, agent events</li>
+          <li>Agent Executor — numeric latency_ms, estimated_cost, finish_reason</li>
+          <li>GSSP GS — cost calc, file/attachment telemetry</li>
+          <li>GSSP QS — RAG quality fields, cache-miss cost</li>
+          <li>GSSP RS — per-stage latency, embedding model/tokens/cost</li>
+          <li>Consumer Service — first Kafka emission, document telemetry, queue depth</li>
+          <li>Data Ingestion — success-path events, UTC timestamps, cost</li>
+          <li>User Feedback — FEEDBACK_SUBMITTED event, correlation_id linkage, redaction</li>
+          <li>No plaintext SOE_ID / raw body in any raw topic sample</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="tl-item">
+      <div class="tl-dot planned"></div>
+      <div class="tl-content">
+        <div class="tl-phase planned">Phase 3 · Planned</div>
+        <div class="tl-title">Enrichment Consumer — obs-enrichment-consumer</div>
+        <div class="tl-weeks">Weeks 6–10 · WS-D</div>
+        <ul class="tl-items">
+          <li>9-stage pipeline (validate → trace-ctx → PII redact → enrich → errmap → cost → S3 → SLO → quality-hook)</li>
+          <li>GLiNER in-process NER (loads once at startup, ~512Mi)</li>
+          <li>Postgres budget_accumulator atomic upsert (no Redis)</li>
+          <li>BUDGET_THRESHOLD_EXCEEDED event on cap breach</li>
+          <li>Invalid events → ai-obs-dead-letter with reason + replay path</li>
+          <li>SLO burn-rate 1h + 6h → daily_slo_compliance row</li>
+          <li>K8s: 3 replicas, manual commit (commit only after produce to processed)</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="tl-item">
+      <div class="tl-dot planned"></div>
+      <div class="tl-content">
+        <div class="tl-phase planned">Phase 4 · Planned</div>
+        <div class="tl-title">Storage Consumer + Stores</div>
+        <div class="tl-weeks">Weeks 8–12 · WS-E</div>
+        <ul class="tl-items">
+          <li>obs-storage-consumer fan-out: ES (hot, per-LOB) + obs_events.* (PG interim) + S3 payloads</li>
+          <li>Control-plane rows → observability.* (budget/SLO)</li>
+          <li>Idempotent writes (ES _id=event_id, PG ON CONFLICT DO NOTHING)</li>
+          <li>obs_events batch writer (5s/1000 rows COPY → staging)</li>
+          <li>Monthly partition creation via pg_partman</li>
+          <li>kminion shows all 3 consumer groups (enrichment, storage, eval)</li>
+          <li>Dead-letter replay script verified</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="tl-item">
+      <div class="tl-dot planned"></div>
+      <div class="tl-content">
+        <div class="tl-phase planned">Phase Q · Planned (overlaps Phase 4–5)</div>
+        <div class="tl-title">Custom AI Quality &amp; Trace Layer (replaces Langfuse)</div>
+        <div class="tl-weeks">Weeks 10–15 · WS-Q · Open decision: Langfuse vs custom build</div>
+        <ul class="tl-items">
+          <li>Prompt registry CRUD + version diff + A/B traffic split</li>
+          <li>obs-eval-service worker — faithfulness, hallucination, answer-relevance judges</li>
+          <li>LLM-as-judge output → ai-obs-quality-scores-* + obs_events.quality_scores</li>
+          <li>Trace Explorer API GET /api/v1/trace/{correlation_id}</li>
+          <li>React waterfall/tree page with per-span timing, tokens, cost, prompt version, eval scores</li>
+          <li>Feedback → trace join surfaced in Trace Explorer</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="tl-item">
+      <div class="tl-dot planned"></div>
+      <div class="tl-content">
+        <div class="tl-phase planned">Phase 5 · Planned</div>
+        <div class="tl-title">Presentation — Custom Dashboard + Kibana</div>
+        <div class="tl-weeks">Weeks 12–16 · WS-F</div>
+        <ul class="tl-items">
+          <li>Custom Dashboard Service live (FastAPI + React + Tremor)</li>
+          <li>COIN-JWT auth + per-LOB index-level RBAC</li>
+          <li>Pages: Platform Overview, Cost Governance, Business KPIs, Kafka Health, RAG Quality, Anomaly View, Feedback Trends, Trace Explorer</li>
+          <li>All 8 Kibana dashboards live with per-LOB isolation</li>
+          <li>Prometheus scraping via custom dashboard backend (PromQL)</li>
+          <li>kube-prometheus-stack grafana.enabled=false confirmed</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="tl-item">
+      <div class="tl-dot planned"></div>
+      <div class="tl-content">
+        <div class="tl-phase planned">Phase 6 · Planned</div>
+        <div class="tl-title">Observability Chatbot — obs-chatbot</div>
+        <div class="tl-weeks">Weeks 15–19 · WS-G</div>
+        <ul class="tl-items">
+          <li>IntentClassifier (internal LLM)</li>
+          <li>MetricSemanticLayer (metric_catalog)</li>
+          <li>AccessController (LOB RBAC from application_registry)</li>
+          <li>QueryPlanner (obs_events / ES / S3 / Trace Explorer API)</li>
+          <li>AnswerGenerator with source attribution + dashboard deep-links</li>
+          <li>Natural-language answers joining AI-quality + infra context on correlation_id</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="tl-item">
+      <div class="tl-dot optional"></div>
+      <div class="tl-content">
+        <div class="tl-phase optional">Phase 7 · Optional — Planned</div>
+        <div class="tl-title">Advanced: Anomaly Detection + Batch RCA</div>
+        <div class="tl-weeks">Weeks 19–24 · WS-H · Not on current architecture diagram — scoped as optional</div>
+        <ul class="tl-items">
+          <li>Custom Isolation Forest + Kibana ML log anomaly detection</li>
+          <li>Anomaly events → ai-obs-anomalies-* → Anomaly View page</li>
+          <li>Nightly RCA CronJob — join errors ↔ traces ↔ KPI aggregates</li>
+          <li>RCA report → S3 rca-reports/ + weekly Slack/email digest</li>
+          <li>LSTM for metric-level anomalies (advanced)</li>
+        </ul>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- MILESTONE TABLE -->
+  <div class="table-wrap" style="margin-top:3rem">
+    <div class="table-header"><span>📅</span><h3>Milestone Summary</h3></div>
+    <table>
+      <thead><tr><th>Phase</th><th>Weeks</th><th>Exit Signal</th><th>Status</th></tr></thead>
+      <tbody>
+        <tr><td>Phase 0 — Foundation</td><td>1–3</td><td class="muted">Contract frozen; infra live; CI green</td><td><span class="pill pill-gray">Planned</span></td></tr>
+        <tr><td>Phase 1 — Shared SDK</td><td>3–6</td><td class="muted">One import → emit + trace + log + prompt works</td><td><span class="pill pill-gray">Planned</span></td></tr>
+        <tr><td>Phase 2 — Instrumentation</td><td>4–8</td><td class="muted">Full event chain per request across all 8 services</td><td><span class="pill pill-gray">Planned</span></td></tr>
+        <tr><td>Phase 3 — Enrichment</td><td>6–10</td><td class="muted">raw→processed redacted/enriched/costed; DLQ works</td><td><span class="pill pill-gray">Planned</span></td></tr>
+        <tr><td>Phase 4 — Storage</td><td>8–12</td><td class="muted">ES + obs_events (PG) + S3 populated; dedup + replay verified</td><td><span class="pill pill-gray">Planned</span></td></tr>
+        <tr><td>Phase Q — AI Quality</td><td>10–15</td><td class="muted">Trace Explorer + prompt versioning + eval scores</td><td><span class="pill pill-gray">Planned</span></td></tr>
+        <tr><td>Phase 5 — Presentation</td><td>12–16</td><td class="muted">Dashboards + Kibana, COIN-JWT RBAC enforced</td><td><span class="pill pill-gray">Planned</span></td></tr>
+        <tr><td>Phase 6 — Chatbot</td><td>15–19</td><td class="muted">NL queries answered with sources + dashboard deep-links</td><td><span class="pill pill-gray">Planned</span></td></tr>
+        <tr><td>Phase 7 — Anomaly + RCA</td><td>19–24</td><td class="muted">Anomaly view + weekly RCA digest</td><td><span class="pill pill-yellow">Optional</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<footer>
+  AI Services Platform · Observability Plane · Storage Component &nbsp;·&nbsp;
+  <span class="glow-dot yellow"></span>&nbsp; All phases planned — no work complete &nbsp;·&nbsp;
+  Generated 2026-06-29
+</footer>
+
+<script>
+  function switchTab(group, id) {
+    document.querySelectorAll(`[id^="${group}-"]`).forEach(el => el.classList.remove('active'));
+    document.getElementById(`${group}-${id}`).classList.add('active');
+    const nav = document.getElementById(`${group}-tabs`);
+    nav.querySelectorAll('.tab-btn').forEach(btn => {
+      const key = id === 'firehose' ? 'obs_events' : id.substring(0,4);
+      btn.classList.toggle('active', btn.textContent.toLowerCase().includes(key.toLowerCase()));
+    });
+  }
+
+  // Nav active on scroll
+  const sections = document.querySelectorAll('section[id]');
+  const navLinks = document.querySelectorAll('.nav-links a');
+  const obs = new IntersectionObserver(entries => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        navLinks.forEach(a => a.classList.remove('active'));
+        const link = document.querySelector(`.nav-links a[href="#${e.target.id}"]`);
+        if (link) link.classList.add('active');
+      }
+    });
+  }, { threshold: 0.3 });
+  sections.forEach(s => obs.observe(s));
+
+  // Scroll-in fade animations — skip elements already in view on load
+  const fadeObs = new IntersectionObserver(entries => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        e.target.style.opacity = '1';
+        e.target.style.transform = 'translateY(0)';
+        fadeObs.unobserve(e.target);
+      }
+    });
+  }, { threshold: 0.06, rootMargin: '0px 0px -20px 0px' });
+
+  // Small delay so the observer fires before we hide anything
+  requestAnimationFrame(() => {
+    document.querySelectorAll('.card, .telem-card, .dash-card, .tl-item, .table-wrap, .highlight-box, .pipeline-step, .deferred-banner').forEach(el => {
+      const rect = el.getBoundingClientRect();
+      // Only animate elements that start below the fold
+      if (rect.top > window.innerHeight * 0.95) {
+        el.style.opacity = '0';
+        el.style.transform = 'translateY(18px)';
+        el.style.transition = 'opacity 0.5s ease, transform 0.5s ease';
+      }
+      fadeObs.observe(el);
+    });
+  });
+</script>
+</body>
+</html>

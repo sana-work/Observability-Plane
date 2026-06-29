@@ -7,6 +7,7 @@ here is applied idempotently by `ci/deploy.yml` on merge to `main` (Phase 0 of `
 - **Kafka Direct Path** — services produce straight to `ai-obs-events-raw`; no OIS / HTTP ingestion.
 - **Custom AI-quality layer** — prompt registry (`postgres/migrations/003`), eval scores, Trace Explorer. Langfuse undecided.
 - **Snowflake deferred** — `postgres-events/` (`obs_events` schema) is the **interim** firehose; `snowflake/` is written but **not applied** until onboarding. Swap-back: `snowflake/README.md`.
+- **No Redis yet** — interim stand-ins: budget accumulator → `observability.budget_accumulator` (PG atomic upsert, `postgres/migrations/006`); registry cache → in-process `cachetools.TTLCache` in the Enrichment Consumer; dedup → store-level idempotency (ES `_id`, PG `ON CONFLICT`). Swap to Redis later.
 - **50 event types** — `contracts/event_types.py` (reconcile the diagram's "38" label, `plan.md` §15.2).
 
 ## Layout
