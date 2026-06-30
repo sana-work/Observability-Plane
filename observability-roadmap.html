@@ -7,23 +7,23 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
   :root {
-    --bg: #09090f;
-    --surface: #111118;
-    --surface2: #16161f;
+    --bg: #060f1e;
+    --surface: #0a1929;
+    --surface2: #0f2238;
     --border: rgba(255,255,255,0.07);
-    --primary: #6C63FF;
-    --primary-glow: rgba(108,99,255,0.35);
-    --accent: #00D4AA;
-    --accent2: #FF6B6B;
-    --accent3: #FFD93D;
-    --accent4: #4ECDC4;
-    --text: #F0EFF8;
-    --muted: rgba(240,239,248,0.5);
-    --muted2: rgba(240,239,248,0.25);
-    --card-bg: rgba(22,22,31,0.85);
-    --gradient1: linear-gradient(135deg, #6C63FF 0%, #00D4AA 100%);
-    --gradient2: linear-gradient(135deg, #FF6B6B 0%, #FFD93D 100%);
-    --gradient3: linear-gradient(135deg, #4ECDC4 0%, #6C63FF 100%);
+    --primary: #3b7ae8;
+    --primary-glow: rgba(59,122,232,0.32);
+    --accent: #0ecdb0;
+    --accent2: #f0a832;
+    --accent3: #f0a832;
+    --accent4: #3b7ae8;
+    --text: #edf2fa;
+    --muted: rgba(237,242,250,0.5);
+    --muted2: rgba(237,242,250,0.25);
+    --card-bg: rgba(8,20,40,0.9);
+    --gradient1: linear-gradient(135deg, #3b7ae8 0%, #0ecdb0 100%);
+    --gradient2: linear-gradient(135deg, #f0a832 0%, #e06040 100%);
+    --gradient3: linear-gradient(135deg, #0ecdb0 0%, #3b7ae8 100%);
   }
   * { margin:0; padding:0; box-sizing:border-box; }
   html { scroll-behavior:smooth; }
@@ -53,8 +53,8 @@
     text-decoration:none; color:var(--muted); font-size:0.76rem; font-weight:500;
     padding:0.38rem 0.8rem; border-radius:6px; white-space:nowrap; transition:all 0.2s;
   }
-  .nav-links a:hover { color:var(--text); background:rgba(108,99,255,0.12); }
-  .nav-links a.active { color:var(--primary); background:rgba(108,99,255,0.15); }
+  .nav-links a:hover { color:var(--text); background:rgba(59,122,232,0.12); }
+  .nav-links a.active { color:var(--primary); background:rgba(59,122,232,0.15); }
 
   /* SECTIONS */
   section { padding:100px 2rem 60px; max-width:1400px; margin:0 auto; }
@@ -68,9 +68,9 @@
   .hero-bg {
     position:fixed; inset:0; z-index:-1; pointer-events:none;
     background:
-      radial-gradient(ellipse 80% 60% at 20% 20%, rgba(108,99,255,0.12) 0%, transparent 60%),
-      radial-gradient(ellipse 60% 50% at 80% 80%, rgba(0,212,170,0.08) 0%, transparent 55%),
-      radial-gradient(ellipse 40% 40% at 50% 50%, rgba(255,107,107,0.05) 0%, transparent 50%);
+      radial-gradient(ellipse 80% 60% at 20% 20%, rgba(59,122,232,0.14) 0%, transparent 60%),
+      radial-gradient(ellipse 60% 50% at 80% 80%, rgba(14,205,176,0.09) 0%, transparent 55%),
+      radial-gradient(ellipse 40% 40% at 50% 50%, rgba(240,168,50,0.05) 0%, transparent 50%);
   }
   .hero-eyebrow {
     font-family:'JetBrains Mono',monospace; font-size:0.78rem;
@@ -108,12 +108,12 @@
     width:100%;
   }
   .flow-node {
-    background:linear-gradient(135deg,rgba(108,99,255,0.15) 0%,rgba(0,212,170,0.08) 100%);
-    border:1px solid rgba(108,99,255,0.35); border-radius:12px;
+    background:linear-gradient(135deg,rgba(59,122,232,0.15) 0%,rgba(0,212,170,0.08) 100%);
+    border:1px solid rgba(59,122,232,0.35); border-radius:12px;
     padding:0.9rem 0.75rem; text-align:center; flex:1 1 0; min-width:0; max-width:160px;
     transition:all 0.3s; cursor:default;
   }
-  .flow-node:hover { border-color:var(--primary); background:linear-gradient(135deg,rgba(108,99,255,0.28) 0%,rgba(0,212,170,0.15) 100%); transform:translateY(-3px); box-shadow:0 8px 32px var(--primary-glow); }
+  .flow-node:hover { border-color:var(--primary); background:linear-gradient(135deg,rgba(59,122,232,0.28) 0%,rgba(0,212,170,0.15) 100%); transform:translateY(-3px); box-shadow:0 8px 32px var(--primary-glow); }
   .flow-node .icon { font-size:1.5rem; margin-bottom:0.5rem; }
   .flow-node .name { font-size:0.75rem; font-weight:600; color:var(--text); line-height:1.35; }
   .flow-arrow { color:var(--primary); font-size:1.3rem; opacity:0.6; flex-shrink:0; }
@@ -127,7 +127,7 @@
     padding:1.5rem; transition:all 0.3s; position:relative; overflow:hidden;
   }
   .card::before { content:''; position:absolute; top:0; left:0; right:0; height:2px; background:var(--gradient1); opacity:0; transition:opacity 0.3s; }
-  .card:hover { border-color:rgba(108,99,255,0.3); transform:translateY(-3px); box-shadow:0 12px 40px rgba(0,0,0,0.4); }
+  .card:hover { border-color:rgba(59,122,232,0.3); transform:translateY(-3px); box-shadow:0 12px 40px rgba(0,0,0,0.4); }
   .card:hover::before { opacity:1; }
   .card-icon { font-size:2rem; margin-bottom:1rem; }
   .card-title { font-family:'Space Grotesk',sans-serif; font-size:1.05rem; font-weight:600; margin-bottom:0.4rem; }
@@ -137,10 +137,10 @@
   .tech-s3 { background:rgba(255,153,0,0.12); color:#FFB340; border:1px solid rgba(255,153,0,0.2); }
   .tech-grafana { background:rgba(255,111,0,0.12); color:#FF8C40; border:1px solid rgba(255,111,0,0.2); }
   .tech-kibana { background:rgba(0,212,170,0.12); color:#00D4AA; border:1px solid rgba(0,212,170,0.2); }
-  .tech-kafka { background:rgba(108,99,255,0.12); color:#9B94FF; border:1px solid rgba(108,99,255,0.2); }
+  .tech-kafka { background:rgba(59,122,232,0.12); color:#7db4f5; border:1px solid rgba(59,122,232,0.2); }
   .tech-sf { background:rgba(41,182,246,0.12); color:#29B6F6; border:1px solid rgba(41,182,246,0.2); }
   .tech-redis { background:rgba(220,38,38,0.12); color:#F87171; border:1px solid rgba(220,38,38,0.2); }
-  .tech-custom { background:rgba(108,99,255,0.12); color:#A78BFA; border:1px solid rgba(108,99,255,0.2); }
+  .tech-custom { background:rgba(59,122,232,0.12); color:#7db4f5; border:1px solid rgba(59,122,232,0.2); }
   .card-desc { font-size:0.83rem; color:var(--muted); line-height:1.65; }
 
   /* TABLE */
@@ -151,30 +151,30 @@
   th { text-align:left; font-size:0.72rem; font-weight:600; letter-spacing:0.08em; text-transform:uppercase; color:var(--muted); padding:0.85rem 1.25rem; background:rgba(255,255,255,0.02); border-bottom:1px solid var(--border); }
   td { padding:0.8rem 1.25rem; font-size:0.83rem; border-bottom:1px solid rgba(255,255,255,0.04); vertical-align:top; line-height:1.6; }
   tr:last-child td { border-bottom:none; }
-  tr:hover td { background:rgba(108,99,255,0.04); }
+  tr:hover td { background:rgba(59,122,232,0.04); }
   td.mono { font-family:'JetBrains Mono',monospace; font-size:0.78rem; color:var(--accent); }
   td.muted { color:var(--muted); }
 
   /* PILL */
   .pill { display:inline-block; padding:0.18rem 0.55rem; border-radius:4px; font-size:0.68rem; font-weight:600; font-family:'JetBrains Mono',monospace; letter-spacing:0.02em; white-space:nowrap; }
-  .pill-purple { background:rgba(108,99,255,0.15); color:#9B94FF; }
+  .pill-purple { background:rgba(59,122,232,0.15); color:#7db4f5; }
   .pill-green  { background:rgba(0,212,170,0.12); color:#00D4AA; }
-  .pill-yellow { background:rgba(255,217,61,0.12); color:#FFD93D; }
-  .pill-red    { background:rgba(255,107,107,0.12); color:#FF6B6B; }
-  .pill-blue   { background:rgba(78,205,196,0.12); color:#4ECDC4; }
-  .pill-orange { background:rgba(255,179,0,0.12); color:#FFB340; }
+  .pill-yellow { background:rgba(240,168,50,0.12); color:#f0a832; }
+  .pill-red    { background:rgba(232,80,60,0.12); color:#e86060; }
+  .pill-blue   { background:rgba(59,122,232,0.12); color:#7db4f5; }
+  .pill-orange { background:rgba(240,168,50,0.12); color:#f0a832; }
   .pill-gray   { background:rgba(255,255,255,0.06); color:var(--muted); }
 
   /* TELEMETRY */
   .telem-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(340px,1fr)); gap:1.25rem; }
   .telem-card { background:var(--card-bg); border:1px solid var(--border); border-radius:16px; overflow:hidden; transition:all 0.3s; }
-  .telem-card:hover { border-color:rgba(108,99,255,0.3); transform:translateY(-2px); box-shadow:0 8px 32px rgba(0,0,0,0.3); }
-  .telem-head { padding:1.1rem 1.3rem; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:0.75rem; background:linear-gradient(90deg,rgba(108,99,255,0.08) 0%,transparent 100%); }
+  .telem-card:hover { border-color:rgba(59,122,232,0.3); transform:translateY(-2px); box-shadow:0 8px 32px rgba(0,0,0,0.3); }
+  .telem-head { padding:1.1rem 1.3rem; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:0.75rem; background:linear-gradient(90deg,rgba(59,122,232,0.08) 0%,transparent 100%); }
   .telem-head .icon { font-size:1.35rem; }
   .telem-head h3 { font-family:'Space Grotesk',sans-serif; font-size:0.95rem; font-weight:600; }
   .telem-fields { padding:1rem 1.3rem; display:flex; flex-wrap:wrap; gap:0.4rem; }
   .telem-field { font-family:'JetBrains Mono',monospace; font-size:0.72rem; padding:0.25rem 0.6rem; background:rgba(255,255,255,0.04); border:1px solid var(--border); border-radius:5px; color:var(--accent); transition:all 0.2s; }
-  .telem-field:hover { background:rgba(108,99,255,0.12); border-color:rgba(108,99,255,0.3); color:var(--text); }
+  .telem-field:hover { background:rgba(59,122,232,0.12); border-color:rgba(59,122,232,0.3); color:var(--text); }
   .telem-metrics { padding:0 1.3rem 1rem; }
   .telem-metrics .label { font-size:0.7rem; text-transform:uppercase; letter-spacing:0.1em; color:var(--muted2); margin-bottom:0.5rem; }
   .telem-kpi-list { display:flex; flex-wrap:wrap; gap:0.35rem; }
@@ -183,25 +183,25 @@
   /* DASHBOARD */
   .dash-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); gap:1.25rem; }
   .dash-card { background:var(--card-bg); border:1px solid var(--border); border-radius:16px; overflow:hidden; transition:all 0.3s; }
-  .dash-card:hover { border-color:rgba(108,99,255,0.3); transform:translateY(-3px); box-shadow:0 12px 40px rgba(0,0,0,0.4); }
+  .dash-card:hover { border-color:rgba(59,122,232,0.3); transform:translateY(-3px); box-shadow:0 12px 40px rgba(0,0,0,0.4); }
   .dash-head { padding:1.1rem 1.3rem; border-bottom:1px solid var(--border); }
   .dash-head h3 { font-family:'Space Grotesk',sans-serif; font-size:0.92rem; font-weight:600; display:flex; align-items:center; gap:0.5rem; }
   .dash-body { padding:1rem 1.3rem; }
   .metric-row { display:flex; justify-content:space-between; align-items:flex-start; padding:0.5rem 0; border-bottom:1px solid rgba(255,255,255,0.04); gap:1rem; }
   .metric-row:last-child { border-bottom:none; }
   .metric-name { font-size:0.8rem; color:var(--muted); flex:1; }
-  .metric-badge { font-family:'JetBrains Mono',monospace; font-size:0.68rem; padding:0.15rem 0.45rem; border-radius:3px; background:rgba(108,99,255,0.12); color:#9B94FF; white-space:nowrap; }
+  .metric-badge { font-family:'JetBrains Mono',monospace; font-size:0.68rem; padding:0.15rem 0.45rem; border-radius:3px; background:rgba(59,122,232,0.12); color:#7db4f5; white-space:nowrap; }
 
   /* ROADMAP TIMELINE */
   .timeline { position:relative; padding-left:2rem; }
-  .timeline::before { content:''; position:absolute; left:7px; top:0; bottom:0; width:2px; background:linear-gradient(to bottom, rgba(108,99,255,0.4), rgba(108,99,255,0.1), transparent); }
+  .timeline::before { content:''; position:absolute; left:7px; top:0; bottom:0; width:2px; background:linear-gradient(to bottom, rgba(59,122,232,0.4), rgba(59,122,232,0.1), transparent); }
   .tl-item { position:relative; margin-bottom:2rem; }
   .tl-dot { position:absolute; left:-2rem; top:0.15rem; width:16px; height:16px; border-radius:50%; background:var(--bg); border:2px solid var(--muted2); display:flex; align-items:center; justify-content:center; }
-  .tl-dot.planned { border-color:rgba(108,99,255,0.4); }
+  .tl-dot.planned { border-color:rgba(59,122,232,0.4); }
   .tl-dot.optional { border-color:rgba(255,217,61,0.4); }
 
   .tl-content { background:var(--card-bg); border:1px solid var(--border); border-radius:14px; padding:1.25rem 1.4rem; transition:all 0.3s; }
-  .tl-content:hover { border-color:rgba(108,99,255,0.25); }
+  .tl-content:hover { border-color:rgba(59,122,232,0.25); }
   .tl-phase { font-family:'JetBrains Mono',monospace; font-size:0.7rem; letter-spacing:0.1em; text-transform:uppercase; margin-bottom:0.4rem; }
   .tl-phase.planned { color:var(--muted2); }
   .tl-phase.optional { color:var(--accent3); }
@@ -211,7 +211,7 @@
   .tl-items li { font-size:0.78rem; padding:0.2rem 0.6rem; background:rgba(255,255,255,0.04); border:1px solid var(--border); border-radius:5px; color:var(--muted); }
 
   /* HIGHLIGHT BOX */
-  .highlight-box { background:linear-gradient(135deg,rgba(108,99,255,0.08) 0%,rgba(0,212,170,0.05) 100%); border:1px solid rgba(108,99,255,0.2); border-radius:16px; padding:1.5rem 2rem; margin-bottom:2rem; display:flex; align-items:flex-start; gap:1rem; }
+  .highlight-box { background:linear-gradient(135deg,rgba(59,122,232,0.08) 0%,rgba(0,212,170,0.05) 100%); border:1px solid rgba(59,122,232,0.2); border-radius:16px; padding:1.5rem 2rem; margin-bottom:2rem; display:flex; align-items:flex-start; gap:1rem; }
   .highlight-box.warn { background:linear-gradient(135deg,rgba(255,217,61,0.07) 0%,rgba(255,107,107,0.04) 100%); border-color:rgba(255,217,61,0.2); }
   .highlight-box .icon { font-size:1.8rem; flex-shrink:0; }
   .highlight-box h3 { font-family:'Space Grotesk',sans-serif; font-size:1rem; font-weight:600; margin-bottom:0.4rem; }
@@ -220,8 +220,8 @@
   /* TABS */
   .tab-nav { display:flex; gap:0.5rem; margin-bottom:1.5rem; flex-wrap:wrap; }
   .tab-btn { padding:0.5rem 1.1rem; border:1px solid var(--border); background:transparent; color:var(--muted); border-radius:8px; font-size:0.82rem; font-weight:500; cursor:pointer; transition:all 0.2s; font-family:'Inter',sans-serif; }
-  .tab-btn:hover { color:var(--text); border-color:rgba(108,99,255,0.3); }
-  .tab-btn.active { background:rgba(108,99,255,0.15); color:var(--primary); border-color:rgba(108,99,255,0.4); }
+  .tab-btn:hover { color:var(--text); border-color:rgba(59,122,232,0.3); }
+  .tab-btn.active { background:rgba(59,122,232,0.15); color:var(--primary); border-color:rgba(59,122,232,0.4); }
   .tab-content { display:none; }
   .tab-content.active { display:block; }
 
@@ -233,8 +233,8 @@
   .event-flow { display:flex; flex-direction:column; gap:0; }
   .event-step { display:flex; align-items:stretch; gap:1rem; }
   .event-step-left { display:flex; flex-direction:column; align-items:center; }
-  .event-num { width:32px; height:32px; border-radius:50%; flex-shrink:0; background:rgba(108,99,255,0.15); border:1px solid rgba(108,99,255,0.4); display:flex; align-items:center; justify-content:center; font-family:'JetBrains Mono',monospace; font-size:0.72rem; font-weight:600; color:var(--primary); }
-  .event-line { flex:1; width:1px; background:rgba(108,99,255,0.2); margin:4px 0; }
+  .event-num { width:32px; height:32px; border-radius:50%; flex-shrink:0; background:rgba(59,122,232,0.15); border:1px solid rgba(59,122,232,0.4); display:flex; align-items:center; justify-content:center; font-family:'JetBrains Mono',monospace; font-size:0.72rem; font-weight:600; color:var(--primary); }
+  .event-line { flex:1; width:1px; background:rgba(59,122,232,0.2); margin:4px 0; }
   .event-step:last-child .event-line { display:none; }
   .event-body { padding-bottom:1.2rem; flex:1; }
   .event-name { font-family:'JetBrains Mono',monospace; font-size:0.82rem; font-weight:600; color:var(--accent); margin-bottom:0.25rem; }
@@ -243,7 +243,7 @@
   /* ENRICHMENT PIPELINE */
   .pipeline { display:flex; flex-direction:column; gap:0.5rem; }
   .pipeline-step { display:flex; align-items:center; gap:1rem; padding:0.85rem 1.25rem; background:rgba(255,255,255,0.03); border:1px solid var(--border); border-radius:10px; transition:all 0.2s; }
-  .pipeline-step:hover { border-color:rgba(108,99,255,0.25); background:rgba(108,99,255,0.05); }
+  .pipeline-step:hover { border-color:rgba(59,122,232,0.25); background:rgba(59,122,232,0.05); }
   .pipeline-num { font-family:'JetBrains Mono',monospace; font-size:0.72rem; color:var(--primary); width:22px; flex-shrink:0; }
   .pipeline-name { font-family:'Space Grotesk',sans-serif; font-size:0.88rem; font-weight:600; min-width:200px; }
   .pipeline-desc { font-size:0.8rem; color:var(--muted); }
@@ -286,6 +286,40 @@
     nav { padding:0 1rem; }
     section { padding:80px 1rem 40px; }
   }
+
+  /* ── Coverage Matrix ────────────────────────────────── */
+  .cov-panel{display:none}.cov-panel.active{display:block}
+  .cov-legend{display:flex;gap:0.65rem;flex-wrap:wrap;margin:0 0 1.25rem;align-items:center}
+  .cov-legend span{font-size:0.73rem;padding:0.15rem 0.65rem;border-radius:20px;font-weight:600;border:1px solid transparent}
+  .cov-tbl-wrap{width:100%;overflow-x:auto;border-radius:14px;border:1px solid var(--border)}
+  .cov-tbl{width:100%;border-collapse:collapse;font-size:0.78rem}
+  .cov-tbl th{background:rgba(59,122,232,0.18);color:var(--text);font-weight:600;padding:0.55rem 0.7rem;text-align:center;border-bottom:1px solid var(--border);font-size:0.71rem;white-space:nowrap}
+  .cov-tbl th:first-child{text-align:left;min-width:165px;white-space:normal}
+  .cov-tbl td{padding:0.42rem 0.7rem;border-bottom:1px solid rgba(255,255,255,0.04);text-align:center;vertical-align:top}
+  .cov-tbl td:first-child{text-align:left;font-family:'JetBrains Mono',monospace;font-size:0.71rem;color:var(--text);white-space:normal}
+  .cov-tbl tr:hover td{background:rgba(59,122,232,0.05)}
+  .cov-tbl .gr td{background:rgba(59,122,232,0.1);color:var(--primary);font-family:'JetBrains Mono',monospace;font-size:0.68rem;font-weight:700;letter-spacing:0.06em;padding:0.3rem 0.7rem;text-align:left}
+  .cov-p{color:#00d464;font-weight:700;font-size:0.95rem}
+  .cov-q{color:#ffbe00;font-weight:700;font-size:0.9rem}
+  .cov-m{color:rgba(255,255,255,0.2);font-size:0.9rem}
+  .cov-r{color:#a89fff;font-weight:700;font-size:0.9rem}
+  .cov-n{color:rgba(255,255,255,0.13);font-size:0.88rem}
+  .cov-nt{font-family:'Inter',sans-serif;font-size:0.63rem;color:var(--muted);display:block;text-align:left;white-space:normal;margin-top:0.05rem}
+  .cov-note{font-size:0.79rem;color:var(--muted);margin:0 0 1.1rem;line-height:1.55}
+  .cov-sub{font-size:0.8rem;color:var(--text);margin:1.4rem 0 0.6rem;font-weight:600;letter-spacing:0.02em}
+  .svc-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(268px,1fr));gap:0.9rem;margin-top:0.75rem}
+  .svc-card{background:var(--card-bg);border:1px solid var(--border);border-radius:14px;padding:1.2rem;transition:border-color 0.2s}
+  .svc-card:hover{border-color:rgba(59,122,232,0.35)}
+  .svc-card h4{font-size:0.88rem;color:var(--text);margin:0 0 0.25rem}
+  .svc-card .role{font-size:0.73rem;color:var(--muted);margin-bottom:0.7rem;line-height:1.45}
+  .svc-card .trow{display:flex;flex-wrap:wrap;gap:0.3rem;margin-top:0.45rem}
+  .stag{font-size:0.63rem;padding:0.12rem 0.42rem;border-radius:7px;border:1px solid rgba(255,255,255,0.1);color:var(--muted);line-height:1.4;white-space:nowrap}
+  .stag.k{border-color:rgba(0,212,170,0.35);color:var(--accent)}
+  .stag.s{border-color:rgba(59,122,232,0.3);color:var(--primary)}
+  .stag.nk{opacity:0.38}
+  .stag.warn{border-color:rgba(255,190,0,0.3);color:#ffbe00}
+  .stag.ok{border-color:rgba(0,212,170,0.3);color:var(--accent)}
+  .stag.bad{border-color:rgba(255,80,80,0.3);color:#ff8080}
 </style>
 </head>
 <body>
@@ -293,32 +327,29 @@
 
 <!-- NAV -->
 <nav>
-  <div class="nav-brand">⬡ <span>Observability Plane</span></div>
+  <div class="nav-brand">⬡ <span>AI Services Observability</span></div>
   <div class="nav-links">
     <a href="#overview" class="active">Overview</a>
-    <a href="#arch-diagram">Arch Diagram</a>
-    <a href="#architecture">Storage</a>
-    <a href="#pipeline">Pipeline</a>
-    <a href="#elasticsearch">Elasticsearch</a>
-    <a href="#postgresql">PostgreSQL</a>
-    <a href="#s3">Amazon S3</a>
-    <a href="#grafana">Grafana</a>
-    <a href="#kibana">Kibana</a>
-    <a href="#telemetry">Telemetry</a>
+    <a href="#arch-diagram">Architecture</a>
+    <a href="#pipeline">Event Pipeline</a>
+    <a href="#architecture">Data Storage</a>
+    <a href="#grafana">Monitoring</a>
+    <a href="#telemetry">Telemetry Schema</a>
     <a href="#dashboards">Dashboards</a>
-    <a href="#roadmap">Roadmap</a>
+    <a href="#roadmap">Delivery Plan</a>
+    <a href="#coverage">Gap Assessment</a>
   </div>
 </nav>
 
 <!-- HERO -->
 <section class="hero" id="overview">
-  <div class="hero-eyebrow anim-1">AI Services Platform · Internal Engineering</div>
+  <div class="hero-eyebrow anim-1">AI Services Platform · Observability Initiative · June 2026</div>
   <h1 class="anim-2">
-    <span class="line1">Observability Plane</span>
-    <span class="line2">Storage Component</span>
+    <span class="line1">AI Services Observability</span>
+    <span class="line2">Platform Plan</span>
   </h1>
   <p class="hero-sub anim-3">
-    A Kafka-native two-layer observability pipeline for 8 AI services — capturing every request, agent step, LLM call, tool invocation, guardrail decision, and user feedback across a unified, governed storage fabric.
+    A full-spectrum observability platform delivering end-to-end visibility across 8 AI services — enabling cost governance, SLO tracking, AI quality measurement, and compliance-grade audit trails from a single unified pipeline.
   </p>
 
   <div class="hero-stats anim-4">
@@ -351,9 +382,9 @@
 
 <!-- FULL ARCHITECTURE DIAGRAM -->
 <section id="arch-diagram">
-  <div class="section-tag">00 · Full Architecture</div>
-  <h2 class="section-title">Detailed Architecture Overview</h2>
-  <p class="section-desc">End-to-end view of the AI Services Platform Observability Plane — producers, Kafka topics, enrichment pipeline, storage layers, and presentation surface.</p>
+  <div class="section-tag">Architecture</div>
+  <h2 class="section-title">End-to-End Platform Architecture</h2>
+  <p class="section-desc">Full view of the AI Services Observability Plane — from service instrumentation through Kafka event processing, multi-layer storage, to the observability dashboards.</p>
   <div style="width:100%;border-radius:20px;overflow:hidden;border:1px solid var(--border);background:var(--card-bg);backdrop-filter:blur(10px);padding:1.5rem;">
     <img src="Observability Arch Latest.png" alt="AI Services Platform Observability Plane — Detailed Architecture" style="width:100%;height:auto;border-radius:12px;display:block;" />
   </div>
@@ -361,14 +392,13 @@
 
 <!-- ARCHITECTURE -->
 <section id="architecture">
-  <div class="section-tag">01 · Storage Architecture</div>
-  <h2 class="section-title">Five-Store Storage Design</h2>
+  <div class="section-tag">Data Storage</div>
+  <h2 class="section-title">Multi-Layer Storage Strategy</h2>
   <p class="section-desc">
-    Five purpose-built storage layers, each tuned for a specific job — no single database does all of them well.
-    Snowflake and Redis are under active evaluation for onboarding — decisions are not yet finalised. PostgreSQL <code style="font-size:0.85em;color:var(--accent)">obs_events</code> and in-process TTL cache serve as interim stand-ins until either is confirmed.
+    Five purpose-built storage layers — each optimised for a distinct access pattern. Snowflake and Redis are under active evaluation; PostgreSQL and an in-process cache serve as production-ready interim solutions until onboarding is confirmed.
   </p>
 
-  <div class="deferred-banner" style="border-color:rgba(108,99,255,0.35);background:rgba(108,99,255,0.08);">
+  <div class="deferred-banner" style="border-color:rgba(59,122,232,0.35);background:rgba(59,122,232,0.08);">
     🔎 &nbsp;Snowflake &amp; Redis are <strong>under evaluation</strong> — onboarding is being discussed but not yet approved. The current interim (PostgreSQL <code>obs_events.*</code> + in-process TTL cache) is production-ready and the swap path is contained.
   </div>
 
@@ -414,9 +444,9 @@
 
 <!-- PIPELINE -->
 <section id="pipeline">
-  <div class="section-tag">02 · Enrichment Pipeline &amp; Event Flow</div>
-  <h2 class="section-title">9-Stage Enrichment Consumer</h2>
-  <p class="section-desc">Raw events from all 8 services flow through a single 9-stage pipeline before reaching any storage. Every stage runs centrally — services never repeat this work.</p>
+  <div class="section-tag">Event Pipeline</div>
+  <h2 class="section-title">Centralised Event Processing</h2>
+  <p class="section-desc">Every event from all 8 services passes through a single 9-stage enrichment pipeline before reaching any storage. PII redaction, cost calculation, SLO evaluation, and quality flagging are handled centrally — services are never burdened with this cross-cutting work.</p>
 
   <div class="two-col" style="margin-bottom:2rem">
     <div>
@@ -431,21 +461,6 @@
           </tbody>
         </table>
       </div>
-      <div class="table-wrap">
-        <div class="table-header"><span>📨</span><h3>Orchestration Event Sequence</h3></div>
-        <div style="padding:1.25rem">
-          <div class="event-flow">
-            <div class="event-step"><div class="event-step-left"><div class="event-num">1</div><div class="event-line"></div></div><div class="event-body"><div class="event-name">REQUEST_RECEIVED</div><div class="event-desc">Platform gateway receives inbound API call</div></div></div>
-            <div class="event-step"><div class="event-step-left"><div class="event-num">2</div><div class="event-line"></div></div><div class="event-body"><div class="event-name">AUTH_COMPLETED</div><div class="event-desc">Authentication success or failure recorded</div></div></div>
-            <div class="event-step"><div class="event-step-left"><div class="event-num">3</div><div class="event-line"></div></div><div class="event-body"><div class="event-name">CONFIG_LOADED</div><div class="event-desc">Agent config, model, tools resolved</div></div></div>
-            <div class="event-step"><div class="event-step-left"><div class="event-num">4</div><div class="event-line"></div></div><div class="event-body"><div class="event-name">PLAN_CREATED</div><div class="event-desc">Static/dynamic execution plan built</div></div></div>
-            <div class="event-step"><div class="event-step-left"><div class="event-num">5</div><div class="event-line"></div></div><div class="event-body"><div class="event-name">AGENT_EXECUTION_REQUEST_PRODUCED</div><div class="event-desc">Kafka event produced for agent execution</div></div></div>
-            <div class="event-step"><div class="event-step-left"><div class="event-num">6</div><div class="event-line"></div></div><div class="event-body"><div class="event-name">FINAL_RESPONSE_CONSUMED</div><div class="event-desc">Final response consumed from Kafka</div></div></div>
-            <div class="event-step"><div class="event-step-left"><div class="event-num">7</div><div class="event-line"></div></div><div class="event-body"><div class="event-name">FINAL_RESPONSE_BUILT</div><div class="event-desc">Response assembled for delivery</div></div></div>
-            <div class="event-step"><div class="event-step-left"><div class="event-num">8</div><div class="event-line"></div></div><div class="event-body"><div class="event-name">RESPONSE_DELIVERED</div><div class="event-desc">Response returned to calling application</div></div></div>
-          </div>
-        </div>
-      </div>
     </div>
 
     <div>
@@ -453,35 +468,17 @@
         <div class="table-header"><span>⚙️</span><h3>9-Stage Enrichment Pipeline</h3></div>
         <div style="padding:1.25rem">
           <div class="pipeline">
-            <div class="pipeline-step"><div class="pipeline-num">01</div><div class="pipeline-name">Schema Validator</div><div class="pipeline-desc">Validate structure; invalid → dead-letter</div></div>
-            <div class="pipeline-step"><div class="pipeline-num">02</div><div class="pipeline-name">Trace Context Extractor</div><div class="pipeline-desc">Extract &amp; propagate <code style="font-size:0.8em;color:var(--accent)">correlation_id</code> + W3C <code style="font-size:0.8em;color:var(--accent)">traceparent</code></div></div>
-            <div class="pipeline-step"><div class="pipeline-num">03</div><div class="pipeline-name">PII / Data Redactor</div><div class="pipeline-desc">GLiNER in-process NER — hash SOE_ID, redact names/cards/emails</div></div>
-            <div class="pipeline-step"><div class="pipeline-num">04</div><div class="pipeline-name">Metadata Enricher</div><div class="pipeline-desc">Join app/agent/tool/rag registries (in-process 5-min TTL cache)</div></div>
-            <div class="pipeline-step"><div class="pipeline-num">05</div><div class="pipeline-name">Error Code Mapper</div><div class="pipeline-desc">Normalize errors to standard catalog taxonomy</div></div>
-            <div class="pipeline-step"><div class="pipeline-num">06</div><div class="pipeline-name">Token / Cost Calculator</div><div class="pipeline-desc">Compute <code style="font-size:0.8em;color:var(--accent)">estimated_cost_usd</code>; upsert Postgres budget accumulator</div></div>
-            <div class="pipeline-step"><div class="pipeline-num">07</div><div class="pipeline-name">S3 Archiver</div><div class="pipeline-desc">Off-load large prompts/responses/contexts to S3</div></div>
-            <div class="pipeline-step"><div class="pipeline-num">08</div><div class="pipeline-name">SLO Evaluator</div><div class="pipeline-desc">Multi-window burn-rate (1h + 6h); writes <code style="font-size:0.8em;color:var(--accent)">daily_slo_compliance</code></div></div>
-            <div class="pipeline-step"><div class="pipeline-num">09</div><div class="pipeline-name">RAG / Quality Hook</div><div class="pipeline-desc">Mark RAG/LLM events for sampling by eval service</div></div>
+            <div class="pipeline-step"><div class="pipeline-num">01</div><div class="pipeline-name">Schema Validator</div><div class="pipeline-desc">Validate structure; invalid events routed to dead-letter topic</div></div>
+            <div class="pipeline-step"><div class="pipeline-num">02</div><div class="pipeline-name">Trace Context Extractor</div><div class="pipeline-desc">Extract and propagate <code style="font-size:0.8em;color:var(--accent)">correlation_id</code> + W3C traceparent across all hops</div></div>
+            <div class="pipeline-step"><div class="pipeline-num">03</div><div class="pipeline-name">PII Redactor</div><div class="pipeline-desc">GLiNER NER model — hash user identifiers, redact names, card numbers, emails</div></div>
+            <div class="pipeline-step"><div class="pipeline-num">04</div><div class="pipeline-name">Metadata Enricher</div><div class="pipeline-desc">Enrich with app, agent, tool, and RAG registry context via in-process cache</div></div>
+            <div class="pipeline-step"><div class="pipeline-num">05</div><div class="pipeline-name">Error Code Normaliser</div><div class="pipeline-desc">Map raw errors to the standard error catalog taxonomy</div></div>
+            <div class="pipeline-step"><div class="pipeline-num">06</div><div class="pipeline-name">Cost Calculator</div><div class="pipeline-desc">Compute <code style="font-size:0.8em;color:var(--accent)">estimated_cost_usd</code> per request; update budget accumulators</div></div>
+            <div class="pipeline-step"><div class="pipeline-num">07</div><div class="pipeline-name">S3 Archiver</div><div class="pipeline-desc">Off-load large prompts, responses, and RAG contexts to object storage</div></div>
+            <div class="pipeline-step"><div class="pipeline-num">08</div><div class="pipeline-name">SLO Evaluator</div><div class="pipeline-desc">Multi-window burn-rate calculation (1h + 6h); write daily SLO compliance records</div></div>
+            <div class="pipeline-step"><div class="pipeline-num">09</div><div class="pipeline-name">AI Quality Hook</div><div class="pipeline-desc">Flag RAG and LLM events for sampling by the quality evaluation service</div></div>
           </div>
         </div>
-      </div>
-
-      <div class="table-wrap">
-        <div class="table-header"><span>🔑</span><h3>Platform Request Fields</h3></div>
-        <table>
-          <thead><tr><th>Field</th><th>Description</th></tr></thead>
-          <tbody>
-            <tr><td class="mono">trace_id</td><td class="muted">End-to-end correlation ID</td></tr>
-            <tr><td class="mono">correlation_id</td><td class="muted">Parcel-tracking ID across all 8 services</td></tr>
-            <tr><td class="mono">span_id / parent_span_id</td><td class="muted">OTEL span for trace tree assembly</td></tr>
-            <tr><td class="mono">usecase_id</td><td class="muted">Application / CSI ID</td></tr>
-            <tr><td class="mono">tenant_id / lob</td><td class="muted">Tenant or line of business (per-LOB RBAC)</td></tr>
-            <tr><td class="mono">request_type</td><td class="muted">prompt, RAG, single-agent, multi-agent, loop-agent</td></tr>
-            <tr><td class="mono">status</td><td class="muted">success, failed, partial, timeout</td></tr>
-            <tr><td class="mono">latency_ms</td><td class="muted">End-to-end latency (numeric, not a log string)</td></tr>
-            <tr><td class="mono">estimated_cost_usd</td><td class="muted">Computed by pipeline cost stage</td></tr>
-          </tbody>
-        </table>
       </div>
     </div>
   </div>
@@ -490,8 +487,8 @@
     <div class="icon">🔒</div>
     <div>
       <h3>Two-Layer Architecture</h3>
-      <p><strong>Layer 1 — AI Quality &amp; Trace</strong> (Langfuse vs custom build — open decision): LLM traces, RAG spans, agent step trees, prompt versioning, faithfulness evals, feedback linkage.<br>
-      <strong>Layer 2 — Platform / Infrastructure</strong> (Kafka-direct pipeline): structured events, metrics, Kafka health, cost governance, SLO, business KPIs, anomalies.<br>
+      <p><strong>Layer 1 — AI Quality &amp; Trace:</strong> LLM traces, RAG spans, agent step trees, prompt versioning, faithfulness evaluations, and feedback linkage — targeted at product and AI quality teams.<br>
+      <strong>Layer 2 — Platform &amp; Infrastructure:</strong> Structured events, Kafka health, cost governance, SLO burn rates, business KPIs, and anomaly detection — targeted at platform engineering and management.<br>
       Both layers share a single <code style="color:var(--accent)">correlation_id</code> — any request is reconstructable across both.</p>
     </div>
   </div>
@@ -499,9 +496,9 @@
 
 <!-- ELASTICSEARCH -->
 <section id="elasticsearch">
-  <div class="section-tag">03 · Elasticsearch</div>
-  <h2 class="section-title">Index Strategy</h2>
-  <p class="section-desc">Per-LOB namespaced indices: <code style="font-size:0.9em;color:var(--accent)">ai-obs-{lob}-{category}-{YYYY.MM.dd}</code>. One document per event, keyed by <code style="font-size:0.9em;color:var(--accent)">event_id</code>. ILM: hot-warm-30d default; compliance-180d for regulated LOBs.</p>
+  <div class="section-tag">Data Storage · Search Layer</div>
+  <h2 class="section-title">Elasticsearch — Operational Search</h2>
+  <p class="section-desc">Per-LOB namespaced indices with one document per event. Sub-second full-text search and error drill-down for all 8 service types. Default 30-day retention; extended to 180 days for regulated lines of business.</p>
 
   <div class="table-wrap">
     <div class="table-header"><span>🔍</span><h3>Elasticsearch Indices</h3></div>
@@ -533,11 +530,11 @@
 
 <!-- POSTGRESQL -->
 <section id="postgresql">
-  <div class="section-tag">04 · PostgreSQL</div>
-  <h2 class="section-title">Control Plane + Event Firehose (Interim)</h2>
-  <p class="section-desc">Two separate schemas with distinct roles: <code style="color:var(--accent)">observability.*</code> is the authoritative control plane; <code style="color:var(--accent)">obs_events.*</code> is the interim event firehose (Snowflake onboarding under evaluation).</p>
+  <div class="section-tag">Data Storage · Control Plane</div>
+  <h2 class="section-title">PostgreSQL — Configuration &amp; Analytics</h2>
+  <p class="section-desc">Two schemas with distinct roles: <code style="color:var(--accent)">observability.*</code> holds the authoritative registries, SLO records, budget limits, and governance config; <code style="color:var(--accent)">obs_events.*</code> serves as the interim event analytics store while Snowflake onboarding is evaluated.</p>
 
-  <div class="deferred-banner" style="border-color:rgba(108,99,255,0.35);background:rgba(108,99,255,0.08);">
+  <div class="deferred-banner" style="border-color:rgba(59,122,232,0.35);background:rgba(59,122,232,0.08);">
     🔎 &nbsp;Snowflake onboarding is <strong>under evaluation</strong>. <code>obs_events.*</code> is production-ready as a bounded ~90-day window. The swap path is contained — identical <code>event_id</code>/<code>correlation_id</code> model means only the Storage Consumer + dashboard queries change.
   </div>
 
@@ -602,7 +599,7 @@
   </div>
 
   <div id="pg-firehose" class="tab-content">
-    <div class="deferred-banner" style="border-color:rgba(108,99,255,0.35);background:rgba(108,99,255,0.08);">🔎 &nbsp;This schema bridges while Snowflake onboarding is under evaluation. Bounded ~90-day retention (monthly partitions via pg_partman). Identical event_id/correlation_id model — swap is contained to Storage Consumer + dashboard queries.</div>
+    <div class="deferred-banner" style="border-color:rgba(59,122,232,0.35);background:rgba(59,122,232,0.08);">🔎 &nbsp;This schema bridges while Snowflake onboarding is under evaluation. Bounded ~90-day retention (monthly partitions via pg_partman). Identical event_id/correlation_id model — swap is contained to Storage Consumer + dashboard queries.</div>
     <div class="table-wrap">
       <div class="table-header"><span>🔥</span><h3>Event Firehose Tables — <code>obs_events.*</code></h3></div>
       <table>
@@ -623,9 +620,9 @@
 
 <!-- S3 -->
 <section id="s3">
-  <div class="section-tag">05 · Amazon S3</div>
-  <h2 class="section-title">Object Store</h2>
-  <p class="section-desc">S3 holds large, semi-structured, or sensitive artifacts that would bloat Elasticsearch or PostgreSQL. Bucket: <code style="color:var(--accent)">ai-obs-payloads-{env}</code> — SSE-KMS, per-LOB lifecycle.</p>
+  <div class="section-tag">Data Storage · Archive</div>
+  <h2 class="section-title">Amazon S3 — Long-Term Archive</h2>
+  <p class="section-desc">Immutable object store for large or sensitive artifacts — model payloads, trace archives, RAG contexts, audit evidence, and RCA reports. SSE-KMS encrypted with per-LOB lifecycle tiering (Standard → IA at 30 days → Glacier at 180 days).</p>
 
   <div class="table-wrap">
     <div class="table-header"><span>📦</span><h3>S3 Prefix Catalog</h3></div>
@@ -641,18 +638,17 @@
 
 <!-- GRAFANA -->
 <section id="grafana">
-  <div class="section-tag">06 · Grafana Ecosystem</div>
-  <h2 class="section-title">Grafana Tempo &amp; Prometheus Stack</h2>
+  <div class="section-tag">Monitoring · Infrastructure Layer</div>
+  <h2 class="section-title">Infrastructure Observability</h2>
   <p class="section-desc">
-    Grafana is used for <strong>distributed tracing (Tempo)</strong> and <strong>infrastructure metrics (Prometheus/kube-prometheus-stack)</strong> — but <strong>not</strong> for the primary platform dashboards.
-    The custom Dashboard Service is built instead (COIN-JWT auth, per-LOB RBAC, business KPI pages that Grafana cannot model cleanly).
+    Grafana Tempo provides distributed tracing; kube-prometheus-stack delivers infrastructure metrics — both feed the custom dashboard backend directly. Grafana's own visualisation layer is intentionally disabled: the platform requires COIN-JWT auth, per-LOB RBAC, and business KPI views that Grafana cannot model cleanly.
   </p>
 
   <div class="highlight-box warn">
     <div class="icon">⚠️</div>
     <div>
-      <h3>Grafana Dashboards are OFF — by design</h3>
-      <p>kube-prometheus-stack is deployed with <code style="color:var(--accent3)">grafana.enabled=false</code>. Prometheus metrics are scraped by the Custom Dashboard Service backend via PromQL. Grafana's visualization layer is replaced by the custom FastAPI + React + Tremor dashboard (§Custom Dashboard Service). The choice: COIN-JWT auth + per-LOB RBAC + business-KPI pages + Observability Chatbot integration don't fit Grafana's model.</p>
+      <h3>Deliberate Design Decision — Grafana Visualisation Disabled</h3>
+      <p>kube-prometheus-stack is deployed with <code style="color:var(--accent3)">grafana.enabled=false</code>. Prometheus metrics are consumed directly by the Custom Dashboard Service via PromQL. This gives us COIN-JWT SSO, per-LOB row-level access control, and business KPI views natively — capabilities that would require significant workarounds in Grafana.</p>
     </div>
   </div>
 
@@ -702,9 +698,9 @@
 
 <!-- KIBANA -->
 <section id="kibana">
-  <div class="section-tag">07 · Kibana</div>
-  <h2 class="section-title">Dashboard Catalog</h2>
-  <p class="section-desc">Kibana is the operational search and event analytics interface, backed directly by Elasticsearch indices. Handles error drill-down, Kibana ML log anomalies, and error fingerprint grouping.</p>
+  <div class="section-tag">Monitoring · Operational Search</div>
+  <h2 class="section-title">Kibana — Operational Analytics</h2>
+  <p class="section-desc">Real-time event search and error investigation backed directly by Elasticsearch. Provides drill-down dashboards per service domain — from platform-wide health to individual agent traces, LLM cost analysis, and RAG quality metrics.</p>
 
   <div class="cards-grid">
     <div class="card"><div class="card-icon">🌐</div><div class="card-title">Platform Overview Dashboard</div><div style="margin-bottom:0.75rem;display:flex;gap:0.4rem;flex-wrap:wrap"><span class="pill pill-purple">requests-*</span><span class="pill pill-red">errors-*</span></div><p class="card-desc">Request count, response code, error count, error trend. Platform team &amp; app owners.</p></div>
@@ -720,9 +716,9 @@
 
 <!-- TELEMETRY -->
 <section id="telemetry">
-  <div class="section-tag">08 · Telemetry Data Model</div>
-  <h2 class="section-title">8 Telemetry Streams</h2>
-  <p class="section-desc">50 event types across 8 telemetry schemas. All share one mandatory envelope: <code style="color:var(--accent)">event_id, event_type, schema_version, timestamp, correlation_id, span_id, service_name, environment, usecase_id, lob, status, latency_ms</code>.</p>
+  <div class="section-tag">Telemetry Schema</div>
+  <h2 class="section-title">8 Signal Streams · 50 Event Types</h2>
+  <p class="section-desc">Every signal across all 8 services is captured in one of 8 telemetry schemas. Each schema shares a common mandatory envelope for correlation and governance, then extends it with domain-specific fields.</p>
 
   <div class="telem-grid">
 
@@ -811,13 +807,13 @@
 
 <!-- DASHBOARDS -->
 <section id="dashboards">
-  <div class="section-tag">09 · Dashboard Design</div>
-  <h2 class="section-title">Custom Dashboard Service + Kibana</h2>
-  <p class="section-desc">The Custom Dashboard Service (FastAPI + React + Tremor, COIN-JWT auth, per-LOB RBAC) is the primary surface. Kibana handles operational search. Neither uses Grafana's visualization layer.</p>
+  <div class="section-tag">Dashboards</div>
+  <h2 class="section-title">Business Intelligence &amp; Observability Interface</h2>
+  <p class="section-desc">The Custom Dashboard Service is the primary stakeholder-facing surface — built with COIN-JWT SSO and per-LOB access control. Five domain dashboards give platform owners, product managers, and compliance teams a real-time view of AI service health, cost, and quality.</p>
 
   <div class="dash-grid">
     <div class="dash-card">
-      <div class="dash-head" style="background:linear-gradient(90deg,rgba(108,99,255,0.1) 0%,transparent 100%)"><h3>🌐 Usecase / Overview Dashboard</h3></div>
+      <div class="dash-head" style="background:linear-gradient(90deg,rgba(59,122,232,0.1) 0%,transparent 100%)"><h3>🌐 Usecase / Overview Dashboard</h3></div>
       <div class="dash-body">
         <div class="metric-row"><span class="metric-name">Total requests / Successful responses</span><span class="metric-badge">Request count</span></div>
         <div class="metric-row"><span class="metric-name">Total errors / Error rate</span><span class="metric-badge">Error count</span></div>
@@ -879,7 +875,7 @@
       </div>
     </div>
     <div class="dash-card">
-      <div class="dash-head" style="background:linear-gradient(90deg,rgba(108,99,255,0.1) 0%,transparent 100%)"><h3>⭐ User Feedback Dashboard</h3></div>
+      <div class="dash-head" style="background:linear-gradient(90deg,rgba(59,122,232,0.1) 0%,transparent 100%)"><h3>⭐ User Feedback Dashboard</h3></div>
       <div class="dash-body">
         <div class="metric-row"><span class="metric-name">Total / Positive / Negative feedback</span><span class="metric-badge">Rating average</span></div>
         <div class="metric-row"><span class="metric-name">Feedback by application / tool</span><span class="metric-badge">Feedback by model</span></div>
@@ -901,9 +897,9 @@
 
 <!-- ROADMAP -->
 <section id="roadmap">
-  <div class="section-tag">10 · Delivery Roadmap</div>
-  <h2 class="section-title">8 Phases — All Planned</h2>
-  <p class="section-desc">Weeks are indicative effort, not committed dates. Phases 2–4 and Phase Q overlap. Nothing is marked complete — all work is ahead of us.</p>
+  <div class="section-tag">Delivery Plan</div>
+  <h2 class="section-title">8-Phase Delivery Roadmap</h2>
+  <p class="section-desc">Indicative week estimates — not committed dates. Phases 2–4 and Q overlap. All phases are planned; no work is in progress or complete.</p>
 
   <div class="deferred-banner">
     ⚠️ &nbsp;No phase is complete. All checkboxes are open. Status = Planned. Weeks are relative effort, not calendar dates.
@@ -1094,10 +1090,453 @@
   </div>
 </section>
 
+<!-- COVERAGE -->
+<section id="coverage">
+  <div class="section-tag">Gap Assessment</div>
+  <h2 class="section-title">Current State — Field Coverage by Service</h2>
+  <p class="section-desc">Baseline telemetry coverage across all 8 AI Platform services, mapped from the Observability Coverage assessment. This gap analysis defines the instrumentation work in Phases 1 and 2.</p>
+
+  <div class="cov-legend">
+    <span style="background:rgba(0,212,100,0.12);color:#00d464;border-color:rgba(0,212,100,0.3)">✓ Present</span>
+    <span style="background:rgba(255,190,0,0.1);color:#ffbe00;border-color:rgba(255,190,0,0.3)">⚠ Partial</span>
+    <span style="background:rgba(255,255,255,0.05);color:rgba(255,255,255,0.3);border-color:rgba(255,255,255,0.12)">✗ Missing</span>
+    <span style="background:rgba(59,122,232,0.12);color:#a89fff;border-color:rgba(59,122,232,0.35)">● PII Risk</span>
+    <span style="background:rgba(255,255,255,0.03);color:rgba(255,255,255,0.2);border-color:rgba(255,255,255,0.08)">— N/A</span>
+  </div>
+
+  <div class="tab-nav" id="cov-tabs">
+    <button class="tab-btn active" onclick="switchTab('cov','overview')">Overview</button>
+    <button class="tab-btn" onclick="switchTab('cov','events')">Event Fields</button>
+    <button class="tab-btn" onclick="switchTab('cov','llm')">LLM Telemetry</button>
+    <button class="tab-btn" onclick="switchTab('cov','agent')">Agent</button>
+    <button class="tab-btn" onclick="switchTab('cov','tool')">Tool</button>
+    <button class="tab-btn" onclick="switchTab('cov','rag')">RAG / Ingestion</button>
+    <button class="tab-btn" onclick="switchTab('cov','file')">File Telemetry</button>
+    <button class="tab-btn" onclick="switchTab('cov','feed')">Feedback</button>
+    <button class="tab-btn" onclick="switchTab('cov','kafk')">Kafka</button>
+  </div>
+
+  <!-- OVERVIEW -->
+  <div id="cov-overview" class="cov-panel active">
+    <p class="cov-note">8 services in scope. 2 emit to Kafka today (Agent Executor, Agentic Orchestration). Remaining 6 will onboard via the Observability SDK in Phase 2. All services use Python / FastAPI with COIN JWT auth except Consumer Service (internal scheduler).</p>
+    <div class="svc-grid">
+      <div class="svc-card">
+        <h4>Agent Executor</h4>
+        <div class="role">Stateful, event-driven multi-step agent execution engine. Manages tool calls, HIL pauses, and audit trail via PostgreSQL PGVector.</div>
+        <div class="trow">
+          <span class="stag s">Python / FastAPI</span>
+          <span class="stag s">VertexAI Gemini</span>
+          <span class="stag s">PostgreSQL / PGVector</span>
+        </div>
+        <div class="trow">
+          <span class="stag k">Kafka: Optional streaming</span>
+        </div>
+        <div class="trow">
+          <span class="stag warn">Current: Audit table + DecLogger</span>
+          <span class="stag ok">Target: Full agent + LLM + tool signals</span>
+        </div>
+      </div>
+      <div class="svc-card">
+        <h4>Agentic Orchestration</h4>
+        <div class="role">Multi-agent routing, planning, LLM gate, Human-in-the-Loop coordination. Primary Kafka producer on the platform.</div>
+        <div class="trow">
+          <span class="stag s">Python / FastAPI</span>
+          <span class="stag s">VertexAI / Stellar</span>
+          <span class="stag s">COIN JWT</span>
+        </div>
+        <div class="trow">
+          <span class="stag k">Kafka: Primary channel</span>
+        </div>
+        <div class="trow">
+          <span class="stag warn">Current: JSONFormatter HTTP + Kafka events</span>
+          <span class="stag ok">Target: Plan / HIL / Kafka telemetry</span>
+        </div>
+      </div>
+      <div class="svc-card">
+        <h4>GSSP GS — LLM Gateway</h4>
+        <div class="role">Generic Generation Service; proxies LLM calls to VertexAI, Claude, and Llama via R2D2. Tracks token usage via LLMUsageMetrics.</div>
+        <div class="trow">
+          <span class="stag s">Python / FastAPI</span>
+          <span class="stag s">VertexAI / Claude / Llama</span>
+          <span class="stag s">PostgreSQL / S3</span>
+        </div>
+        <div class="trow">
+          <span class="stag nk">No Kafka</span>
+        </div>
+        <div class="trow">
+          <span class="stag warn">Current: HTTP logs + LLMUsageMetrics</span>
+          <span class="stag ok">Target: LLM / multimodal / file telemetry</span>
+        </div>
+      </div>
+      <div class="svc-card">
+        <h4>GSSP QS — Query Service</h4>
+        <div class="role">RAG workflow orchestration, guardrails, semantic cache via PGVector, retrieval and generation coordination.</div>
+        <div class="trow">
+          <span class="stag s">Python / FastAPI</span>
+          <span class="stag s">PGVector cache</span>
+          <span class="stag s">COIN JWT</span>
+        </div>
+        <div class="trow">
+          <span class="stag nk">No Kafka</span>
+        </div>
+        <div class="trow">
+          <span class="stag warn">Current: HTTP request/response logs only</span>
+          <span class="stag ok">Target: LLM + retrieval + quality metrics</span>
+        </div>
+      </div>
+      <div class="svc-card">
+        <h4>GSSP RS — Retrieval Service</h4>
+        <div class="role">Configurable document retrieval and embedding lookup via PGVector and R2D2. Feeds GSSP QS with ranked chunks.</div>
+        <div class="trow">
+          <span class="stag s">Python / FastAPI</span>
+          <span class="stag s">PGVector / R2D2 embeddings</span>
+          <span class="stag s">COIN JWT</span>
+        </div>
+        <div class="trow">
+          <span class="stag nk">No Kafka</span>
+        </div>
+        <div class="trow">
+          <span class="stag warn">Current: Partial config / DB traces</span>
+          <span class="stag ok">Target: RAG / retrieval / quality signals</span>
+        </div>
+      </div>
+      <div class="svc-card">
+        <h4>Consumer Service</h4>
+        <div class="role">Document ingestion scheduler; drives the RAG pipeline (S3 → parse → chunk → embed → pgvector). APScheduler-driven batch jobs.</div>
+        <div class="trow">
+          <span class="stag s">Python / FastAPI</span>
+          <span class="stag s">APScheduler</span>
+          <span class="stag s">PostgreSQL / pgvector</span>
+        </div>
+        <div class="trow">
+          <span class="stag nk">No Kafka</span>
+        </div>
+        <div class="trow">
+          <span class="stag warn">Current: JSON logs, scheduler lifecycle</span>
+          <span class="stag ok">Target: RAG + pipeline + embedding signals</span>
+        </div>
+      </div>
+      <div class="svc-card">
+        <h4>Data Ingestion Service</h4>
+        <div class="role">REST endpoint for document ingest, embedding generation, and vector storage. Uses SageMaker and S3 for processing.</div>
+        <div class="trow">
+          <span class="stag s">Python / FastAPI</span>
+          <span class="stag s">SageMaker</span>
+          <span class="stag s">PostgreSQL / S3</span>
+        </div>
+        <div class="trow">
+          <span class="stag nk">No Kafka</span>
+        </div>
+        <div class="trow">
+          <span class="stag bad">Current: Minimal / ad-hoc logs</span>
+          <span class="stag ok">Target: File + RAG ingestion signals</span>
+        </div>
+      </div>
+      <div class="svc-card">
+        <h4>User Feedback</h4>
+        <div class="role">Feedback capture API; persists ratings, comments, and partial correlation_id links to the generating trace.</div>
+        <div class="trow">
+          <span class="stag s">Python / FastAPI</span>
+          <span class="stag s">PostgreSQL / PGVector</span>
+          <span class="stag s">COIN JWT</span>
+        </div>
+        <div class="trow">
+          <span class="stag nk">No Kafka</span>
+        </div>
+        <div class="trow">
+          <span class="stag warn">Current: Middleware logs + feedback rows</span>
+          <span class="stag ok">Target: Feedback + trace-join signals</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- EVENT FIELDS -->
+  <div id="cov-events" class="cov-panel">
+    <p class="cov-note"><code>span_id</code>, <code>parent_span_id</code>, <code>schema_version</code>, <code>usecase_id</code>, <code>lob</code>, and <code>tenant_id</code> are universally missing — these are the core SDK envelope gaps to close in Phase 1. <code>user_hash</code> is a PII risk in two services where user identity is logged as plain text.</p>
+    <div class="cov-tbl-wrap">
+      <table class="cov-tbl">
+        <thead>
+          <tr>
+            <th>Field</th>
+            <th>Agent Executor</th>
+            <th>Agentic Orchestration</th>
+            <th>Consumer Service</th>
+            <th>Data Ingestion</th>
+            <th>GSSP QS</th>
+            <th>GSSP RS</th>
+            <th>User Feedback</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>event_id</td><td><span class="cov-q">⚠</span><span class="cov-nt">audit_table only</span></td><td><span class="cov-q">⚠</span><span class="cov-nt">Kafka msgs only</span></td><td><span class="cov-m">✗</span></td><td><span class="cov-m">✗</span></td><td><span class="cov-m">✗</span></td><td><span class="cov-m">✗</span></td><td><span class="cov-m">✗</span></td></tr>
+          <tr><td>event_type</td><td><span class="cov-q">⚠</span><span class="cov-nt">audit_table only</span></td><td><span class="cov-p">✓</span></td><td><span class="cov-q">⚠</span><span class="cov-nt">error handler only</span></td><td><span class="cov-q">⚠</span><span class="cov-nt">error handler only</span></td><td><span class="cov-q">⚠</span><span class="cov-nt">observability_type</span></td><td><span class="cov-q">⚠</span><span class="cov-nt">observability_type</span></td><td><span class="cov-q">⚠</span><span class="cov-nt">observability_type</span></td></tr>
+          <tr><td>schema_version</td><td><span class="cov-m">✗</span></td><td><span class="cov-m">✗</span></td><td><span class="cov-m">✗</span></td><td><span class="cov-m">✗</span></td><td><span class="cov-m">✗</span></td><td><span class="cov-m">✗</span></td><td><span class="cov-m">✗</span></td></tr>
+          <tr><td>timestamp</td><td><span class="cov-p">✓</span></td><td><span class="cov-p">✓</span></td><td><span class="cov-p">✓</span></td><td><span class="cov-q">⚠</span><span class="cov-nt">not always UTC ISO</span></td><td><span class="cov-q">⚠</span><span class="cov-nt">time_local format</span></td><td><span class="cov-q">⚠</span><span class="cov-nt">time_local format</span></td><td><span class="cov-p">✓</span></td></tr>
+          <tr><td>span_id</td><td><span class="cov-m">✗</span></td><td><span class="cov-m">✗</span></td><td><span class="cov-m">✗</span></td><td><span class="cov-m">✗</span></td><td><span class="cov-m">✗</span></td><td><span class="cov-m">✗</span></td><td><span class="cov-m">✗</span></td></tr>
+          <tr><td>parent_span_id</td><td><span class="cov-m">✗</span></td><td><span class="cov-m">✗</span></td><td><span class="cov-m">✗</span></td><td><span class="cov-m">✗</span></td><td><span class="cov-m">✗</span></td><td><span class="cov-m">✗</span></td><td><span class="cov-m">✗</span></td></tr>
+          <tr><td>request_id</td><td><span class="cov-p">✓</span></td><td><span class="cov-p">✓</span></td><td><span class="cov-p">✓</span></td><td><span class="cov-p">✓</span></td><td><span class="cov-p">✓</span></td><td><span class="cov-p">✓</span></td><td><span class="cov-p">✓</span></td></tr>
+          <tr><td>usecase_id</td><td><span class="cov-m">✗</span></td><td><span class="cov-m">✗</span></td><td><span class="cov-m">✗</span></td><td><span class="cov-m">✗</span></td><td><span class="cov-m">✗</span></td><td><span class="cov-m">✗</span></td><td><span class="cov-q">⚠</span><span class="cov-nt">consumer app ID only</span></td></tr>
+          <tr><td>environment</td><td><span class="cov-p">✓</span></td><td><span class="cov-p">✓</span></td><td><span class="cov-p">✓</span></td><td><span class="cov-p">✓</span></td><td><span class="cov-p">✓</span></td><td><span class="cov-p">✓</span></td><td><span class="cov-m">✗</span></td></tr>
+          <tr><td>service_name</td><td><span class="cov-p">✓</span></td><td><span class="cov-p">✓</span></td><td><span class="cov-p">✓</span></td><td><span class="cov-p">✓</span></td><td><span class="cov-p">✓</span></td><td><span class="cov-p">✓</span></td><td><span class="cov-p">✓</span></td></tr>
+          <tr><td>component</td><td><span class="cov-q">⚠</span><span class="cov-nt">module path only</span></td><td><span class="cov-q">⚠</span><span class="cov-nt">module path only</span></td><td><span class="cov-p">✓</span></td><td><span class="cov-p">✓</span></td><td><span class="cov-q">⚠</span><span class="cov-nt">logger name field</span></td><td><span class="cov-m">✗</span></td><td><span class="cov-m">✗</span></td></tr>
+          <tr><td>lob</td><td><span class="cov-m">✗</span></td><td><span class="cov-m">✗</span></td><td><span class="cov-m">✗</span></td><td><span class="cov-m">✗</span></td><td><span class="cov-m">✗</span></td><td><span class="cov-m">✗</span></td><td><span class="cov-m">✗</span></td></tr>
+          <tr><td>tenant_id</td><td><span class="cov-m">✗</span></td><td><span class="cov-m">✗</span></td><td><span class="cov-m">✗</span></td><td><span class="cov-m">✗</span></td><td><span class="cov-m">✗</span></td><td><span class="cov-m">✗</span></td><td><span class="cov-m">✗</span></td></tr>
+          <tr><td>user_hash</td><td><span class="cov-r">●</span><span class="cov-nt">PII: plain text, not hashed</span></td><td><span class="cov-r">●</span><span class="cov-nt">PII: plain text, not hashed</span></td><td><span class="cov-q">⚠</span><span class="cov-nt">soe_id plain text</span></td><td><span class="cov-q">⚠</span><span class="cov-nt">soe_id plain text</span></td><td><span class="cov-m">✗</span></td><td><span class="cov-m">✗</span></td><td><span class="cov-m">✗</span></td></tr>
+          <tr><td>status</td><td><span class="cov-p">✓</span></td><td><span class="cov-p">✓</span></td><td><span class="cov-p">✓</span></td><td><span class="cov-p">✓</span></td><td><span class="cov-q">⚠</span><span class="cov-nt">errors only</span></td><td><span class="cov-q">⚠</span><span class="cov-nt">errors only</span></td><td><span class="cov-q">⚠</span><span class="cov-nt">HTTP/error only</span></td></tr>
+          <tr><td>latency_ms</td><td><span class="cov-q">⚠</span><span class="cov-nt">derivable from audit</span></td><td><span class="cov-q">⚠</span><span class="cov-nt">HTTP only</span></td><td><span class="cov-q">⚠</span><span class="cov-nt">string format</span></td><td><span class="cov-q">⚠</span><span class="cov-nt">string format</span></td><td><span class="cov-q">⚠</span><span class="cov-nt">seconds/string</span></td><td><span class="cov-q">⚠</span><span class="cov-nt">seconds/string</span></td><td><span class="cov-p">✓</span></td></tr>
+          <tr><td>error_code</td><td><span class="cov-m">✗</span></td><td><span class="cov-m">✗</span></td><td><span class="cov-m">✗</span></td><td><span class="cov-m">✗</span></td><td><span class="cov-q">⚠</span><span class="cov-nt">errors only</span></td><td><span class="cov-m">✗</span></td><td><span class="cov-m">✗</span></td></tr>
+          <tr><td>http_status</td><td><span class="cov-q">⚠</span></td><td><span class="cov-q">⚠</span></td><td><span class="cov-m">✗</span></td><td><span class="cov-m">✗</span></td><td><span class="cov-m">✗</span></td><td><span class="cov-m">✗</span></td><td><span class="cov-q">⚠</span><span class="cov-nt">errors/response only</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- LLM TELEMETRY -->
+  <div id="cov-llm" class="cov-panel">
+    <p class="cov-note">GSSP GS is the primary LLM gateway and has the strongest signal today via <code>LLMUsageMetrics</code>. Agent services only retain token counts in the audit table. GSSP RS handles embeddings (not generation) — <code>confidence_score</code> is N/A. <code>finish_reason</code> and <code>safety_blocked</code> are missing everywhere.</p>
+    <div class="cov-tbl-wrap">
+      <table class="cov-tbl">
+        <thead>
+          <tr>
+            <th>Field</th>
+            <th>Agent Executor</th>
+            <th>Agentic Orchestration</th>
+            <th>GSSP GS</th>
+            <th>GSSP QS</th>
+            <th>GSSP RS</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>model_name</td><td><span class="cov-m">✗</span></td><td><span class="cov-m">✗</span></td><td><span class="cov-p">✓</span><span class="cov-nt">LLM call logs</span></td><td><span class="cov-q">⚠</span><span class="cov-nt">cache/pricing only</span></td><td><span class="cov-m">✗</span><span class="cov-nt">embedding config not logged per call</span></td></tr>
+          <tr><td>model_provider</td><td><span class="cov-m">✗</span></td><td><span class="cov-m">✗</span></td><td><span class="cov-q">⚠</span><span class="cov-nt">config level only</span></td><td><span class="cov-q">⚠</span><span class="cov-nt">client/config</span></td><td><span class="cov-m">✗</span></td></tr>
+          <tr><td>prompt_template_id</td><td><span class="cov-m">✗</span></td><td><span class="cov-m">✗</span></td><td><span class="cov-m">✗</span></td><td><span class="cov-m">✗</span></td><td><span class="cov-m">✗</span></td></tr>
+          <tr><td>input_tokens</td><td><span class="cov-q">⚠</span><span class="cov-nt">audit_table</span></td><td><span class="cov-q">⚠</span><span class="cov-nt">audit_table</span></td><td><span class="cov-p">✓</span><span class="cov-nt">LLMUsageMetrics</span></td><td><span class="cov-q">⚠</span><span class="cov-nt">cache hit only</span></td><td><span class="cov-q">⚠</span><span class="cov-nt">embedding usage discarded</span></td></tr>
+          <tr><td>output_tokens</td><td><span class="cov-q">⚠</span><span class="cov-nt">audit_table</span></td><td><span class="cov-q">⚠</span><span class="cov-nt">audit_table</span></td><td><span class="cov-p">✓</span><span class="cov-nt">LLMUsageMetrics</span></td><td><span class="cov-q">⚠</span><span class="cov-nt">cache hit only</span></td><td><span class="cov-q">⚠</span><span class="cov-nt">embedding usage discarded</span></td></tr>
+          <tr><td>total_tokens</td><td><span class="cov-q">⚠</span><span class="cov-nt">audit_table</span></td><td><span class="cov-q">⚠</span><span class="cov-nt">audit_table</span></td><td><span class="cov-p">✓</span><span class="cov-nt">LLMUsageMetrics</span></td><td><span class="cov-q">⚠</span><span class="cov-nt">cache hit only</span></td><td><span class="cov-q">⚠</span><span class="cov-nt">embedding usage discarded</span></td></tr>
+          <tr><td>estimated_cost</td><td><span class="cov-m">✗</span></td><td><span class="cov-m">✗</span></td><td><span class="cov-q">⚠</span><span class="cov-nt">DB-bound, not in events</span></td><td><span class="cov-q">⚠</span><span class="cov-nt">cache-hit cost saved only</span></td><td><span class="cov-m">✗</span></td></tr>
+          <tr><td>llm_latency_ms</td><td><span class="cov-m">✗</span></td><td><span class="cov-m">✗</span></td><td><span class="cov-p">✓</span><span class="cov-nt">LLMUsageMetrics</span></td><td><span class="cov-m">✗</span></td><td><span class="cov-m">✗</span></td></tr>
+          <tr><td>finish_reason</td><td><span class="cov-m">✗</span></td><td><span class="cov-m">✗</span></td><td><span class="cov-m">✗</span></td><td><span class="cov-m">✗</span></td><td><span class="cov-m">✗</span></td></tr>
+          <tr><td>rate_limit_hit</td><td><span class="cov-m">✗</span></td><td><span class="cov-m">✗</span></td><td><span class="cov-q">⚠</span><span class="cov-nt">seconds/retry string</span></td><td><span class="cov-m">✗</span></td><td><span class="cov-m">✗</span></td></tr>
+          <tr><td>safety_blocked</td><td><span class="cov-m">✗</span></td><td><span class="cov-m">✗</span></td><td><span class="cov-m">✗</span></td><td><span class="cov-m">✗</span></td><td><span class="cov-m">✗</span></td></tr>
+          <tr><td>confidence_score</td><td><span class="cov-m">✗</span></td><td><span class="cov-m">✗</span></td><td><span class="cov-q">⚠</span><span class="cov-nt">logprobs (Claude only)</span></td><td><span class="cov-m">✗</span></td><td><span class="cov-n">—</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- AGENT TELEMETRY -->
+  <div id="cov-agent" class="cov-panel">
+    <p class="cov-note">Agent Executor captures the richest signal via its <code>audit_table</code> (one row per invocation/step/tool/error). Agentic Orchestration primarily emits events through Kafka (HIL flows, execution rejections). Step-level structured fields are not standardized in either service.</p>
+    <div class="cov-tbl-wrap">
+      <table class="cov-tbl">
+        <thead>
+          <tr>
+            <th>Field</th>
+            <th>Agent Executor</th>
+            <th>Agentic Orchestration</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>agent_id</td><td><span class="cov-q">⚠</span><span class="cov-nt">name in payload, not logged</span></td><td><span class="cov-q">⚠</span><span class="cov-nt">name in plans only</span></td></tr>
+          <tr><td>agent_version</td><td><span class="cov-m">✗</span></td><td><span class="cov-m">✗</span></td></tr>
+          <tr><td>agent_type</td><td><span class="cov-m">✗</span></td><td><span class="cov-m">✗</span></td></tr>
+          <tr><td>step_count</td><td><span class="cov-q">⚠</span><span class="cov-nt">embedded in log sentence</span></td><td><span class="cov-q">⚠</span><span class="cov-nt">embedded in log sentence</span></td></tr>
+          <tr><td>loop_count</td><td><span class="cov-m">✗</span></td><td><span class="cov-m">✗</span></td></tr>
+          <tr><td>handoff_count</td><td><span class="cov-m">✗</span></td><td><span class="cov-m">✗</span></td></tr>
+          <tr><td>step_name</td><td><span class="cov-m">✗</span></td><td><span class="cov-m">✗</span></td></tr>
+          <tr><td>step_number</td><td><span class="cov-m">✗</span></td><td><span class="cov-m">✗</span></td></tr>
+          <tr><td>termination_reason</td><td><span class="cov-m">✗</span></td><td><span class="cov-m">✗</span></td></tr>
+          <tr><td>agent_latency_ms</td><td><span class="cov-q">⚠</span><span class="cov-nt">derivable from audit timestamps</span></td><td><span class="cov-m">✗</span></td></tr>
+          <tr class="gr"><td colspan="3">EVENTS</td></tr>
+          <tr><td>AGENT_STARTED</td><td><span class="cov-p">✓</span><span class="cov-nt">audit_table: INVOCATION row</span></td><td><span class="cov-m">✗</span></td></tr>
+          <tr><td>AGENT_STEP_COMPLETED</td><td><span class="cov-p">✓</span><span class="cov-nt">audit_table: AGENT row per step</span></td><td><span class="cov-m">✗</span></td></tr>
+          <tr><td>AGENT_FAILED</td><td><span class="cov-p">✓</span><span class="cov-nt">audit_table: ERROR row</span></td><td><span class="cov-q">⚠</span><span class="cov-nt">Kafka: EXECUTION_REJECTED</span></td></tr>
+          <tr><td>HIL_REQUEST</td><td><span class="cov-m">✗</span></td><td><span class="cov-q">⚠</span><span class="cov-nt">Kafka: HIL_REQUEST message</span></td></tr>
+          <tr><td>HIL_RESPONSE</td><td><span class="cov-m">✗</span></td><td><span class="cov-p">✓</span><span class="cov-nt">Kafka: HIL_RESPONSE</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- TOOL TELEMETRY -->
+  <div id="cov-tool" class="cov-panel">
+    <p class="cov-note">Agent Executor has reasonable tool coverage via its audit table (one row per tool call). Agentic Orchestration has zero structured tool telemetry today — all fields and events are missing.</p>
+    <div class="cov-tbl-wrap">
+      <table class="cov-tbl">
+        <thead>
+          <tr>
+            <th>Field</th>
+            <th>Agent Executor</th>
+            <th>Agentic Orchestration</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>tool_id</td><td><span class="cov-q">⚠</span><span class="cov-nt">name in payload only</span></td><td><span class="cov-m">✗</span></td></tr>
+          <tr><td>tool_name</td><td><span class="cov-q">⚠</span><span class="cov-nt">payload only</span></td><td><span class="cov-m">✗</span></td></tr>
+          <tr><td>tool_type</td><td><span class="cov-m">✗</span></td><td><span class="cov-m">✗</span></td></tr>
+          <tr><td>tool_latency_ms</td><td><span class="cov-m">✗</span></td><td><span class="cov-m">✗</span></td></tr>
+          <tr><td>tool_status</td><td><span class="cov-p">✓</span><span class="cov-nt">audit_table: TOOL row</span></td><td><span class="cov-m">✗</span></td></tr>
+          <tr><td>retry_count</td><td><span class="cov-m">✗</span></td><td><span class="cov-m">✗</span></td></tr>
+          <tr><td>timeout_flag</td><td><span class="cov-m">✗</span></td><td><span class="cov-m">✗</span></td></tr>
+          <tr><td>http_status (tool)</td><td><span class="cov-m">✗</span></td><td><span class="cov-m">✗</span></td></tr>
+          <tr class="gr"><td colspan="3">EVENTS</td></tr>
+          <tr><td>TOOL_CALL_STARTED</td><td><span class="cov-p">✓</span><span class="cov-nt">audit_table</span></td><td><span class="cov-m">✗</span></td></tr>
+          <tr><td>TOOL_CALL_COMPLETED</td><td><span class="cov-p">✓</span><span class="cov-nt">audit_table</span></td><td><span class="cov-m">✗</span></td></tr>
+          <tr><td>TOOL_CALL_FAILED</td><td><span class="cov-p">✓</span><span class="cov-nt">audit_table: ERROR row</span></td><td><span class="cov-m">✗</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- RAG INGESTION -->
+  <div id="cov-rag" class="cov-panel">
+    <p class="cov-note">All RAG retrieval quality fields (chunk count, relevance scores, embedding latency) are universally missing across the three services that perform retrieval or ingestion. Job-level fields are present in Consumer Service and Data Ingestion but are not surfaced to GSSP QS which orchestrates the retrieval requests.</p>
+    <div class="cov-tbl-wrap">
+      <table class="cov-tbl">
+        <thead>
+          <tr>
+            <th>Field</th>
+            <th>Consumer Service</th>
+            <th>Data Ingestion</th>
+            <th>GSSP QS</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr class="gr"><td colspan="4">RAG RETRIEVAL FIELDS</td></tr>
+          <tr><td>rag_id</td><td><span class="cov-m">✗</span></td><td><span class="cov-m">✗</span></td><td><span class="cov-m">✗</span></td></tr>
+          <tr><td>knowledge_base</td><td><span class="cov-m">✗</span></td><td><span class="cov-m">✗</span></td><td><span class="cov-m">✗</span></td></tr>
+          <tr><td>embedding_model</td><td><span class="cov-m">✗</span></td><td><span class="cov-m">✗</span></td><td><span class="cov-m">✗</span></td></tr>
+          <tr><td>embedding_latency_ms</td><td><span class="cov-m">✗</span></td><td><span class="cov-m">✗</span></td><td><span class="cov-m">✗</span></td></tr>
+          <tr><td>retrieved_chunk_count</td><td><span class="cov-m">✗</span></td><td><span class="cov-m">✗</span></td><td><span class="cov-m">✗</span></td></tr>
+          <tr><td>avg_relevance_score</td><td><span class="cov-m">✗</span></td><td><span class="cov-m">✗</span></td><td><span class="cov-m">✗</span></td></tr>
+          <tr><td>citation_coverage_pct</td><td><span class="cov-m">✗</span></td><td><span class="cov-m">✗</span></td><td><span class="cov-m">✗</span></td></tr>
+          <tr><td>context_truncation_flag</td><td><span class="cov-m">✗</span></td><td><span class="cov-m">✗</span></td><td><span class="cov-m">✗</span></td></tr>
+          <tr class="gr"><td colspan="4">DOCUMENT / JOB FIELDS</td></tr>
+          <tr><td>job_id</td><td><span class="cov-p">✓</span></td><td><span class="cov-p">✓</span></td><td><span class="cov-n">—</span></td></tr>
+          <tr><td>document_id</td><td><span class="cov-p">✓</span></td><td><span class="cov-p">✓</span></td><td><span class="cov-n">—</span></td></tr>
+          <tr><td>job_status</td><td><span class="cov-p">✓</span><span class="cov-nt">SUCCESS/FAILURE/ERROR</span></td><td><span class="cov-p">✓</span></td><td><span class="cov-n">—</span></td></tr>
+          <tr><td>job_processing_time</td><td><span class="cov-q">⚠</span><span class="cov-nt">string format</span></td><td><span class="cov-q">⚠</span><span class="cov-nt">string format</span></td><td><span class="cov-n">—</span></td></tr>
+          <tr><td>input_tokens (embed)</td><td><span class="cov-m">✗</span></td><td><span class="cov-m">✗</span></td><td><span class="cov-n">—</span></td></tr>
+          <tr class="gr"><td colspan="4">EVENTS</td></tr>
+          <tr><td>RAG_RETRIEVAL_STARTED</td><td><span class="cov-m">✗</span></td><td><span class="cov-m">✗</span></td><td><span class="cov-m">✗</span></td></tr>
+          <tr><td>RAG_RETRIEVAL_COMPLETED</td><td><span class="cov-m">✗</span></td><td><span class="cov-m">✗</span></td><td><span class="cov-m">✗</span></td></tr>
+          <tr><td>RAG_NO_RESULT</td><td><span class="cov-m">✗</span></td><td><span class="cov-m">✗</span></td><td><span class="cov-m">✗</span></td></tr>
+          <tr><td>DOCUMENT_INDEXED</td><td><span class="cov-q">⚠</span><span class="cov-nt">job completion log only</span></td><td><span class="cov-q">⚠</span><span class="cov-nt">job completion log only</span></td><td><span class="cov-n">—</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- FILE TELEMETRY -->
+  <div id="cov-file" class="cov-panel">
+    <p class="cov-note">File telemetry covers two separate flows: inbound multi-modal attachment handling (GSSP GS and Agentic Orchestration) and the document ingestion pipeline (Consumer Service and Data Ingestion). Both flows have zero structured field coverage today. The document parse events are the only signal present.</p>
+    <p class="cov-sub">Inbound Request — GSSP GS &amp; Agentic Orchestration</p>
+    <div class="cov-tbl-wrap">
+      <table class="cov-tbl">
+        <thead>
+          <tr><th>Field</th><th>GSSP GS</th><th>Agentic Orchestration</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>has_attachment</td><td><span class="cov-m">✗</span></td><td><span class="cov-m">✗</span></td></tr>
+          <tr><td>file_count</td><td><span class="cov-m">✗</span></td><td><span class="cov-m">✗</span></td></tr>
+          <tr><td>image_count</td><td><span class="cov-m">✗</span></td><td><span class="cov-m">✗</span></td></tr>
+          <tr><td>doc_count</td><td><span class="cov-m">✗</span></td><td><span class="cov-m">✗</span></td></tr>
+          <tr><td>total_file_size_bytes</td><td><span class="cov-m">✗</span></td><td><span class="cov-m">✗</span></td></tr>
+          <tr><td>largest_file_bytes</td><td><span class="cov-m">✗</span></td><td><span class="cov-m">✗</span></td></tr>
+          <tr><td>file_types</td><td><span class="cov-m">✗</span></td><td><span class="cov-m">✗</span></td></tr>
+          <tr><td>multimodal_flag</td><td><span class="cov-m">✗</span></td><td><span class="cov-m">✗</span></td></tr>
+          <tr><td>requests_without_files</td><td><span class="cov-m">✗</span></td><td><span class="cov-m">✗</span></td></tr>
+          <tr><td>FILE_ATTACHMENT_RECEIVED</td><td><span class="cov-m">✗</span></td><td><span class="cov-m">✗</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="cov-sub">Document Ingestion Pipeline — Consumer Service &amp; Data Ingestion</p>
+    <div class="cov-tbl-wrap">
+      <table class="cov-tbl">
+        <thead>
+          <tr><th>Field</th><th>Consumer Service</th><th>Data Ingestion</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>document_format</td><td><span class="cov-m">✗</span></td><td><span class="cov-m">✗</span></td></tr>
+          <tr><td>document_size_bytes</td><td><span class="cov-m">✗</span></td><td><span class="cov-m">✗</span></td></tr>
+          <tr><td>page_count</td><td><span class="cov-m">✗</span></td><td><span class="cov-m">✗</span></td></tr>
+          <tr><td>chunk_count</td><td><span class="cov-m">✗</span></td><td><span class="cov-m">✗</span></td></tr>
+          <tr><td>avg_chunk_size_tokens</td><td><span class="cov-m">✗</span></td><td><span class="cov-m">✗</span></td></tr>
+          <tr><td>extraction_status</td><td><span class="cov-m">✗</span></td><td><span class="cov-m">✗</span></td></tr>
+          <tr><td>parser_used</td><td><span class="cov-m">✗</span></td><td><span class="cov-m">✗</span></td></tr>
+          <tr><td>s3_object_key</td><td><span class="cov-q">⚠</span><span class="cov-nt">in some logs only</span></td><td><span class="cov-q">⚠</span><span class="cov-nt">in some logs only</span></td></tr>
+          <tr><td>requests_without_files</td><td><span class="cov-m">✗</span></td><td><span class="cov-m">✗</span></td></tr>
+          <tr class="gr"><td colspan="3">EVENTS</td></tr>
+          <tr><td>DOCUMENT_PARSE_STARTED</td><td><span class="cov-p">✓</span></td><td><span class="cov-p">✓</span></td></tr>
+          <tr><td>DOCUMENT_PARSE_COMPLETED</td><td><span class="cov-p">✓</span></td><td><span class="cov-p">✓</span></td></tr>
+          <tr><td>DOCUMENT_PARSE_FAILED</td><td><span class="cov-p">✓</span></td><td><span class="cov-p">✓</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- FEEDBACK TELEMETRY -->
+  <div id="cov-feed" class="cov-panel">
+    <p class="cov-note">User Feedback service is the sole source for this domain. Core fields are well covered. Key gaps: <code>sentiment</code> is missing (no NLP enrichment today), and <code>correlation_id</code> linkage is partial — the join from a submitted rating back to the specific LLM generation that triggered it is not guaranteed.</p>
+    <div class="cov-tbl-wrap">
+      <table class="cov-tbl">
+        <thead>
+          <tr>
+            <th>Field</th>
+            <th>User Feedback</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>feedback_id</td><td><span class="cov-p">✓</span></td></tr>
+          <tr><td>correlation_id (linked to trace)</td><td><span class="cov-q">⚠</span><span class="cov-nt">partial — trace join not guaranteed</span></td></tr>
+          <tr><td>rating</td><td><span class="cov-p">✓</span></td></tr>
+          <tr><td>thumbs</td><td><span class="cov-p">✓</span></td></tr>
+          <tr><td>sentiment</td><td><span class="cov-m">✗</span></td></tr>
+          <tr><td>feedback_category</td><td><span class="cov-p">✓</span></td></tr>
+          <tr><td>free_text_comment</td><td><span class="cov-p">✓</span></td></tr>
+          <tr><td>resolution_status</td><td><span class="cov-p">✓</span></td></tr>
+          <tr class="gr"><td colspan="2">EVENTS</td></tr>
+          <tr><td>FEEDBACK_SUBMITTED</td><td><span class="cov-p">✓</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- KAFKA TELEMETRY -->
+  <div id="cov-kafk" class="cov-panel">
+    <p class="cov-note">Only 2 services produce to Kafka today. <code>kafka_topic</code> is present in both. All diagnostic fields (partition, offset, consumer group, lag, DLQ flag) are missing in both services — these are critical for Enrichment Consumer SLO tracking in Phase 3.</p>
+    <div class="cov-tbl-wrap">
+      <table class="cov-tbl">
+        <thead>
+          <tr>
+            <th>Field</th>
+            <th>Agent Executor</th>
+            <th>Agentic Orchestration</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>kafka_topic</td><td><span class="cov-p">✓</span></td><td><span class="cov-p">✓</span></td></tr>
+          <tr><td>kafka_partition</td><td><span class="cov-m">✗</span></td><td><span class="cov-m">✗</span></td></tr>
+          <tr><td>kafka_offset</td><td><span class="cov-m">✗</span></td><td><span class="cov-m">✗</span></td></tr>
+          <tr><td>consumer_group</td><td><span class="cov-m">✗</span></td><td><span class="cov-m">✗</span></td></tr>
+          <tr><td>producer_latency_ms</td><td><span class="cov-m">✗</span></td><td><span class="cov-m">✗</span></td></tr>
+          <tr><td>consumer_latency_ms</td><td><span class="cov-m">✗</span></td><td><span class="cov-m">✗</span></td></tr>
+          <tr><td>kafka_lag</td><td><span class="cov-m">✗</span></td><td><span class="cov-m">✗</span></td></tr>
+          <tr><td>message_size_bytes</td><td><span class="cov-m">✗</span></td><td><span class="cov-m">✗</span></td></tr>
+          <tr><td>retry_count</td><td><span class="cov-m">✗</span></td><td><span class="cov-m">✗</span></td></tr>
+          <tr><td>dlq_flag</td><td><span class="cov-m">✗</span></td><td><span class="cov-m">✗</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</section>
+
 <footer>
-  AI Services Platform · Observability Plane · Storage Component &nbsp;·&nbsp;
-  <span class="glow-dot yellow"></span>&nbsp; All phases planned — no work complete &nbsp;·&nbsp;
-  Generated 2026-06-29
+  AI Services Platform · Observability Plan · June 2026 &nbsp;·&nbsp;
+  <span class="glow-dot yellow"></span>&nbsp; All phases planned — no work in progress &nbsp;·&nbsp;
+  Confidential — Internal Use Only
 </footer>
 
 <script>
