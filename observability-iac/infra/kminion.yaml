@@ -1,30 +1,81 @@
-# kminion — Kafka + consumer-lag metrics for Prometheus. Watches all 3 obs consumer groups.
+# kminion — Kafka consumer-lag exporter for Prometheus.
+# Watches the three pipeline consumer groups (obs-enrichment, obs-storage,
+# obs-eval) plus the DLQ replay group. kubectl apply -f kminion.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kminion-config
+  namespace: observability
+data:
+  config.yaml: |
+    kafka:
+      brokers: ["kafka-0.kafka-headless.kafka.svc:9092"]
+      # sasl/tls config via env in prod
+    minion:
+      consumerGroups:
+        enabled: true
+        scrapeMode: adminApi
+        allowedGroups: ["obs-enrichment", "obs-storage", "obs-eval", "obs-dlq-replay"]
+      topics:
+        granularity: partition
+        allowedTopics: ["ai-obs-events-raw", "ai-obs-events-processed", "ai-obs-dead-letter"]
+      logDirs:
+        enabled: true
+    exporter:
+      host: 0.0.0.0
+      port: 8080
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: kminion
-  namespace: ai-platform
+  namespace: observability
+  labels: { app: kminion }
 spec:
   replicas: 1
-  selector: { matchLabels: { app: kminion } }
+  selector:
+    matchLabels: { app: kminion }
   template:
     metadata:
       labels: { app: kminion }
     spec:
       containers:
         - name: kminion
-          image: redpandadata/kminion:latest
-          ports: [{ containerPort: 8080, name: metrics }]
-          env:
-            - name: KAFKA_BROKERS
-              value: "kafka.kafka.svc.cluster.local:9092"
-            # consumer groups to track: obs-enrichment-consumer, obs-storage-consumer, obs-eval-consumer
+          image: redpandadata/kminion:v2.2.8
+          args: ["--config.filepath=/etc/kminion/config.yaml"]
+          ports:
+            - containerPort: 8080
+              name: metrics
+          volumeMounts:
+            - name: config
+              mountPath: /etc/kminion
+          resources:
+            requests: { cpu: 50m, memory: 128Mi }
+            limits: { cpu: 250m, memory: 256Mi }
+      volumes:
+        - name: config
+          configMap: { name: kminion-config }
 ---
 apiVersion: v1
 kind: Service
 metadata:
   name: kminion
-  namespace: ai-platform
+  namespace: observability
+  labels: { app: kminion }
 spec:
   selector: { app: kminion }
-  ports: [{ port: 8080, targetPort: 8080, name: metrics }]
+  ports:
+    - name: metrics
+      port: 8080
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: kminion
+  namespace: observability
+spec:
+  selector:
+    matchLabels: { app: kminion }
+  endpoints:
+    - port: metrics
+      interval: 30s

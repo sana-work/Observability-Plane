@@ -1,38 +1,77 @@
-# Fluent Bit DaemonSet config — ships structlog JSON container logs to Elasticsearch.
-# Also captures the SDK's Kafka-emit fallback lines (obs_fallback_event) so events are recoverable.
+# Fluent Bit DaemonSet config — ships the structlog JSON stdout of the 8
+# services to Elasticsearch (logs index, separate from the event indices).
+# Deploy with the fluent/fluent-bit helm chart, existingConfigMap: fluent-bit-obs.
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: fluent-bit-config
-  namespace: ai-platform
+  name: fluent-bit-obs
+  namespace: observability
 data:
   fluent-bit.conf: |
+    [SERVICE]
+        Daemon        Off
+        Log_Level     info
+        Parsers_File  parsers.conf
+        HTTP_Server   On
+        HTTP_Listen   0.0.0.0
+        HTTP_Port     2020
+
     [INPUT]
         Name              tail
-        Path              /var/log/containers/*.log
-        Parser            docker
-        Tag               kube.*
-        Mem_Buf_Limit     5MB
+        Path              /var/log/containers/*_ai-services_*.log
+        Parser            cri
+        Tag               ai.*
+        Mem_Buf_Limit     50MB
+        Skip_Long_Lines   On
+
+    # decode the structlog JSON body so correlation_id becomes a real field
+    [FILTER]
+        Name    parser
+        Match   ai.*
+        Key_Name log
+        Parser  structlog_json
+        Reserve_Data On
 
     [FILTER]
-        Name              kubernetes
-        Match             kube.*
-        Merge_Log         On
-        Keep_Log          Off
-        K8S-Logging.Parser On
+        Name    kubernetes
+        Match   ai.*
+        Merge_Log Off
+        Labels  On
+        Annotations Off
 
+    # strip secrets from log lines (user_id stays — carried raw by platform decision)
     [FILTER]
-        Name              parser
-        Match             kube.*
-        Key_Name          log
-        Parser            json
+        Name    modify
+        Match   ai.*
+        Remove  authorization
+        Remove  api_key
+        Remove  password
 
     [OUTPUT]
-        Name              es
-        Match             kube.*
-        Host              ${ELASTICSEARCH_HOST}
-        Port              9200
-        Index             ai-obs-${service_name}-logs-%Y.%m
-        tls               On
-        tls.verify        Off
-        Retry_Limit       5
+        Name            es
+        Match           ai.*
+        Host            ${ES_HOST}
+        Port            9200
+        HTTP_User       ${ES_USER}
+        HTTP_Passwd     ${ES_PASSWORD}
+        tls             On
+        Logstash_Format On
+        Logstash_Prefix ai-obs-service-logs
+        Suppress_Type_Name On
+        Replace_Dots    On
+        Retry_Limit     5
+
+  parsers.conf: |
+    [PARSER]
+        Name        cri
+        Format      regex
+        Regex       ^(?<time>[^ ]+) (?<stream>stdout|stderr) (?<logtag>[^ ]*) (?<log>.*)$
+        Time_Key    time
+        Time_Format %Y-%m-%dT%H:%M:%S.%L%z
+
+    [PARSER]
+        Name        structlog_json
+        Format      json
+        Time_Key    timestamp
+        Time_Format %Y-%m-%dT%H:%M:%S.%f%z
+        Time_Keep   On

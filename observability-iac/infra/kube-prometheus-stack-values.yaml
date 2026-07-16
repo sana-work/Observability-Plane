@@ -1,17 +1,118 @@
-# kube-prometheus-stack — infra metrics. Grafana DISABLED; the Custom Dashboard Service
-# scrapes Prometheus directly. Helm: prometheus-community/kube-prometheus-stack
+# helm upgrade --install kps prometheus-community/kube-prometheus-stack \
+#   -n observability --create-namespace -f kube-prometheus-stack-values.yaml
+#
+# GRAFANA SCOPING (decision 2026-07-15): Grafana is enabled as an
+# INTERNAL-ONLY OPS CONSOLE for the platform team — ClusterIP, no ingress,
+# no anonymous access. Reach it via:
+#   kubectl -n observability port-forward svc/kps-grafana 3000:80
+#
+# It is NOT a stakeholder surface. LOB users never get accounts here; the
+# stakeholder-facing dashboards remain the Custom Dashboard Service, which
+# queries Prometheus/ES/Postgres directly (COIN-JWT SSO + per-LOB RBAC that
+# Grafana cannot model cleanly). Do not add an ingress or SSO to Grafana
+# without an architecture review.
+#
+# Phase 5 follow-up: evaluate reusing Grafana's OSS React packages
+# (@grafana/ui, @grafana/scenes) inside the Custom Dashboard instead of
+# building time-series panels from scratch — server not required for that.
+
 grafana:
-  enabled: false
-prometheus:
   enabled: true
+  # internal-only: cluster-local service, no ingress, no sign-up, no anon
+  service:
+    type: ClusterIP
+  ingress:
+    enabled: false
+  # admin credentials come from a pre-created secret, never from values
+  admin:
+    existingSecret: grafana-admin-credentials
+    userKey: admin-user
+    passwordKey: admin-password
+  grafana.ini:
+    users:
+      allow_sign_up: false
+      allow_org_create: false
+    auth.anonymous:
+      enabled: false
+    security:
+      # ops console is not embedded anywhere; keep the strict default
+      allow_embedding: false
+    analytics:
+      reporting_enabled: false
+      check_for_updates: false
+  persistence:
+    enabled: true
+    size: 5Gi
+  # Prometheus datasource is auto-provisioned by the chart; add Tempo so
+  # engineers can jump from a metric spike to the matching infra trace.
+  additionalDataSources:
+    - name: Tempo
+      type: tempo
+      access: proxy
+      url: http://tempo-query-frontend.observability.svc:3100
+  # community dashboards useful during Phase 3-4 bring-up
+  sidecar:
+    dashboards:
+      enabled: true
+      label: grafana_dashboard
+
+alertmanager:
+  enabled: true
+  alertmanagerSpec:
+    retention: 120h
+
+prometheus:
   prometheusSpec:
     retention: 15d
-    # extra scrape targets: the 8 services' /metrics + kminion :8080
-    additionalScrapeConfigs:
-      - job_name: kminion
-        static_configs:
-          - targets: ["kminion.ai-platform.svc:8080"]
-kube-state-metrics:
-  enabled: true
-nodeExporter:
-  enabled: true
+    retentionSize: 45GB
+    resources:
+      requests: { cpu: 500m, memory: 2Gi }
+      limits: { cpu: "2", memory: 6Gi }
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          resources: { requests: { storage: 50Gi } }
+    # pick up ServiceMonitors/PodMonitors from app namespaces (SDK /metrics endpoints)
+    serviceMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelectorNilUsesHelmValues: false
+    ruleSelectorNilUsesHelmValues: false
+
+additionalPrometheusRulesMap:
+  ai-obs-pipeline:
+    groups:
+      - name: ai-obs-consumers
+        rules:
+          - alert: ObsConsumerLagHigh
+            expr: sum by (group_id, topic_name) (kminion_kafka_consumer_group_topic_lag{group_id=~"obs-.*"}) > 1000
+            for: 10m
+            labels: { severity: page, team: observability-platform }
+            annotations:
+              summary: "Consumer group {{ $labels.group_id }} lag > 1000 on {{ $labels.topic_name }} for 10m"
+              runbook: "https://wiki/ai-obs/runbooks/consumer-lag"
+          - alert: ObsDeadLetterRateHigh
+            expr: |
+              sum(rate(kminion_kafka_topic_high_water_mark_sum{topic_name="ai-obs-dead-letter"}[5m]))
+                /
+              clamp_min(sum(rate(kminion_kafka_topic_high_water_mark_sum{topic_name="ai-obs-events-raw"}[5m])), 1) > 0.01
+            for: 10m
+            labels: { severity: warning, team: observability-platform }
+            annotations:
+              summary: "DLQ rate > 1% of raw event volume"
+              runbook: "https://wiki/ai-obs/runbooks/dlq-triage"
+          - alert: ObsEnrichmentDown
+            expr: absent(up{job="obs-enrichment-consumer"} == 1)
+            for: 5m
+            labels: { severity: page, team: observability-platform }
+            annotations:
+              summary: "Enrichment consumer has no live pods"
+      - name: ai-obs-services
+        rules:
+          - alert: ObsServiceHighErrorRate
+            expr: |
+              sum by (job) (rate(http_requests_total{status=~"5..", job=~".*gssp.*|.*agent.*|.*feedback.*|.*ingestion.*|.*consumer.*"}[5m]))
+                /
+              clamp_min(sum by (job) (rate(http_requests_total[5m])), 0.001) > 0.05
+            for: 10m
+            labels: { severity: warning }
+            annotations:
+              summary: "{{ $labels.job }} 5xx rate > 5%"

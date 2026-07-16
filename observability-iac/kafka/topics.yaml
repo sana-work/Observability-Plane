@@ -1,30 +1,41 @@
-# Declarative record of the observability topics (source of truth for create_topics.sh).
-# Partition key on produce = correlation_id (ordered per-request processing).
+# Declarative source of truth for the observability topics.
+# Applied by create_topics.sh (idempotent: creates if missing, aligns configs if present).
+#
+# Compatibility contract with ai-observability-sdk:
+#   * topic names match ObsSettings defaults (AI_OBS_KAFKA_TOPIC_RAW=ai-obs-events-raw)
+#   * producers key every message by correlation_id -> per-request ordering within a partition
+#   * message value = ObsEvent JSON (contracts/event_schema.py, schema_version 1.0)
+#   * headers carry `traceparent` (+ optional `tracestate`) and `correlation_id`
+
+defaults:
+  replication_factor: 3        # overridden to 1 by create_topics.sh when KAFKA_ENV=dev
+
 topics:
   - name: ai-obs-events-raw
     partitions: 12
-    replication_factor: 3
     configs:
       retention.ms: 604800000        # 7 days
       compression.type: lz4
       min.insync.replicas: 2
-    producers: [the 8 services via ai-observability-sdk]
-    consumers: [obs-enrichment-consumer]
+      max.message.bytes: 1048576     # 1 MiB — large payloads go to S3, not Kafka
+    producers: [all 8 services via ai-observability-sdk]
+    consumers: [obs-enrichment-consumer (group obs-enrichment)]
 
   - name: ai-obs-events-processed
     partitions: 12
-    replication_factor: 3
     configs:
       retention.ms: 259200000        # 3 days
       compression.type: lz4
       min.insync.replicas: 2
+      max.message.bytes: 1048576
     producers: [obs-enrichment-consumer]
-    consumers: [obs-storage-consumer, obs-eval-consumer]
+    consumers: [obs-storage-consumer (group obs-storage), obs-eval-service (group obs-eval)]
 
   - name: ai-obs-dead-letter
     partitions: 3
-    replication_factor: 3
     configs:
       retention.ms: 1209600000       # 14 days
+      compression.type: lz4
+      # no min.insync override — availability over durability for quarantine
     producers: [obs-enrichment-consumer]
-    consumers: [dlq-replay (scripts/replay_dead_letter.py)]
+    consumers: [scripts/replay_dead_letter.py (group obs-dlq-replay, manual)]

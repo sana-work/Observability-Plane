@@ -1,0 +1,25 @@
+{
+  "index_patterns": ["ai-obs-*-guardrail-events-*"],
+  "priority": 200,
+  "composed_of": ["obs-common-settings", "obs-common-mappings"],
+  "template": {
+    "settings": { "index": { "lifecycle": { "name": "compliance-180d" } } },
+    "mappings": {
+      "properties": {
+        "payload": {
+          "properties": {
+            "policy_id":               { "type": "keyword" },
+            "policy_version":          { "type": "keyword" },
+            "decision":                { "type": "keyword" },
+            "risk_score":              { "type": "double" },
+            "violation_type":          { "type": "keyword" },
+            "redaction_applied":       { "type": "boolean" },
+            "blocked_stage":           { "type": "keyword" },
+            "false_positive_feedback": { "type": "boolean" }
+          }
+        }
+      }
+    }
+  },
+  "_meta": { "grain": "1 doc / guardrail decision", "consumers": "Guardrail dashboard, compliance review", "note": "180d lifecycle — compliance data" }
+}

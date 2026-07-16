@@ -1,0 +1,25 @@
+{
+  "index_patterns": ["ai-obs-quality-scores-*"],
+  "priority": 200,
+  "composed_of": ["obs-common-settings", "obs-common-mappings"],
+  "template": {
+    "settings": { "index": { "lifecycle": { "name": "compliance-180d" } } },
+    "mappings": {
+      "properties": {
+        "payload": {
+          "properties": {
+            "eval_id":              { "type": "keyword" },
+            "evaluated_event_id":   { "type": "keyword" },
+            "eval_type":            { "type": "keyword" },
+            "score":                { "type": "double" },
+            "hallucination_flag":   { "type": "boolean" },
+            "judge_model":          { "type": "keyword" },
+            "judge_prompt_version": { "type": "keyword" },
+            "rationale_s3_key":     { "type": "keyword", "index": false }
+          }
+        }
+      }
+    }
+  },
+  "_meta": { "grain": "1 doc / evaluation", "consumers": "Trace Explorer, RAG dashboard — written by obs-eval-service (Phase Q)" }
+}

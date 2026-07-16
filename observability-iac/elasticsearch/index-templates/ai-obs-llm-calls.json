@@ -1,0 +1,34 @@
+{
+  "index_patterns": ["ai-obs-*-llm-calls-*"],
+  "priority": 200,
+  "composed_of": ["obs-common-settings", "obs-common-mappings"],
+  "template": {
+    "mappings": {
+      "properties": {
+        "payload": {
+          "properties": {
+            "model_provider":        { "type": "keyword" },
+            "model_name":            { "type": "keyword" },
+            "model_version":         { "type": "keyword" },
+            "prompt_template_id":    { "type": "keyword" },
+            "prompt_version":        { "type": "keyword" },
+            "prompt_hash":           { "type": "keyword" },
+            "temperature":           { "type": "float" },
+            "input_tokens":          { "type": "integer" },
+            "output_tokens":         { "type": "integer" },
+            "total_tokens":          { "type": "integer" },
+            "estimated_cost_usd":    { "type": "double" },
+            "time_to_first_token_ms":{ "type": "double" },
+            "retry_count":           { "type": "short" },
+            "rate_limit_hit":        { "type": "boolean" },
+            "safety_blocked":        { "type": "boolean" },
+            "finish_reason":         { "type": "keyword" },
+            "llm_error_code":        { "type": "keyword" },
+            "response_s3_key":       { "type": "keyword", "index": false }
+          }
+        }
+      }
+    }
+  },
+  "_meta": { "grain": "1 doc / model call", "consumers": "LLM dashboard, token/cost analysis, chatbot" }
+}

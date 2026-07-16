@@ -1,0 +1,23 @@
+{
+  "index_patterns": ["ai-obs-*-traces-*"],
+  "priority": 200,
+  "composed_of": ["obs-common-settings", "obs-common-mappings"],
+  "template": {
+    "mappings": {
+      "properties": {
+        "payload": {
+          "properties": {
+            "span_name":     { "type": "keyword" },
+            "span_kind":     { "type": "keyword" },
+            "child_count":   { "type": "integer" },
+            "depth":         { "type": "short" },
+            "start_ts":      { "type": "date" },
+            "end_ts":        { "type": "date" },
+            "trace_s3_key":  { "type": "keyword", "index": false }
+          }
+        }
+      }
+    }
+  },
+  "_meta": { "grain": "1 doc / span", "consumers": "Trace Explorer (AI-quality view), RCA chatbot — keyed by correlation_id" }
+}

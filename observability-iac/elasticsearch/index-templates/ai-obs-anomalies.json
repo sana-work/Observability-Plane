@@ -1,0 +1,23 @@
+{
+  "index_patterns": ["ai-obs-anomalies-*"],
+  "priority": 200,
+  "composed_of": ["obs-common-settings", "obs-common-mappings"],
+  "template": {
+    "mappings": {
+      "properties": {
+        "payload": {
+          "properties": {
+            "detector":       { "type": "keyword" },
+            "anomaly_score":  { "type": "double" },
+            "metric_id":      { "type": "keyword" },
+            "observed_value": { "type": "double" },
+            "expected_value": { "type": "double" },
+            "window_start":   { "type": "date" },
+            "window_end":     { "type": "date" }
+          }
+        }
+      }
+    }
+  },
+  "_meta": { "grain": "1 doc / anomaly signal", "consumers": "Anomaly View (Phase 7, optional)" }
+}

@@ -1,12 +1,28 @@
 {
   "Rules": [
     {
-      "ID": "tier-down",
+      "ID": "obs-default-tiering",
       "Status": "Enabled",
       "Filter": { "Prefix": "" },
       "Transitions": [
-        { "Days": 30,  "StorageClass": "STANDARD_IA" },
+        { "Days": 30, "StorageClass": "STANDARD_IA" },
         { "Days": 180, "StorageClass": "GLACIER" }
+      ],
+      "AbortIncompleteMultipartUpload": { "DaysAfterInitiation": 7 }
+    },
+    {
+      "ID": "debug-bundles-expire",
+      "Status": "Enabled",
+      "Filter": { "Prefix": "debug-bundles/" },
+      "Expiration": { "Days": 90 }
+    },
+    {
+      "ID": "audit-evidence-never-expire",
+      "Status": "Enabled",
+      "Filter": { "Prefix": "audit-evidence/" },
+      "Transitions": [
+        { "Days": 30, "StorageClass": "STANDARD_IA" },
+        { "Days": 90, "StorageClass": "GLACIER" }
       ]
     }
   ]

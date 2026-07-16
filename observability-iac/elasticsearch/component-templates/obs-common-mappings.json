@@ -3,29 +3,33 @@
     "mappings": {
       "dynamic": true,
       "properties": {
-        "event_id":          { "type": "keyword" },
-        "event_type":        { "type": "keyword" },
-        "telemetry_type":    { "type": "keyword" },
-        "correlation_id":    { "type": "keyword" },
-        "trace_id":          { "type": "keyword" },
-        "span_id":           { "type": "keyword" },
-        "parent_span_id":    { "type": "keyword" },
-        "service_name":      { "type": "keyword" },
-        "component":         { "type": "keyword" },
-        "environment":       { "type": "keyword" },
-        "application_id":    { "type": "keyword" },
-        "lob":               { "type": "keyword" },
-        "tenant_id":         { "type": "keyword" },
-        "user_hash":         { "type": "keyword" },
-        "status":            { "type": "keyword" },
-        "error_code":        { "type": "keyword" },
-        "error_fingerprint": { "type": "keyword" },
-        "http_status":       { "type": "integer" },
-        "latency_ms":        { "type": "float" },
-        "timestamp":         { "type": "date" },
-        "emitted_at":        { "type": "date" }
+        "event_id":        { "type": "keyword" },
+        "schema_version":  { "type": "keyword" },
+        "event_type":      { "type": "keyword" },
+        "telemetry_type":  { "type": "keyword" },
+        "timestamp":       { "type": "date" },
+        "emitted_at":      { "type": "date" },
+        "ingested_at":     { "type": "date" },
+        "correlation_id":  { "type": "keyword" },
+        "request_id":      { "type": "keyword" },
+        "trace_id":        { "type": "keyword" },
+        "span_id":         { "type": "keyword" },
+        "parent_span_id":  { "type": "keyword" },
+        "service_name":    { "type": "keyword" },
+        "component":       { "type": "keyword", "ignore_above": 512 },
+        "environment":     { "type": "keyword" },
+        "application_id":  { "type": "keyword" },
+        "lob":             { "type": "keyword" },
+        "tenant_id":       { "type": "keyword" },
+        "user_id":         { "type": "keyword" },
+        "status":          { "type": "keyword" },
+        "latency_ms":      { "type": "double" },
+        "error_code":      { "type": "keyword" },
+        "http_status":     { "type": "short" }
       }
     }
   },
-  "_meta": { "description": "Shared envelope mappings; payload.* is dynamic. error_fingerprint backs ES-side error grouping." }
+  "_meta": {
+    "description": "Envelope mappings — field-for-field mirror of contracts/event_schema.py (ObsEvent, schema_version 1.0). Domain payload.* fields are mapped per index family."
+  }
 }

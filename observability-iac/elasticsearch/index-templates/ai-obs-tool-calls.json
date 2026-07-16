@@ -1,0 +1,25 @@
+{
+  "index_patterns": ["ai-obs-*-tool-calls-*"],
+  "priority": 200,
+  "composed_of": ["obs-common-settings", "obs-common-mappings"],
+  "template": {
+    "mappings": {
+      "properties": {
+        "payload": {
+          "properties": {
+            "tool_id":             { "type": "keyword" },
+            "tool_name":           { "type": "keyword" },
+            "tool_version":        { "type": "keyword" },
+            "tool_type":           { "type": "keyword" },
+            "called_by_agent_id":  { "type": "keyword" },
+            "input_schema_valid":  { "type": "boolean" },
+            "retry_count":         { "type": "short" },
+            "response_size_bytes": { "type": "long" },
+            "http_status_upstream":{ "type": "short" }
+          }
+        }
+      }
+    }
+  },
+  "_meta": { "grain": "1 doc / tool call", "consumers": "Tool dashboard, dependency health, incident analysis" }
+}

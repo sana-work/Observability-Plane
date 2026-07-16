@@ -1,9 +1,25 @@
 {
   "policy": {
+    "_meta": {
+      "description": "Extended lifecycle for regulated LOBs (attach via the per-LOB index template override): warm at 7d, delete at 180d."
+    },
     "phases": {
-      "hot":   { "actions": { "rollover": { "max_size": "50gb", "max_age": "1d" } } },
-      "warm":  { "min_age": "2d", "actions": { "shrink": { "number_of_shards": 1 }, "forcemerge": { "max_num_segments": 1 } } },
-      "delete":{ "min_age": "180d", "actions": { "delete": {} } }
+      "hot": {
+        "min_age": "0ms",
+        "actions": { "set_priority": { "priority": 100 } }
+      },
+      "warm": {
+        "min_age": "7d",
+        "actions": {
+          "readonly": {},
+          "forcemerge": { "max_num_segments": 1 },
+          "set_priority": { "priority": 50 }
+        }
+      },
+      "delete": {
+        "min_age": "180d",
+        "actions": { "delete": {} }
+      }
     }
   }
 }

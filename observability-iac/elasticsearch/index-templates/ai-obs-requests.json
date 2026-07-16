@@ -1,0 +1,19 @@
+{
+  "index_patterns": ["ai-obs-*-requests-*"],
+  "priority": 200,
+  "composed_of": ["obs-common-settings", "obs-common-mappings"],
+  "template": {
+    "mappings": {
+      "properties": {
+        "payload": {
+          "properties": {
+            "method":     { "type": "keyword" },
+            "path":       { "type": "keyword", "ignore_above": 512 },
+            "usecase_id": { "type": "keyword" }
+          }
+        }
+      }
+    }
+  },
+  "_meta": { "grain": "1 doc / request event", "consumers": "Platform Overview, Application dashboard, chatbot" }
+}

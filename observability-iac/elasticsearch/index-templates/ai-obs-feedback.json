@@ -1,0 +1,26 @@
+{
+  "index_patterns": ["ai-obs-*-feedback-*"],
+  "priority": 200,
+  "composed_of": ["obs-common-settings", "obs-common-mappings"],
+  "template": {
+    "mappings": {
+      "properties": {
+        "payload": {
+          "properties": {
+            "feedback_id":        { "type": "keyword" },
+            "usecase_id":         { "type": "keyword" },
+            "agent_id":           { "type": "keyword" },
+            "response_id":        { "type": "keyword" },
+            "rating":             { "type": "short" },
+            "thumbs":             { "type": "keyword" },
+            "sentiment":          { "type": "keyword" },
+            "feedback_category":  { "type": "keyword" },
+            "free_text_redacted": { "type": "text" },
+            "resolution_status":  { "type": "keyword" }
+          }
+        }
+      }
+    }
+  },
+  "_meta": { "grain": "1 doc / feedback item", "consumers": "Feedback dashboard, quality review, chatbot" }
+}

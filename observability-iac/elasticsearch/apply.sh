@@ -1,34 +1,37 @@
 #!/usr/bin/env bash
-# Phase 0 / Task 0.4 — apply ILM policies, component templates, and one composable
-# index template per event category. Idempotent (PUT). $ES = https://host:9200
+# Idempotent Elasticsearch IaC apply: ILM policies -> component templates -> index templates.
+#   ES_URL=http://localhost:9200 [ES_AUTH=user:pass] ./apply.sh
 set -euo pipefail
-ES="${ES:?set ES=https://host:9200}"
-DIR="$(cd "$(dirname "$0")" && pwd)"
-H='-H Content-Type:application/json'
+cd "$(dirname "$0")"
+ES_URL="${ES_URL:-http://localhost:9200}"
+AUTH=()
+[[ -n "${ES_AUTH:-}" ]] && AUTH=(-u "$ES_AUTH")
 
-# 1) ILM policies
-curl -sS -XPUT "$ES/_ilm/policy/hot-warm-30d"   $H -d @"$DIR/ilm-policies/hot-warm-30d.json"
-curl -sS -XPUT "$ES/_ilm/policy/compliance-180d" $H -d @"$DIR/ilm-policies/compliance-180d.json"
+put() { # put <path> <file>
+  local code
+  code=$(curl -sS -o /tmp/es_apply_out -w '%{http_code}' "${AUTH[@]}" \
+    -X PUT "$ES_URL/$1" -H 'Content-Type: application/json' --data-binary "@$2")
+  if [[ "$code" != 2* ]]; then
+    echo "!! FAILED $1 ($code):"; cat /tmp/es_apply_out; echo; exit 1
+  fi
+  echo "ok  $1"
+}
 
-# 2) Component templates
-curl -sS -XPUT "$ES/_component_template/obs-common-settings" $H -d @"$DIR/component-templates/obs-common-settings.json"
-curl -sS -XPUT "$ES/_component_template/obs-common-mappings" $H -d @"$DIR/component-templates/obs-common-mappings.json"
-
-# 3) One index template per category (generated — keeps templates in lockstep).
-CATEGORIES="requests errors llm-calls rag-events agent-steps tool-calls guardrail-events feedback traces quality-scores anomalies"
-for cat in $CATEGORIES; do
-  curl -sS -XPUT "$ES/_index_template/ai-obs-$cat" $H -d "{
-    \"index_patterns\": [\"ai-obs-*-$cat-*\"],
-    \"composed_of\": [\"obs-common-settings\", \"obs-common-mappings\"],
-    \"template\": { \"settings\": {
-      \"index.lifecycle.name\": \"hot-warm-30d\",
-      \"index.lifecycle.rollover_alias\": \"ai-obs-$cat\"
-    }},
-    \"priority\": 200,
-    \"_meta\": { \"category\": \"$cat\" }
-  }"
-  echo " -> applied ai-obs-$cat"
+echo "== ILM policies"
+for f in ilm-policies/*.json; do
+  put "_ilm/policy/$(basename "$f" .json)" "$f"
 done
 
-# Regulated LOBs override to compliance-180d via a higher-priority per-LOB template (added in Phase 4).
-echo "elasticsearch templates + ILM applied."
+echo "== component templates"
+for f in component-templates/*.json; do
+  put "_component_template/$(basename "$f" .json)" "$f"
+done
+
+echo "== index templates"
+for f in index-templates/*.json; do
+  put "_index_template/$(basename "$f" .json)" "$f"
+done
+
+echo "== verify"
+curl -sS "${AUTH[@]}" "$ES_URL/_index_template" | python3 -c \
+  "import json,sys; ts=json.load(sys.stdin)['index_templates']; print('index templates:', sorted(t['name'] for t in ts if t['name'].startswith('ai-obs')))"

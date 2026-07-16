@@ -1,11 +1,55 @@
-# Grafana Tempo — cross-service trace backend (S3-backed). Helm: grafana/tempo
-tempo:
-  storage:
-    trace:
-      backend: s3
-      s3:
-        bucket: ai-obs-traces-${ENV}
-        endpoint: s3.amazonaws.com
-        region: us-east-1
-  retention: 720h        # 30 days
-# OTLP receiver on :4317 (gRPC) — the SDK init_tracing() exporter points here.
+# helm upgrade --install tempo grafana/tempo-distributed \
+#   -n observability -f tempo-values.yaml
+#
+# Grafana Tempo — infra trace backend (S3 storage, ~10x cheaper than
+# Jaeger/Cassandra at our span volume; native TraceQL).
+# Receives OTLP gRPC from ai-observability-sdk init_tracing()
+# (AI_OBS_OTLP_ENDPOINT=http://tempo-distributor.observability.svc:4317).
+
+traces:
+  otlp:
+    grpc:
+      enabled: true   # :4317 — the SDK's exporter protocol
+    http:
+      enabled: true   # :4318 — curl-able for debugging
+
+storage:
+  trace:
+    backend: s3
+    s3:
+      bucket: ai-obs-tempo-traces
+      endpoint: s3.us-east-1.amazonaws.com
+      region: us-east-1
+      # credentials via IRSA service account — no static keys
+
+compactor:
+  config:
+    compaction:
+      block_retention: 720h   # 30 days of infra spans
+
+distributor:
+  replicas: 2
+ingester:
+  replicas: 3
+  persistence:
+    enabled: true
+    size: 10Gi
+querier:
+  replicas: 2
+queryFrontend:
+  replicas: 1
+
+global_overrides:
+  defaults:
+    ingestion:
+      rate_limit_bytes: 20000000
+      burst_size_bytes: 30000000
+    global:
+      max_bytes_per_trace: 5000000
+
+metricsGenerator:
+  enabled: true   # RED metrics from spans -> Prometheus remote_write
+  config:
+    storage:
+      remote_write:
+        - url: http://kps-kube-prometheus-stack-prometheus.observability.svc:9090/api/v1/write

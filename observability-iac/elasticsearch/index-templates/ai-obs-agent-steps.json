@@ -1,0 +1,27 @@
+{
+  "index_patterns": ["ai-obs-*-agent-steps-*"],
+  "priority": 200,
+  "composed_of": ["obs-common-settings", "obs-common-mappings"],
+  "template": {
+    "mappings": {
+      "properties": {
+        "payload": {
+          "properties": {
+            "agent_id":           { "type": "keyword" },
+            "agent_version":      { "type": "keyword" },
+            "agent_type":         { "type": "keyword" },
+            "step_count":         { "type": "integer" },
+            "loop_count":         { "type": "integer" },
+            "handoff_count":      { "type": "integer" },
+            "handoff_to_agent":   { "type": "keyword" },
+            "planner_decision":   { "type": "text" },
+            "termination_reason": { "type": "keyword" },
+            "tools_used":         { "type": "keyword" },
+            "models_used":        { "type": "keyword" }
+          }
+        }
+      }
+    }
+  },
+  "_meta": { "grain": "1 doc / agent step", "consumers": "Agent dashboard, RCA workflow, chatbot" }
+}

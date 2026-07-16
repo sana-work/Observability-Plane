@@ -1,9 +1,27 @@
 {
   "policy": {
+    "_meta": {
+      "description": "Default lifecycle for ai-obs-* daily indices: hot 2d, warm (readonly, 1 segment) to 30d, then delete. Regulated LOBs use compliance-180d instead."
+    },
     "phases": {
-      "hot":   { "actions": { "rollover": { "max_size": "50gb", "max_age": "1d" } } },
-      "warm":  { "min_age": "2d", "actions": { "shrink": { "number_of_shards": 1 }, "forcemerge": { "max_num_segments": 1 } } },
-      "delete":{ "min_age": "30d", "actions": { "delete": {} } }
+      "hot": {
+        "min_age": "0ms",
+        "actions": {
+          "set_priority": { "priority": 100 }
+        }
+      },
+      "warm": {
+        "min_age": "2d",
+        "actions": {
+          "readonly": {},
+          "forcemerge": { "max_num_segments": 1 },
+          "set_priority": { "priority": 50 }
+        }
+      },
+      "delete": {
+        "min_age": "30d",
+        "actions": { "delete": {} }
+      }
     }
   }
 }

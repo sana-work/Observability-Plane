@@ -1,0 +1,61 @@
+# Local Phase 0 stack — everything the SDK and consumers need on a laptop.
+#   docker compose -f docker-compose.dev.yml up -d
+#   ./kafka/create_topics.sh                     (BOOTSTRAP=localhost:9092 KAFKA_ENV=dev)
+#   PGURL=postgres://postgres:obs@localhost:5432/postgres ./postgres/apply.sh --with-seed
+#   PGURL=postgres://postgres:obs@localhost:5432/postgres ./postgres-events/apply.sh
+#   ES_URL=http://localhost:9200 ./elasticsearch/apply.sh
+services:
+  kafka:
+    image: apache/kafka:3.7.0
+    ports: ["9092:9092"]
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:19092,CONTROLLER://0.0.0.0:9093,EXTERNAL://0.0.0.0:9092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:19092,EXTERNAL://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT,EXTERNAL:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"   # topics come from create_topics.sh only
+
+  postgres:
+    image: postgres:16
+    ports: ["5432:5432"]
+    environment:
+      POSTGRES_PASSWORD: obs
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.13.0
+    ports: ["9200:9200"]
+    environment:
+      discovery.type: single-node
+      xpack.security.enabled: "false"
+      ES_JAVA_OPTS: -Xms512m -Xmx512m
+    volumes:
+      - es-data:/usr/share/elasticsearch/data
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.13.0
+    ports: ["5601:5601"]
+    environment:
+      ELASTICSEARCH_HOSTS: http://elasticsearch:9200
+    depends_on: [elasticsearch]
+
+  tempo:
+    image: grafana/tempo:2.4.1
+    command: ["-config.file=/etc/tempo/tempo.yaml"]
+    ports:
+      - "4317:4317"   # OTLP gRPC — matches AI_OBS_OTLP_ENDPOINT=http://localhost:4317
+      - "3200:3200"   # tempo query API
+    volumes:
+      - ./dev/tempo-local.yaml:/etc/tempo/tempo.yaml:ro
+      - tempo-data:/var/tempo
+
+volumes:
+  pg-data:
+  es-data:
+  tempo-data:

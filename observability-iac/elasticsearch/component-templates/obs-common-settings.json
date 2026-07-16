@@ -1,10 +1,17 @@
 {
   "template": {
     "settings": {
-      "number_of_shards": 1,
-      "number_of_replicas": 1,
-      "index.refresh_interval": "5s"
+      "index": {
+        "number_of_shards": 1,
+        "number_of_replicas": 1,
+        "refresh_interval": "5s",
+        "lifecycle": { "name": "hot-warm-30d" },
+        "mapping": { "total_fields": { "limit": 2000 } },
+        "codec": "best_compression"
+      }
     }
   },
-  "_meta": { "description": "Shared settings for all ai-obs-* indices" }
+  "_meta": {
+    "description": "Shared settings for all ai-obs-* indices. Storage consumer writes with _id = event_id (idempotent replays)."
+  }
 }

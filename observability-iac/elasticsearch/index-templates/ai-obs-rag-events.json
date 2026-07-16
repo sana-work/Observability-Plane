@@ -1,0 +1,31 @@
+{
+  "index_patterns": ["ai-obs-*-rag-events-*"],
+  "priority": 200,
+  "composed_of": ["obs-common-settings", "obs-common-mappings"],
+  "template": {
+    "mappings": {
+      "properties": {
+        "payload": {
+          "properties": {
+            "rag_id":              { "type": "keyword" },
+            "knowledge_base":      { "type": "keyword" },
+            "vector_db_index":     { "type": "keyword" },
+            "embedding_model":     { "type": "keyword" },
+            "query_hash":          { "type": "keyword" },
+            "top_k":               { "type": "short" },
+            "chunk_count":         { "type": "integer" },
+            "no_result_flag":      { "type": "boolean" },
+            "avg_relevance_score": { "type": "double" },
+            "reranker_score":      { "type": "double" },
+            "citation_coverage":   { "type": "double" },
+            "context_tokens":      { "type": "integer" },
+            "truncation_flag":     { "type": "boolean" },
+            "source_docs_used":    { "type": "keyword" },
+            "context_s3_key":      { "type": "keyword", "index": false }
+          }
+        }
+      }
+    }
+  },
+  "_meta": { "grain": "1 doc / retrieval", "consumers": "RAG dashboard, KB owners, chatbot" }
+}

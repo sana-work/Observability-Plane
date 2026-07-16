@@ -1,0 +1,22 @@
+{
+  "index_patterns": ["ai-obs-*-errors-*"],
+  "priority": 200,
+  "composed_of": ["obs-common-settings", "obs-common-mappings"],
+  "template": {
+    "mappings": {
+      "properties": {
+        "payload": {
+          "properties": {
+            "error_message":     { "type": "text" },
+            "error_category":    { "type": "keyword" },
+            "error_fingerprint": { "type": "keyword" },
+            "stack_hash":        { "type": "keyword" },
+            "retryable":         { "type": "boolean" },
+            "runbook_url":       { "type": "keyword", "index": false }
+          }
+        }
+      }
+    }
+  },
+  "_meta": { "grain": "1 doc / error event", "consumers": "Error dashboard, fingerprint grouping, RCA" }
+}
