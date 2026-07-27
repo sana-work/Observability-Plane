@@ -1,0 +1,35 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "obs-enrichment-consumer"
+version = "0.1.0"
+description = "Phase 3 — 9-stage enrichment pipeline: ai-obs-events-raw -> ai-obs-events-processed (+ dead-letter)."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "pydantic>=2.6",
+    "pydantic-settings>=2.2",
+    "confluent-kafka>=2.3",
+    "psycopg[binary,pool]>=3.1",
+    "boto3>=1.34",
+    "prometheus-client>=0.20",
+]
+
+[project.optional-dependencies]
+gliner = ["gliner>=0.2"]        # NER-based PII redaction (~512Mi at runtime); regex fallback ships by default
+dev = ["pytest>=8.0", "ruff>=0.4"]
+
+[project.scripts]
+obs-enrichment = "obs_enrichment.consumer:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["obs_enrichment"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py311"
