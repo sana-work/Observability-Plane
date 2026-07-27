@@ -44,6 +44,10 @@ class ObsEvent(BaseModel):
     application_id: Optional[str] = None
     lob: Optional[str] = None
     tenant_id: Optional[str] = None
+    # Raw user id (SOE ID) — retained unhashed by platform decision (2026-07):
+    # required for audit trails and the "Requests/Errors by SOEID" dashboards.
+    # Exposure is governed by per-LOB RBAC on the stores and compliance
+    # retention, not by hashing.
     user_id: Optional[str] = None
 
     # --- outcome ---
@@ -52,6 +56,7 @@ class ObsEvent(BaseModel):
     error_code: Optional[str] = None
     http_status: Optional[int] = None
 
+    # --- domain payload (LLM/RAG/agent/tool/feedback/doc-specific fields) ---
     payload: dict[str, Any] = Field(default_factory=dict)
 
     @field_validator("event_type")
