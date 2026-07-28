@@ -17,6 +17,42 @@ this repo; use them as the target state or build clean-room from the spec.
 
 ---
 
+## Quick-pick task list (claim by writing your name; details in the tables below)
+
+**Foundation — do first, in order (~2.5d total)**
+- [ ] `____` **F1** · Contract freeze — ObsEvent envelope + 50 event types + 8 service names + tests *(1d · blocks EVERYTHING)*
+- [ ] `____` **F2** · Repo + CI skeletons for both packages *(0.5d)*
+- [ ] `____` **F3** · Vendor contract into both packages + drift-check CI *(0.5d · needs F1, F2)*
+- [ ] `____` **F4** · Dev docker stack verified + README'd *(0.5d)*
+
+**ai-observability-sdk (~11d — S-tasks are one chain per row, parallel across rows)**
+- [ ] `____` **S1** · `config.py` (AI_OBS_* settings) + `context.py` (ObsContext contextvar) *(1.5d · needs F3)*
+- [ ] `____` **S2** · `hashing.py` + `kafka_headers.py` (W3C traceparent) *(0.5d · needs S1)*
+- [ ] `____` **S3** · `emitter.py` — fire-and-forget KafkaEmitter + `emit_event()` ★core *(2d · needs S2)*
+- [ ] `____` **S4** · `tracing.py` (OTEL→Tempo) + `log_config.py` (structlog JSON) *(1.5d · needs S1)*
+- [ ] `____` **S5** · `middleware.py` + `init_observability()` one-liner *(1.5d · needs S3, S4)*
+- [ ] `____` **S6** · `decorators.py` — @trace_llm/_tool/_rag/_agent *(1.5d · needs S3)*
+- [ ] `____` **S7** · `cost.py` pricing + `prompts.py` get_prompt + TTL cache *(1d · needs S1)*
+- [ ] `____` **S8** · Test suite + FakeEmitter + README/.env.example + publish 0.1.0 *(1.5d · needs S5, S6, S7)*
+
+**obs-enrichment-consumer (~9.5d)**
+- [ ] `____` **E1** · `config.py` + `errors.py` + `metrics.py` (prometheus) *(1d · needs F3)*
+- [ ] `____` **E2** · `control_plane.py` — Postgres pool + TTL-cached registry/pricing/SLO reads, add_spend writes *(1.5d · needs E1)*
+- [ ] `____` **E3** · `redactor.py` — regex always, GLiNER optional w/ fallback *(1d · needs E1)*
+- [ ] `____` **E4** · `s3_archiver.py` + `slo.py` burn-rate tracker *(1.5d · needs E2)*
+- [ ] `____` **E5** · `pipeline.py` — the 9 stages ★core *(2d · needs E2, E3, E4)*
+- [ ] `____` **E6** · `consumer.py` — consume→produce→commit-after-flush loop + DLQ *(1.5d · needs E5)*
+- [ ] `____` **E7** · Dockerfile + k8s + CI + README walkthrough + .env.example *(1d · needs E6)*
+
+**Joint verification — final week (~2.5d, all together)**
+- [ ] `____` **V1** · End-to-end smoke: one correlation_id across events/trace/logs *(1d · needs S8, E7)*
+- [ ] `____` **V2** · Failure drills: broker down, queue full, PG down, DLQ replay *(1d · needs V1)*
+- [ ] `____` **V3** · Sign-off + file follow-up tickets *(0.5d · needs V2)*
+
+★ = the two "heart" tasks — assign your strongest reviewers there.
+
+---
+
 ## Table 0 — Foundation (do these first, together — everything depends on F1)
 
 | ID | Task | What to build / how | Depends on | Est | Done when |
