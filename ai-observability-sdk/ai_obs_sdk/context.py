@@ -47,8 +47,25 @@ def reset_context(token: contextvars.Token) -> None:
     _current.reset(token)
 
 
+def peek_context() -> ObsContext | None:
+    """Read the bound context without creating/binding one. Use this for
+    read-only consumers (e.g. the log processor) that must not have the
+    bind-on-read side effect of get_context()."""
+    return _current.get()
+
+
 def get_context() -> ObsContext:
-    """Current context, or a fresh detached one (background jobs, schedulers)."""
+    """Current context, or a fresh detached one (background jobs, schedulers).
+
+    NOTE the side effect: when nothing is bound, the newly created context is
+    also *bound* to the current context — which keeps all emits inside one
+    background unit of work correlated. It also means the binding persists in
+    a long-lived worker thread/task, so a second unit of work on that same
+    worker would inherit the first one's correlation_id. Background loops and
+    Kafka consumers MUST bind_context()/reset_context() explicitly per unit of
+    work (see the Kafka-consumer pattern in the README) rather than relying on
+    this fallback.
+    """
     ctx = _current.get()
     if ctx is None:
         ctx = ObsContext()

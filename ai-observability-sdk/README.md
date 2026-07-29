@@ -116,7 +116,11 @@ def on_message(msg):
 
 1. **Never block, never raise.** `emit_event` swallows every error; a full
    local queue drops events with a warning. Observability cannot take the
-   business path down.
+   business path down. Because failures are silent, they are *counted* —
+   check `emitter_stats()` → `{"delivered", "dropped", "invalid"}` and export
+   it to Prometheus. Identity and SASL config are validated at **startup**
+   (`init_observability`), so a bad `AI_OBS_SERVICE_NAME` fails the boot
+   instead of silently dropping every event.
 2. **User identity is carried raw.** By platform decision, `user_id` (the SOE
    ID from `X-User-ID`/`X-SOE-ID`) is emitted unhashed — audit trails and the
    "by SOEID" dashboards need it. Access is governed by per-LOB RBAC on the
@@ -124,7 +128,18 @@ def on_message(msg):
    Enrichment Consumer's GLiNER stage still redacts PII inside free text.
 3. **Partition key = correlation_id.** All events of one request are ordered
    on one partition.
-4. **The contract is vendored, not imported.** `ai_obs_sdk/contracts/` is a
+   The event trace tree (`span_id` / `parent_span_id`) always uses the
+   `ObsContext` id space, never the live OTEL span — mixing the two produced
+   parent pointers matching no emitted span. The OTEL span is still carried
+   (`trace_id` on the envelope, `payload.otel_span_id`) for Tempo joins.
+4. **Payloads are coerced, not dropped.** Values that aren't JSON-native
+   (enums, datetimes, SDK response objects) are stringified on serialize —
+   prefer JSON-native values in `obs_payload`/`obs_extra` anyway.
+   Note: `prompt_text` is auto-hashed, but keys the Enrichment Consumer is
+   designed to archive (`prompt`, `response`, `rag_context`, `trace_json`)
+   deliberately carry full text — it is PII-redacted and offloaded to S3
+   downstream.
+5. **The contract is vendored, not imported.** `ai_obs_sdk/contracts/` is a
    byte-for-byte copy of `observability-iac/contracts/`; CI fails on drift.
 
 ## Testing

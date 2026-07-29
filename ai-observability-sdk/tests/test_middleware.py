@@ -2,10 +2,10 @@ import pytest
 
 fastapi = pytest.importorskip("fastapi")
 
-from fastapi import FastAPI
-from fastapi.testclient import TestClient
+from fastapi import FastAPI  # noqa: E402 — must follow importorskip
+from fastapi.testclient import TestClient  # noqa: E402
 
-from ai_obs_sdk.middleware import ObservabilityMiddleware
+from ai_obs_sdk.middleware import ObservabilityMiddleware  # noqa: E402
 
 
 @pytest.fixture()

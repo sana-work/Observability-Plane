@@ -92,8 +92,19 @@ them exactly, and add a code comment explaining each where it appears.
    `payload` dictionary.
 6. **Kafka message key = `correlation_id`**, so all events of one request land
    on one partition in order.
-7. **Full prompt text must never appear in an event.** Replace it with a
-   16-character hash.
+7. **A `prompt_text` payload key must never carry raw text** — replace it with
+   a 16-character hash. (Note the deliberate exception: keys the downstream
+   enrichment service is designed to archive — `prompt`, `response`,
+   `rag_context`, `trace_json` — do carry full text; it is PII-redacted and
+   offloaded to object storage there. Document this split in the README.)
+8. **Silent failures must still be countable.** Since `emit_event` swallows
+   everything, expose counters for delivered / dropped / invalid events, and
+   validate identity and credential configuration **at startup** so a
+   misconfigured service fails to boot rather than emitting nothing forever.
+9. **The event trace tree uses one id space.** Emit `span_id` /
+   `parent_span_id` from your own request context, never from the live OTEL
+   span — mixing them yields parent pointers that match no emitted span.
+   Carry the OTEL span id in a separate field for backend joins.
 
 ## The frozen contract — implement exactly
 
@@ -301,7 +312,20 @@ network, and no database is needed to run the suite.** Cover at minimum:
   the exception class name; the inbound user header lands verbatim in
   `user_id`; requests to `/health` emit nothing.
 - Prompts: a fetch hits the network once and then serves from cache until the
-  TTL expires (monkeypatch the clock).
+  TTL expires (monkeypatch the clock); every failure mode (no URL, connection
+  error, HTTP error status, malformed body) raises the **same** exception type
+  so a service's fallback only catches one thing.
+- Startup validation: an invalid service name and a half-configured
+  credential block both fail at settings load, with actionable messages.
+- Counters: an event dropped by validation is reflected in the exposed
+  counters, not only in the logs.
+- Serialization: a payload containing a non-JSON-native value (a set, an enum,
+  an arbitrary object) is still emitted, with those values stringified.
+- **Tracing enabled**: run at least one decorator test with a real tracer
+  provider installed and assert the emitted tree is self-consistent — the
+  started and completed events of one call share a `span_id`, and
+  `parent_span_id` equals the enclosing context's `span_id`. A suite that only
+  runs with tracing disabled will not catch id-space bugs.
 
 ## Verify your own work before finishing
 

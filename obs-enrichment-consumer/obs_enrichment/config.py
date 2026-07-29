@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -52,6 +53,30 @@ class EnrichSettings(BaseSettings):
     # --- ops ---
     metrics_port: int = 9108               # prometheus scrape + liveness
     log_level: str = "INFO"
+
+
+    # Same fail-fast rule as the SDK: a half-configured SASL block either
+    # fails obscurely at connect time or ships credentials over a plaintext
+    # transport. Catch it at boot instead.
+    @field_validator("kafka_sasl_password")
+    @classmethod
+    def complete_sasl_config(cls, v: str | None, info) -> str | None:
+        data = info.data
+        provided = [data.get("kafka_sasl_mechanism"), data.get("kafka_sasl_username"), v]
+        if any(provided) and not all(provided):
+            raise ValueError(
+                "incomplete SASL config: set OBS_ENRICH_KAFKA_SASL_MECHANISM, "
+                "_USERNAME and _PASSWORD together (or none of them)"
+            )
+        if any(provided) and data.get("kafka_security_protocol") not in (
+            "SASL_SSL",
+            "SASL_PLAINTEXT",
+        ):
+            raise ValueError(
+                "SASL credentials set but OBS_ENRICH_KAFKA_SECURITY_PROTOCOL is "
+                f"{data.get('kafka_security_protocol')!r} — use SASL_SSL"
+            )
+        return v
 
 
 @lru_cache(maxsize=1)

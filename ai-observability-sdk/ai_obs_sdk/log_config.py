@@ -17,11 +17,11 @@ import sys
 import structlog
 
 from .config import get_settings
-from .context import _current  # intentional: read-only peek, no default-binding side effect
+from .context import peek_context  # read-only: must not bind a context as a side effect
 
 
 def _add_obs_context(_logger, _method, event_dict: dict) -> dict:
-    ctx = _current.get()
+    ctx = peek_context()
     if ctx is not None:
         event_dict.setdefault("correlation_id", ctx.correlation_id)
         event_dict.setdefault("span_id", ctx.span_id)

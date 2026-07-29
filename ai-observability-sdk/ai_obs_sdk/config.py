@@ -7,7 +7,14 @@ from __future__ import annotations
 
 from functools import lru_cache
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from .contracts import SERVICE_NAME_VALUES
+
+# Paths that produce no telemetry — shared by the middleware (event skipping)
+# and OTEL FastAPI instrumentation (span exclusion) so the two cannot drift.
+OPERATIONAL_PATHS: tuple[str, ...] = ("/metrics", "/health", "/ready", "/livez")
 
 
 class ObsSettings(BaseSettings):
@@ -49,6 +56,47 @@ class ObsSettings(BaseSettings):
     # --- prompt registry (control-plane API in front of observability.prompt_template_registry) ---
     prompt_registry_url: str | None = None   # e.g. http://obs-dashboard-svc/api/v1/prompts
     prompt_cache_ttl_seconds: int = 300      # in-process TTL cache (Redis not onboarded yet)
+
+
+    # --- fail fast at startup, not silently per-event ---------------------
+    # An *invalid* service_name (e.g. "gssp_gs") would otherwise pass config
+    # and then fail ObsEvent validation on every single emit — which
+    # emit_event swallows by design, so the service would run happily and
+    # produce zero telemetry forever. Reject it here instead.
+    @field_validator("service_name")
+    @classmethod
+    def known_service_name(cls, v: str) -> str:
+        if v not in SERVICE_NAME_VALUES:
+            raise ValueError(
+                f"AI_OBS_SERVICE_NAME={v!r} is not one of the 8 platform services: "
+                f"{sorted(SERVICE_NAME_VALUES)}"
+            )
+        return v
+
+    # SASL must be configured completely, and over a SASL transport — a half
+    # configured producer either fails obscurely at connect time or sends
+    # credentials over a plaintext transport.
+    @field_validator("kafka_sasl_password")
+    @classmethod
+    def complete_sasl_config(cls, v: str | None, info) -> str | None:
+        data = info.data
+        provided = [
+            data.get("kafka_sasl_mechanism"),
+            data.get("kafka_sasl_username"),
+            v,
+        ]
+        if any(provided) and not all(provided):
+            raise ValueError(
+                "incomplete SASL config: set AI_OBS_KAFKA_SASL_MECHANISM, "
+                "_USERNAME and _PASSWORD together (or none of them)"
+            )
+        if any(provided) and data.get("kafka_security_protocol") not in ("SASL_SSL", "SASL_PLAINTEXT"):
+            raise ValueError(
+                "SASL credentials set but AI_OBS_KAFKA_SECURITY_PROTOCOL is "
+                f"{data.get('kafka_security_protocol')!r} — use SASL_SSL (or "
+                "SASL_PLAINTEXT for a non-production broker)"
+            )
+        return v
 
 
 @lru_cache(maxsize=1)

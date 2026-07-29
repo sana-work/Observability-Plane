@@ -11,11 +11,11 @@ Then instrument the hot paths:
     from ai_obs_sdk import emit_event, trace_llm, trace_rag, trace_tool, trace_agent, get_prompt
 """
 from .config import ObsSettings, get_settings
-from .context import ObsContext, bind_context, get_context, reset_context
+from .context import ObsContext, bind_context, get_context, peek_context, reset_context
 from .contracts import EventType, ObsEvent, ServiceName
 from .cost import estimate_cost_usd
 from .decorators import trace_agent, trace_llm, trace_rag, trace_tool
-from .emitter import emit_event, get_emitter
+from .emitter import emit_event, emitter_stats, get_emitter
 from .hashing import prompt_hash, query_hash
 from .log_config import configure_logging
 from .middleware import ObservabilityMiddleware, init_observability
@@ -29,6 +29,7 @@ __all__ = [
     "ObservabilityMiddleware",
     "emit_event",
     "get_emitter",
+    "emitter_stats",
     "trace_llm",
     "trace_rag",
     "trace_tool",
@@ -45,6 +46,7 @@ __all__ = [
     "ObsSettings",
     "get_settings",
     "get_context",
+    "peek_context",
     "bind_context",
     "reset_context",
     "prompt_hash",

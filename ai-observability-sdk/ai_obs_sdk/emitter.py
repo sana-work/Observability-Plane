@@ -14,8 +14,9 @@ from __future__ import annotations
 import atexit
 import logging
 import threading
+from typing import Any
 
-from confluent_kafka import KafkaException, Producer
+from confluent_kafka import Producer
 
 from .config import ObsSettings, get_settings
 from .context import get_context
@@ -26,6 +27,42 @@ logger = logging.getLogger("ai_obs_sdk.emitter")
 
 _lock = threading.Lock()
 _emitter: "KafkaEmitter | None" = None
+
+# Events lost *before* reaching the producer (contract validation, bad config).
+# Counted separately from KafkaEmitter.dropped so that "we are emitting nothing"
+# is always visible in the numbers rather than only in the logs.
+_invalid = 0
+
+_JSON_NATIVE = (str, int, float, bool, type(None))
+
+
+def _coerce_json_safe(value: Any) -> Any:
+    """Best-effort conversion of arbitrary payload values to JSON-native ones.
+
+    Teams attach `result.obs_payload` straight from vendor SDKs, so payloads
+    routinely contain enums, datetimes, sets and response objects. Rather than
+    dropping the whole event when serialization fails, stringify the offenders.
+    """
+    if isinstance(value, _JSON_NATIVE):
+        return value
+    if isinstance(value, dict):
+        return {str(k): _coerce_json_safe(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple, set, frozenset)):
+        return [_coerce_json_safe(v) for v in value]
+    return str(value)
+
+
+def serialize(event: ObsEvent) -> bytes:
+    """JSON bytes for the wire, with a coercing retry (see _coerce_json_safe)."""
+    try:
+        return event.model_dump_json().encode()
+    except Exception:  # noqa: BLE001 — pydantic raises on unknown payload types
+        safe = event.model_copy(update={"payload": _coerce_json_safe(event.payload)})
+        logger.warning(
+            "obs event payload was not JSON-serializable; coerced to strings (event_type=%s)",
+            event.event_type,
+        )
+        return safe.model_dump_json().encode()
 
 
 class KafkaEmitter:
@@ -67,7 +104,7 @@ class KafkaEmitter:
             self._producer.produce(
                 topic=self._settings.kafka_topic_raw,
                 key=(event.correlation_id or event.event_id).encode(),
-                value=event.model_dump_json().encode(),
+                value=serialize(event),
                 headers=inject_trace_headers(event.correlation_id or event.event_id),
                 on_delivery=self._on_delivery,
             )
@@ -76,7 +113,7 @@ class KafkaEmitter:
             # local queue full — drop rather than block the request path
             self.dropped += 1
             logger.warning("obs event dropped: local producer queue full")
-        except (KafkaException, Exception):  # noqa: BLE001 — never propagate
+        except Exception:  # noqa: BLE001 — never propagate
             self.dropped += 1
             logger.exception("obs event emit failed")
 
@@ -110,13 +147,24 @@ def emit_event(
 
     Envelope fields (correlation_id, span ids, service identity, user_id)
     are filled from ObsSettings + the current ObsContext automatically.
+
+    span_id / parent_span_id ALWAYS come from the ObsContext, never from the
+    live OTEL span: the two are different id spaces, and mixing them produced
+    parent pointers that matched no emitted span_id (breaking the event trace
+    tree whenever tracing was enabled). The OTEL span is still recorded — as
+    trace_id on the envelope and payload.otel_span_id — so an event can be
+    joined to its Tempo span.
     """
-    settings = get_settings()
-    if not settings.enabled:
-        return
+    global _invalid
     try:
+        settings = get_settings()
+        if not settings.enabled:
+            return
         ctx = get_context()
-        trace_id, otel_span_id = current_trace_ids()
+        otel_trace_id, otel_span_id = current_trace_ids()
+        event_payload = dict(payload or {})
+        if otel_span_id:
+            event_payload.setdefault("otel_span_id", otel_span_id)
         event = ObsEvent(
             event_type=event_type,
             service_name=settings.service_name,
@@ -126,8 +174,8 @@ def emit_event(
             component=component,
             correlation_id=ctx.correlation_id,
             request_id=ctx.request_id,
-            trace_id=trace_id or ctx.trace_id,
-            span_id=otel_span_id or ctx.span_id,
+            trace_id=otel_trace_id or ctx.trace_id,
+            span_id=ctx.span_id,
             parent_span_id=ctx.parent_span_id,
             tenant_id=ctx.tenant_id,
             user_id=ctx.user_id,
@@ -135,8 +183,24 @@ def emit_event(
             latency_ms=latency_ms,
             error_code=error_code,
             http_status=http_status,
-            payload=payload or {},
+            payload=event_payload,
         )
         get_emitter().emit(event)
     except Exception:  # noqa: BLE001 — validation error, misconfig, anything: log, never raise
-        logger.exception("emit_event(%s) failed", event_type)
+        _invalid += 1
+        logger.exception("emit_event(%s) failed — event dropped before produce", event_type)
+
+
+def emitter_stats() -> dict[str, int]:
+    """Counters for health endpoints / Prometheus gauges.
+
+    `invalid` counts events lost before the producer was reached (contract
+    violations, bad config) — the class of failure that is otherwise only
+    visible in logs.
+    """
+    em = _emitter
+    return {
+        "delivered": getattr(em, "delivered", 0),
+        "dropped": getattr(em, "dropped", 0),
+        "invalid": _invalid,
+    }

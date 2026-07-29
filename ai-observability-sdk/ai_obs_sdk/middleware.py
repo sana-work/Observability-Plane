@@ -18,11 +18,12 @@ from uuid import uuid4
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 
+from .config import OPERATIONAL_PATHS
 from .context import ObsContext, bind_context, reset_context
 from .contracts import EventType
 from .emitter import emit_event
 
-_SKIP_PATHS = {"/metrics", "/health", "/ready", "/livez"}
+_SKIP_PATHS = frozenset(OPERATIONAL_PATHS)  # shared with OTEL instrumentation
 
 
 class ObservabilityMiddleware(BaseHTTPMiddleware):
@@ -79,7 +80,7 @@ def init_observability(app) -> None:
     from .log_config import configure_logging
     from .tracing import init_tracing
 
-    settings = get_settings()
+    settings = get_settings()  # validates identity + SASL config — raises at boot if wrong
     configure_logging()
     init_tracing(app)
     app.add_middleware(ObservabilityMiddleware)
@@ -87,6 +88,6 @@ def init_observability(app) -> None:
     if settings.metrics_enabled:
         from prometheus_fastapi_instrumentator import Instrumentator
 
-        Instrumentator(excluded_handlers=["/metrics", "/health", "/ready"]).instrument(
-            app
-        ).expose(app, endpoint="/metrics")
+        Instrumentator(excluded_handlers=list(OPERATIONAL_PATHS)).instrument(app).expose(
+            app, endpoint="/metrics"
+        )

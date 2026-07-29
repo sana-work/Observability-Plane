@@ -14,13 +14,13 @@ from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from opentelemetry.sdk.trace.sampling import ParentBasedTraceIdRatio
 
-from .config import get_settings
+from .config import OPERATIONAL_PATHS, get_settings
 
 logger = logging.getLogger("ai_obs_sdk.tracing")
 _initialized = False
 
 
-def init_tracing(app=None, db_engine=None) -> None:
+def init_tracing(app=None) -> None:
     """Call once at service startup (before the app starts serving).
 
     app: optional FastAPI instance → server spans per route.
@@ -51,7 +51,7 @@ def init_tracing(app=None, db_engine=None) -> None:
     if app is not None:
         from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 
-        FastAPIInstrumentor.instrument_app(app, excluded_urls="/metrics,/health,/ready")
+        FastAPIInstrumentor.instrument_app(app, excluded_urls=",".join(OPERATIONAL_PATHS))
 
     try:
         from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
