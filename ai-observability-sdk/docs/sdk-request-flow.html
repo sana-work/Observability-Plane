@@ -15,11 +15,12 @@
   *{box-sizing:border-box;margin:0;padding:0}
   body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
        background:var(--bg);color:var(--ink);line-height:1.55}
-  .wrap{max-width:1180px;margin:0 auto;padding:28px 20px 80px}
-  h1{font-size:1.9rem;letter-spacing:-.02em}
-  h2{font-size:1.25rem;margin-bottom:4px}
+  .wrap{max-width:1400px;margin:0 auto;padding:28px 28px 80px}
+  h1{font-size:2rem;letter-spacing:-.02em}
+  h2{font-size:1.3rem;margin-bottom:4px}
   h3{font-size:1rem}
-  .sub{color:var(--muted);max-width:70ch}
+  .sub{color:var(--muted);max-width:104ch}
+  .lead{font-size:1.06rem;max-width:none;margin-top:6px}
   .pill{display:inline-block;font-size:.72rem;font-weight:600;padding:2px 10px;border-radius:99px;
         background:var(--accent-soft);color:var(--accent);margin-bottom:10px;letter-spacing:.04em}
   section{margin-top:42px}
@@ -136,7 +137,7 @@
 
   <span class="pill">AI SERVICES PLATFORM · OBSERVABILITY PLANE</span>
   <h1>How <code>ai-observability-sdk</code> captures a request</h1>
-  <p class="sub">The SDK is a small Python library each of the 8 AI services installs. One line at startup +
+  <p class="sub lead">The SDK is a small Python library each of the 8 AI services installs. One line at startup +
      one decorator per hot path, and every request produces structured <b>events</b> on Kafka, a <b>trace</b> in Tempo,
      and JSON <b>logs</b> — all three joined by one <code>correlation_id</code> — while also contributing to Prometheus
      <b>metrics</b> (aggregate counters, no per-request identity) for alerting.
