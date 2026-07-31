@@ -1,0 +1,645 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ai-observability-sdk — Interactive Request Flow</title>
+<style>
+  :root{
+    --bg:#f4f6fa; --card:#ffffff; --ink:#1a2233; --muted:#5b6b85; --line:#dfe5ef;
+    --accent:#4353ff; --accent-soft:#eceeff; --green:#0e9f6e; --green-soft:#e2f7ef;
+    --red:#e02424; --red-soft:#fde8e8; --amber:#c27803; --amber-soft:#fdf6e3;
+    --console:#101726; --console-line:#233047; --console-ink:#d7e2f4;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+       background:var(--bg);color:var(--ink);line-height:1.55}
+  .wrap{max-width:1180px;margin:0 auto;padding:28px 20px 80px}
+  h1{font-size:1.9rem;letter-spacing:-.02em}
+  h2{font-size:1.25rem;margin-bottom:4px}
+  h3{font-size:1rem}
+  .sub{color:var(--muted);max-width:70ch}
+  .pill{display:inline-block;font-size:.72rem;font-weight:600;padding:2px 10px;border-radius:99px;
+        background:var(--accent-soft);color:var(--accent);margin-bottom:10px;letter-spacing:.04em}
+  section{margin-top:42px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:20px}
+  code,.mono{font-family:var(--mono);font-size:.85em}
+
+  /* ---------- hero ---------- */
+  .hero-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px;margin-top:18px}
+  .hero-grid .card{padding:14px 16px}
+  .hero-grid b{display:block;margin-bottom:2px}
+  .hero-grid small{color:var(--muted)}
+  .hero-grid .ic{font-size:1.3rem}
+
+  /* ---------- simulator ---------- */
+  .sim{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:18px;margin-top:16px}
+  @media(max-width:900px){.sim{grid-template-columns:1fr}}
+  .lane{display:flex;flex-direction:column;gap:8px}
+  .stage{border:1.5px solid var(--line);border-radius:12px;padding:9px 14px;background:var(--card);
+         transition:all .25s;position:relative}
+  .stage .who{font-size:.68rem;font-weight:700;letter-spacing:.06em;color:var(--muted);text-transform:uppercase}
+  .stage .what{font-size:.88rem}
+  .stage.active{border-color:var(--accent);background:var(--accent-soft);
+                box-shadow:0 0 0 4px rgba(67,83,255,.12)}
+  .stage.done{border-color:var(--green)}
+  .stage.done .who{color:var(--green)}
+  .stage.err{border-color:var(--red);background:var(--red-soft)}
+  .stage .spanchip{position:absolute;right:12px;top:9px;font-family:var(--mono);font-size:.66rem;
+                   background:#fff;border:1px solid var(--line);border-radius:6px;padding:1px 7px;color:var(--muted)}
+  .arrow{align-self:center;color:var(--muted);font-size:.85rem;line-height:.4}
+
+  .controls{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:14px 0 4px}
+  button{font:inherit;border:none;border-radius:9px;padding:8px 16px;cursor:pointer;font-weight:600}
+  .btn-primary{background:var(--accent);color:#fff}
+  .btn-primary:hover{filter:brightness(1.1)}
+  .btn-ghost{background:#fff;border:1.5px solid var(--line);color:var(--ink)}
+  .btn-ghost:hover{border-color:var(--accent);color:var(--accent)}
+  select{font:inherit;padding:8px 10px;border-radius:9px;border:1.5px solid var(--line);background:#fff;font-weight:600;max-width:100%}
+
+  .narrate{min-height:74px;border-left:4px solid var(--accent);background:var(--card);
+           border-radius:0 12px 12px 0;padding:12px 16px;margin-top:10px}
+  .narrate b{color:var(--accent)}
+  .narrate.err{border-left-color:var(--red)} .narrate.err b{color:var(--red)}
+  .narrate.warn{border-left-color:var(--amber)} .narrate.warn b{color:var(--amber)}
+
+  /* console */
+  .console{background:var(--console);border-radius:14px;padding:14px;color:var(--console-ink);
+           display:flex;flex-direction:column;min-height:420px}
+  .console .title{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;
+                  font-family:var(--mono);font-size:.74rem;color:#8fa3c4;margin-bottom:10px}
+  .counters{display:flex;gap:6px}
+  .counter{font-family:var(--mono);font-size:.7rem;padding:2px 8px;border-radius:6px;background:#1b2740}
+  .counter.d{color:#5eead4}.counter.x{color:#fca5a5}.counter.i{color:#fcd34d}
+  .feed{flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:6px;max-height:560px}
+  .evt{border:1px solid var(--console-line);border-radius:9px;padding:7px 10px;cursor:pointer;
+       font-family:var(--mono);font-size:.76rem;animation:pop .3s ease}
+  @keyframes pop{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+  .evt .head{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .evt .tag{padding:0 7px;border-radius:5px;font-weight:700;font-size:.68rem}
+  .tag.ok{background:#0b3b2e;color:#5eead4}.tag.bad{background:#3f1414;color:#fca5a5}
+  .tag.info{background:#1e2a4a;color:#93b4f5}
+  .evt .meta{color:#8fa3c4}
+  .evt pre{display:none;margin-top:8px;white-space:pre-wrap;word-break:break-all;color:#b8c8e4;
+           border-top:1px dashed var(--console-line);padding-top:8px;font-size:.7rem}
+  .evt.open pre{display:block}
+  .evt.dropped{opacity:.55;border-style:dashed}
+  .evt.dropped .head::after{content:"⚠ dropped locally — broker unreachable";color:#fcd34d;font-size:.66rem}
+  .evt-log{color:#7ee0a3}.evt-note{color:#8fa3c4;font-family:var(--mono);font-size:.72rem;padding:2px 4px}
+  .hint{color:#61759b;font-size:.7rem;font-family:var(--mono);margin-top:8px}
+
+  /* ---------- signals ---------- */
+  .three{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:14px;margin-top:16px}
+  .sig{border-top:4px solid var(--accent)}
+  .sig.log{border-top-color:var(--green)} .sig.met{border-top-color:var(--amber)}
+  .sig small{color:var(--muted);display:block;margin-top:6px}
+  .sig .q{font-style:italic;color:var(--muted)}
+
+  /* ---------- envelope explorer ---------- */
+  .env{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:18px;margin-top:16px}
+  @media(max-width:900px){.env{grid-template-columns:1fr}}
+  .jsonbox{background:var(--console);border-radius:14px;padding:16px;font-family:var(--mono);
+           font-size:.8rem;color:#8fa3c4;overflow-x:auto;line-height:1.7}
+  .jk{color:#93b4f5;cursor:pointer;border-radius:4px;padding:0 3px}
+  .jk:hover,.jk.sel{background:#2a3a63;color:#fff}
+  .jv{color:#7ee0a3}.jn{color:#fcd34d}
+  .explain{position:sticky;top:14px}
+  .explain .card{border-left:4px solid var(--accent)}
+  .explain h3{font-family:var(--mono);color:var(--accent);margin-bottom:6px}
+  .explain .grp{font-size:.7rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted)}
+
+  /* ---------- decorators ---------- */
+  .decs{display:grid;grid-template-columns:repeat(auto-fit,minmax(255px,1fr));gap:14px;margin-top:16px}
+  .dec pre{background:var(--console);color:#b8c8e4;border-radius:9px;padding:10px;font-size:.72rem;
+           overflow-x:auto;margin:10px 0}
+  .dec .cap{font-size:.8rem;color:var(--muted)}
+  .dec .cap b{color:var(--ink)}
+  .dec .emits{margin-top:8px;display:flex;flex-wrap:wrap;gap:5px}
+  .dec .emits span{font-family:var(--mono);font-size:.66rem;background:var(--accent-soft);color:var(--accent);
+                   padding:2px 7px;border-radius:6px}
+  .dec .emits span.bad{background:var(--red-soft);color:var(--red)}
+
+  /* ---------- guarantees + downstream ---------- */
+  .guar{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:14px;margin-top:16px}
+  .guar .card{border-left:4px solid var(--green)}
+  .guar .card.r2{border-left-color:var(--accent)} .guar .card.r3{border-left-color:var(--amber)}
+  .down{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:16px;font-size:.85rem}
+  .down .node{background:var(--card);border:1.5px solid var(--line);border-radius:10px;padding:8px 14px;text-align:center}
+  .down .node small{display:block;color:var(--muted);font-size:.7rem}
+  .down .a{color:var(--muted)}
+  footer{margin-top:60px;color:var(--muted);font-size:.78rem;text-align:center}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <span class="pill">AI SERVICES PLATFORM · OBSERVABILITY PLANE</span>
+  <h1>How <code>ai-observability-sdk</code> captures a request</h1>
+  <p class="sub">The SDK is a small Python library each of the 8 AI services installs. One line at startup +
+     one decorator per hot path, and every request produces structured <b>events</b> on Kafka, a <b>trace</b> in Tempo,
+     and JSON <b>logs</b> — all three joined by one <code>correlation_id</code> — while also contributing to Prometheus
+     <b>metrics</b> (aggregate counters, no per-request identity) for alerting.
+     Press <b>Play</b> below and watch real requests travel through it — across different services.</p>
+
+  <div class="hero-grid">
+    <div class="card"><span class="ic">🔌</span><b>1-line integration</b><small><code>init_observability(app)</code> — logging, tracing, middleware, /metrics wired at once</small></div>
+    <div class="card"><span class="ic">🪶</span><b>Zero request overhead</b><small>fire-and-forget: never blocks, never raises on the request path</small></div>
+    <div class="card"><span class="ic">🧬</span><b>One frozen contract</b><small>50 event types · 8 services · every event validated before it leaves</small></div>
+    <div class="card"><span class="ic">🔗</span><b>One join key</b><small><code>correlation_id</code> ties events + spans + logs of a request together</small></div>
+  </div>
+
+  <!-- ================= SIMULATOR ================= -->
+  <section>
+    <h2>▶ Interactive request simulator — 9 scenarios across the platform</h2>
+    <p class="sub">Choose a scenario, then step through. The left lane rebuilds per scenario (an HTTP service looks different from a Kafka-driven one).
+       Right: what appears on <code>ai-obs-events-raw</code>. Click any event to expand its JSON.</p>
+
+    <div class="controls">
+      <select id="scenario">
+        <optgroup label="GSSP GS — LLM gateway">
+          <option value="success" selected>✅ Happy path — LLM answer succeeds</option>
+          <option value="llmfail">❌ LLM call fails (rate-limited)</option>
+          <option value="brokerdown">🔌 Kafka broker is DOWN (fire-and-forget proof)</option>
+        </optgroup>
+        <optgroup label="Agentic Orchestration">
+          <option value="orch">✅ Plan → dispatch to executor → respond</option>
+        </optgroup>
+        <optgroup label="Agent Executor">
+          <option value="executor">✅ Agent run with nested tool + LLM calls</option>
+          <option value="timeout">⏱ Tool call times out mid-agent-run</option>
+        </optgroup>
+        <optgroup label="GSSP QS — RAG query">
+          <option value="rag">✅ Retrieve → guardrail → generate</option>
+        </optgroup>
+        <optgroup label="User Feedback">
+          <option value="feedback">✅ 👎 rating linked back to its answer</option>
+        </optgroup>
+        <optgroup label="Consumer Service — no HTTP at all">
+          <option value="ingest">✅ Scheduled document ingestion pipeline</option>
+        </optgroup>
+      </select>
+      <button class="btn-primary" id="play">▶ Play</button>
+      <button class="btn-ghost" id="step">Step →</button>
+      <button class="btn-ghost" id="reset">↺ Reset</button>
+    </div>
+
+    <div class="narrate" id="narrate"></div>
+
+    <div class="sim">
+      <div class="lane" id="lane"></div>
+      <div class="console">
+        <div class="title"><span id="topicline">kafka://ai-obs-events-raw</span>
+          <span class="counters"><span class="counter d">delivered <b id="c-del">0</b></span>
+          <span class="counter x">dropped <b id="c-drop">0</b></span>
+          <span class="counter i">invalid <b id="c-inv">0</b></span></span></div>
+        <div class="feed" id="feed"></div>
+        <div class="hint">▲ every message: key = correlation_id · header traceparent · value = ObsEvent JSON</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= SIGNALS ================= -->
+  <section>
+    <h2>The three signals — <code>event | log | metric</code></h2>
+    <p class="sub">The envelope's <code>telemetry_type</code> field names three kinds of telemetry. Each answers a different question and travels a different road — the SDK produces all three, joined by the correlation_id.</p>
+    <div class="three">
+      <div class="card sig"><h3>📨 event <small style="display:inline;color:var(--accent)">→ Kafka</small></h3>
+        <p class="q">“What happened, in business terms?”</p>
+        <small>One structured record per occurrence: <i>LLM call completed — 1440 tokens, $0.0027, prompt v3, finish_reason stop</i>.
+        Validated against the 50-type contract, enriched downstream, stored in ES / Postgres / S3. <b>This is what the simulator above shows.</b></small></div>
+      <div class="card sig log"><h3>📝 log <small style="display:inline;color:var(--green)">→ stdout → Fluent Bit → ES</small></h3>
+        <p class="q">“What did the code say while doing it?”</p>
+        <small>Free-text detail for humans. <code>configure_logging()</code> makes every line JSON and stamps
+        <code>correlation_id</code> on it automatically — so logs join to events without any effort at call sites.</small></div>
+      <div class="card sig met"><h3>📈 metric <small style="display:inline;color:var(--amber)">→ /metrics → Prometheus</small></h3>
+        <p class="q">“What are the aggregate numbers right now?”</p>
+        <small>Pre-aggregated counters and latency histograms per route, scraped from <code>/metrics</code>.
+        Cheap, real-time, no per-request detail — this is what alerts fire on.</small></div>
+    </div>
+    <p class="sub" style="margin-top:12px;font-size:.85rem">ℹ️ Today the SDK emits only <code>telemetry_type: "event"</code> onto Kafka —
+      logs and metrics travel their own roads. The field is a reserved discriminator so a log- or metric-shaped record could ride the event pipeline later without a schema change.</p>
+  </section>
+
+  <!-- ================= ENVELOPE ================= -->
+  <section>
+    <h2>🔎 Anatomy of one event — click any field</h2>
+    <p class="sub">Every event, regardless of type or service, carries the same envelope. Click a key to see what it's for.</p>
+    <div class="env">
+      <div class="jsonbox" id="jsonbox">{
+  <span class="jk" data-k="event_id">"event_id"</span>: <span class="jv">"9b2e41c7-…"</span>,
+  <span class="jk" data-k="schema_version">"schema_version"</span>: <span class="jv">"1.0"</span>,
+  <span class="jk" data-k="event_type">"event_type"</span>: <span class="jv">"LLM_CALL_COMPLETED"</span>,
+  <span class="jk" data-k="telemetry_type">"telemetry_type"</span>: <span class="jv">"event"</span>,
+  <span class="jk" data-k="timestamp">"timestamp"</span>: <span class="jv">"2026-08-07T09:14:03.201+00:00"</span>,
+  <span class="jk" data-k="correlation_id">"correlation_id"</span>: <span class="jv">"demo-123"</span>,
+  <span class="jk" data-k="request_id">"request_id"</span>: <span class="jv">"req-gw-8841"</span>,
+  <span class="jk" data-k="trace_id">"trace_id"</span>: <span class="jv">"4bf92f3577b34da6…"</span>,
+  <span class="jk" data-k="span_id">"span_id"</span>: <span class="jv">"b7ad6b7169203331"</span>,
+  <span class="jk" data-k="parent_span_id">"parent_span_id"</span>: <span class="jv">"00f067aa0ba902b7"</span>,
+  <span class="jk" data-k="service_name">"service_name"</span>: <span class="jv">"gssp-gs"</span>,
+  <span class="jk" data-k="environment">"environment"</span>: <span class="jv">"prod"</span>,
+  <span class="jk" data-k="application_id">"application_id"</span>: <span class="jv">"app-1234"</span>,
+  <span class="jk" data-k="lob">"lob"</span>: <span class="jv">"wealth"</span>,
+  <span class="jk" data-k="tenant_id">"tenant_id"</span>: <span class="jv">"acme-fund"</span>,
+  <span class="jk" data-k="user_id">"user_id"</span>: <span class="jv">"SOE12345"</span>,
+  <span class="jk" data-k="status">"status"</span>: <span class="jv">"success"</span>,
+  <span class="jk" data-k="latency_ms">"latency_ms"</span>: <span class="jn">842.6</span>,
+  <span class="jk" data-k="payload">"payload"</span>: {
+    "model_name": <span class="jv">"gemini-1.5-pro"</span>,
+    "input_tokens": <span class="jn">1200</span>,
+    "output_tokens": <span class="jn">240</span>,
+    "total_tokens": <span class="jn">1440</span>,
+    "estimated_cost_usd": <span class="jn">0.0027</span>,
+    "finish_reason": <span class="jv">"stop"</span>
+  }
+}</div>
+      <div class="explain"><div class="card" id="explain-card">
+        <span class="grp" id="ex-grp">ENVELOPE</span>
+        <h3 id="ex-key">← pick a field</h3>
+        <p id="ex-txt" class="sub" style="font-size:.88rem">Click any highlighted key in the JSON to learn what it does and who uses it downstream.</p>
+      </div></div>
+    </div>
+  </section>
+
+  <!-- ================= DECORATORS ================= -->
+  <section>
+    <h2>🎯 The four capture points — one decorator each</h2>
+    <p class="sub">Teams don't hand-write events. They decorate the function that does the work; the SDK times it, nests it, and emits the correct pair — including the failure and timeout paths everyone forgets. (For lifecycle facts with no function to wrap — a plan created, feedback submitted — services call <code>emit_event()</code> directly, as the Orchestration and Feedback scenarios show.)</p>
+    <div class="decs">
+      <div class="card dec"><h3>🧠 @trace_llm</h3>
+        <pre>@trace_llm(model_provider="vertexai",
+           model_name="gemini-1.5-pro")
+async def generate(prompt):
+    r = await vertex.generate(prompt)
+    r.obs_payload = {
+      "input_tokens": r.usage.in_t,
+      "output_tokens": r.usage.out_t,
+      "finish_reason": r.finish}
+    return r</pre>
+        <p class="cap">Captures <b>tokens, auto-computed cost, latency, TTFT, finish reason, prompt version</b>. <code>prompt_text</code> is auto-hashed — raw prompts never ride in events.</p>
+        <div class="emits"><span>LLM_CALL_STARTED</span><span>LLM_CALL_COMPLETED</span><span class="bad">LLM_CALL_FAILED</span></div></div>
+      <div class="card dec"><h3>🔧 @trace_tool</h3>
+        <pre>@trace_tool(tool_id="servicenow",
+            tool_type="ServiceNow",
+            called_by_agent_id="agent-42")
+async def create_ticket(data): ...</pre>
+        <p class="cap">Captures <b>tool identity, upstream status, retries, response size, latency</b>. A <code>TimeoutError</code> automatically becomes <b>TOOL_CALL_TIMEOUT</b>.</p>
+        <div class="emits"><span>TOOL_CALL_STARTED</span><span>TOOL_CALL_COMPLETED</span><span class="bad">TOOL_CALL_TIMEOUT</span></div></div>
+      <div class="card dec"><h3>📖 @trace_rag</h3>
+        <pre>@trace_rag(vector_db_index="kb-main",
+           embedding_model="text-emb-004",
+           top_k=8)
+async def retrieve(query): ...</pre>
+        <p class="cap">Captures <b>chunk count, relevance, no-result flag, citation coverage, context tokens</b> — the raw material for retrieval-quality dashboards.</p>
+        <div class="emits"><span>RAG_RETRIEVAL_STARTED</span><span>RAG_RETRIEVAL_COMPLETED</span><span class="bad">RAG_RETRIEVAL_FAILED</span></div></div>
+      <div class="card dec"><h3>🕵️ @trace_agent</h3>
+        <pre>@trace_agent(agent_id="planner-v2",
+             agent_type="planner")
+async def run_agent(task): ...</pre>
+        <p class="cap">Captures <b>steps, loops, handoffs, termination reason, tools & models used</b>. Everything the agent calls nests underneath it in the span tree.</p>
+        <div class="emits"><span>AGENT_STARTED</span><span>AGENT_COMPLETED</span><span class="bad">AGENT_FAILED / TIMEOUT</span></div></div>
+    </div>
+  </section>
+
+  <!-- ================= GUARANTEES ================= -->
+  <section>
+    <h2>🛡 Why services trust it — the hard guarantees</h2>
+    <div class="guar">
+      <div class="card"><h3>Never blocks</h3><p class="sub" style="font-size:.86rem"><code>produce()</code> only appends to an in-memory queue; a C background thread does all network I/O. No customer request ever waits for Kafka — try the <b>“broker down”</b> scenario above.</p></div>
+      <div class="card"><h3>Never raises</h3><p class="sub" style="font-size:.86rem">Every failure — broker outage, full queue, bad payload — becomes a log line + a counter (<code>emitter_stats()</code>: delivered / dropped / invalid), never an exception in your request path.</p></div>
+      <div class="card r2"><h3>Validated at the edge</h3><p class="sub" style="font-size:.86rem">Constructing an event checks it against the frozen contract — a typo'd event type fails in unit tests. A wrong <code>AI_OBS_SERVICE_NAME</code> refuses to <b>boot</b> instead of silently emitting nothing.</p></div>
+      <div class="card r3"><h3>Ordered per request</h3><p class="sub" style="font-size:.86rem">Kafka key = correlation_id ⇒ all events of one request land on <b>one partition, in order</b> — so downstream consumers replay each request's story sequentially.</p></div>
+    </div>
+  </section>
+
+  <!-- ================= DOWNSTREAM ================= -->
+  <section>
+    <h2>🗺 Where the captured data goes next</h2>
+    <div class="down">
+      <div class="node"><b>8 services</b><small>+ this SDK</small></div><span class="a">▶</span>
+      <div class="node mono">ai-obs-events-raw<small>Kafka · 7 days</small></div><span class="a">▶</span>
+      <div class="node"><b>Enrichment</b><small>validate · redact PII · cost · SLO</small></div><span class="a">▶</span>
+      <div class="node mono">ai-obs-events-processed<small>Kafka · 3 days</small></div><span class="a">▶</span>
+      <div class="node"><b>Stores</b><small>Elasticsearch · Postgres · S3</small></div><span class="a">▶</span>
+      <div class="node"><b>Faces</b><small>Dashboards · Kibana · Chatbot</small></div>
+    </div>
+    <p class="sub" style="margin-top:12px;font-size:.85rem">Broken events go to <code>ai-obs-dead-letter</code> for debugging and replay — nothing is ever lost silently. Traces flow separately to Grafana Tempo; logs via Fluent Bit to Elasticsearch — all three joinable on <code>correlation_id</code>.</p>
+  </section>
+
+  <footer>ai-observability-sdk 0.1.0 · Observability Plane · interactive doc · 9 scenarios across 6 services</footer>
+</div>
+
+<script>
+/* ============ envelope explorer ============ */
+const FIELDS={
+ event_id:["IDENTITY","Unique id of this one record (auto uuid4). Downstream writes use it to dedupe: ES _id = event_id, Postgres ON CONFLICT DO NOTHING — so at-least-once replays never double-count."],
+ schema_version:["IDENTITY","Version of the envelope contract (frozen at 1.0). Any envelope change bumps this, letting consumers handle old + new shapes safely."],
+ event_type:["IDENTITY","One of the frozen 50 types (LLM_CALL_COMPLETED, TOOL_CALL_TIMEOUT…). Validated at construction — unknown types can never reach the topic."],
+ telemetry_type:["IDENTITY","event | log | metric. The SDK emits only 'event' today; reserved so log/metric-shaped records could ride the pipeline later without a migration."],
+ timestamp:["TIME","When it happened — UTC ISO-8601, auto-set. Partitions the Postgres firehose and orders Kibana timelines."],
+ correlation_id:["CORRELATION","⭐ THE join key. One value for the entire user request across all 8 services, every event, log line and span. Also the Kafka partition key (= ordering). Echoed back to the caller in X-Correlation-ID."],
+ request_id:["CORRELATION","The CALLER'S own id (X-Request-ID) captured verbatim — bridges our data to gateway logs & support tickets. Null if not sent."],
+ trace_id:["CORRELATION","OpenTelemetry/W3C trace id — what Grafana Tempo indexes by. Lets you jump from this event to the timing waterfall."],
+ span_id:["CORRELATION","Which operation inside the request: this LLM call = span B. Comes from the SDK's ObsContext — one consistent id space for the event tree."],
+ parent_span_id:["CORRELATION","The span this one nests under (the request = span A). Walking these pointers rebuilds the tree: request → agent → tool/LLM."],
+ service_name:["OWNERSHIP","Which of the 8 platform services emitted it — validated at BOOT: a wrong value refuses to start rather than silently dropping every event."],
+ environment:["OWNERSHIP","dev | staging | prod."],
+ application_id:["OWNERSHIP","Which registered application/usecase. Joins to the application_registry (owner team, criticality) and drives budgets & SLOs."],
+ lob:["OWNERSHIP","Line of business — the PROVIDER side. Baked into ES index names (ai-obs-wealth-…) so per-LOB access control = index permissions."],
+ tenant_id:["OWNERSHIP","Which client org was SERVED (multi-tenant apps only; null otherwise). The consumer side — the opposite of lob."],
+ user_id:["OWNERSHIP","The raw SOE ID, deliberately UNHASHED (platform decision) — audit trails and 'by SOEID' dashboards need it. Protection = store-level RBAC, not hashing."],
+ status:["OUTCOME","success | failed — the SLO evaluator counts these."],
+ latency_ms:["OUTCOME","Wall-clock duration measured by the SDK — feeds p95/p99 dashboards and latency SLOs."],
+ payload:["DOMAIN","Everything type-specific lives here (tokens, cost, chunk counts, tool status…). The envelope stays frozen; new facts go in the payload — no migrations."]};
+document.querySelectorAll('.jk').forEach(el=>el.addEventListener('click',()=>{
+  document.querySelectorAll('.jk').forEach(e=>e.classList.remove('sel'));
+  el.classList.add('sel');
+  const k=el.dataset.k,[g,t]=FIELDS[k];
+  document.getElementById('ex-grp').textContent=g;
+  document.getElementById('ex-key').textContent=k;
+  document.getElementById('ex-txt').textContent=t;
+}));
+
+/* ============ simulator ============ */
+let CUR={svc:"gssp-gs",corr:"demo-123",user:"SOE12345"};
+const ev=(type,extra)=>({event_id:Math.random().toString(16).slice(2,10)+"…",event_type:type,
+  timestamp:new Date().toISOString(),schema_version:"1.0",telemetry_type:"event",
+  correlation_id:CUR.corr,service_name:CUR.svc,environment:"prod",
+  application_id:"app-1234",lob:"wealth",user_id:CUR.user,...extra});
+
+/* Each scenario: base ids, ready text, its own pipeline stages, and the steps. */
+const SCEN={
+
+/* ── GSSP GS: happy ─────────────────────────────────────────── */
+success:{svc:"gssp-gs",corr:"demo-123",user:"SOE12345",
+ ready:"A user is about to call <code>POST /generate</code> on <b>gssp-gs</b> with <code>X-Correlation-ID: demo-123</code>, <code>X-User-ID: SOE12345</code>.",
+ stages:[
+  {id:"client",who:"Caller",what:"User / upstream sends the HTTP request"},
+  {id:"mwin",who:"SDK · middleware.py",what:"ObsContext built — correlation_id adopted, user_id copied raw",chip:"span A"},
+  {id:"handler",who:"Your service code",what:"Route handler runs business logic",chip:"span A"},
+  {id:"dec",who:"SDK · decorators.py",what:"@trace_llm wraps the model call",chip:"span B ← A"},
+  {id:"ext",who:"External · VertexAI",what:"gemini-1.5-pro generates the answer"},
+  {id:"mwout",who:"SDK · middleware.py",what:"Response finalized — X-Correlation-ID echoed, context reset",chip:"span A"},
+  {id:"emit",who:"SDK · emitter.py (background)",what:"librdkafka batches 50 ms → lz4 → partition = hash(corr) % 12"}],
+ steps:[
+  {s:"client",n:"<b>1 · Request arrives.</b> <code>POST /generate</code>. The user is now waiting — everything the SDK does from here must cost them nothing."},
+  {s:"mwin",n:"<b>2 · Middleware builds the identity.</b> correlation_id <code>demo-123</code> adopted, user_id copied <b>raw</b>, span <b>A</b> minted, bound to the contextvar — every event, log & span from here inherits these ids automatically.",
+   e:[["REQUEST_RECEIVED",{span_id:"A",status:"success",payload:{method:"POST",path:"/generate"}}]]},
+  {s:"handler",n:"<b>3 · Business code runs.</b> Any <code>log.info(…)</code> here automatically carries <code>correlation_id=demo-123</code>.",log:'log ▸ {"event":"building prompt","correlation_id":"demo-123"}'},
+  {s:"dec",n:"<b>4 · @trace_llm intercepts.</b> Child context bound: span <b>B</b>, parent <b>A</b> — this nesting is how the trace tree is built.",
+   e:[["LLM_CALL_STARTED",{span_id:"B",parent_span_id:"A",status:"success",payload:{model_provider:"vertexai",model_name:"gemini-1.5-pro"}}]]},
+  {s:"ext",n:"<b>5 · The model responds</b> in 842 ms. The function attaches facts to its result: <code>r.obs_payload = {input_tokens:1200, output_tokens:240, finish_reason:'stop'}</code>."},
+  {s:"dec",n:"<b>6 · Completion computed.</b> Latency measured, <b>total_tokens 1440</b> and <b>cost $0.0027</b> derived from the price table — the team wrote none of this.",
+   e:[["LLM_CALL_COMPLETED",{span_id:"B",parent_span_id:"A",status:"success",latency_ms:842.6,payload:{model_name:"gemini-1.5-pro",input_tokens:1200,output_tokens:240,total_tokens:1440,estimated_cost_usd:0.0027,finish_reason:"stop"}}]]},
+  {s:"mwout",n:"<b>7 · Response returns 200.</b> REQUEST_COMPLETED with full latency; <code>X-Correlation-ID</code> echoed so the user can quote it in a bug report.",
+   e:[["REQUEST_COMPLETED",{span_id:"A",status:"success",latency_ms:1041.3,http_status:200,payload:{method:"POST",path:"/generate"}}]]},
+  {s:"emit",n:"<b>8 · Meanwhile, in the background…</b> none of the produce() calls did network I/O. librdkafka batched, compressed, and sent all 4 to partition <code>hash('demo-123') % 12</code> — <b>same key ⇒ same partition ⇒ guaranteed order</b>."}]},
+
+/* ── GSSP GS: LLM failure ───────────────────────────────────── */
+llmfail:{svc:"gssp-gs",corr:"demo-124",user:"SOE12345",
+ ready:"Same request as the happy path — but VertexAI is about to rate-limit us.",
+ stages:[
+  {id:"client",who:"Caller",what:"User sends the HTTP request"},
+  {id:"mwin",who:"SDK · middleware.py",what:"ObsContext built",chip:"span A"},
+  {id:"dec",who:"SDK · decorators.py",what:"@trace_llm wraps the model call",chip:"span B ← A"},
+  {id:"ext",who:"External · VertexAI",what:"💥 429 ResourceExhausted — rate limited"},
+  {id:"mwout",who:"SDK · middleware.py",what:"Exception bubbles → REQUEST_FAILED → re-raised",chip:"span A"},
+  {id:"emit",who:"SDK · emitter.py (background)",what:"the full failure story ships to Kafka"}],
+ steps:[
+  {s:"client",n:"<b>1 · Request arrives</b>, same as before."},
+  {s:"mwin",n:"<b>2 · Middleware binds identity</b>, emits REQUEST_RECEIVED.",e:[["REQUEST_RECEIVED",{span_id:"A",status:"success",payload:{method:"POST",path:"/generate"}}]]},
+  {s:"dec",n:"<b>3 · @trace_llm opens span B</b>, emits LLM_CALL_STARTED.",e:[["LLM_CALL_STARTED",{span_id:"B",parent_span_id:"A",status:"success",payload:{model_provider:"vertexai",model_name:"gemini-1.5-pro"}}]]},
+  {s:"ext",err:1,n:"<b>4 · 💥 VertexAI throws</b> <code>ResourceExhausted: 429 quota exceeded</code>."},
+  {s:"dec",err:1,n:"<b>5 · The decorator catches it</b>, emits <b>LLM_CALL_FAILED</b> — error class, truncated message, same span B — then <b>re-raises</b>. The SDK observes failures; it never swallows your exceptions.",
+   e:[["LLM_CALL_FAILED",{span_id:"B",parent_span_id:"A",status:"failed",latency_ms:112.4,error_code:"ResourceExhausted",payload:{model_name:"gemini-1.5-pro",error_message:"429 quota exceeded for aiplatform"}}]]},
+  {s:"mwout",err:1,n:"<b>6 · The exception reaches the middleware</b> → REQUEST_FAILED (http 500), correlation id still echoed, then re-raised into FastAPI's normal error handling.",
+   e:[["REQUEST_FAILED",{span_id:"A",status:"failed",latency_ms:118.9,http_status:500,error_code:"ResourceExhausted",payload:{method:"POST",path:"/generate"}}]]},
+  {s:"emit",n:"<b>7 · The story is complete on Kafka.</b> Downstream, enrichment maps <code>ResourceExhausted</code> → catalog code <b>L0001 (LLM rate limited, retryable)</b> and the Error dashboard groups it instantly."}]},
+
+/* ── GSSP GS: broker down ───────────────────────────────────── */
+brokerdown:{svc:"gssp-gs",corr:"demo-125",user:"SOE12345",
+ ready:"Same happy-path request — <b>but Kafka is completely DOWN</b>. Watch the user experience and the counters top-right.",
+ stages:[
+  {id:"client",who:"Caller",what:"User sends the HTTP request"},
+  {id:"mwin",who:"SDK · middleware.py",what:"Works normally — emits into the LOCAL in-memory queue",chip:"span A"},
+  {id:"dec",who:"SDK · decorators.py",what:"@trace_llm — also just memory appends",chip:"span B ← A"},
+  {id:"ext",who:"External · VertexAI",what:"answers in 842 ms, unaffected"},
+  {id:"mwout",who:"SDK · middleware.py",what:"User gets 200 at identical latency",chip:"span A"},
+  {id:"emit",who:"SDK · emitter.py (background)",what:"⚠ retries fail → events dropped WITH a warning + counter"}],
+ steps:[
+  {s:"client",n:"<b>1 · The request arrives.</b> Kafka has been down for minutes. The service doesn't know and doesn't care."},
+  {s:"mwin",n:"<b>2 · emit_event() returns in microseconds</b> — it only appends to librdkafka's local queue. <b>No network call happens on the request path — ever.</b>",
+   e:[["REQUEST_RECEIVED",{span_id:"A",status:"success",payload:{method:"POST",path:"/generate"}}]],drop:1},
+  {s:"dec",n:"<b>3 · Decorator emits as usual</b> — into the local queue.",e:[["LLM_CALL_STARTED",{span_id:"B",parent_span_id:"A",status:"success",payload:{model_name:"gemini-1.5-pro"}}]],drop:1},
+  {s:"ext",n:"<b>4 · The model answers in 842 ms</b> — unaffected."},
+  {s:"dec",n:"<b>5 · Completion emitted</b> — still just a memory append.",e:[["LLM_CALL_COMPLETED",{span_id:"B",parent_span_id:"A",status:"success",latency_ms:842.6,payload:{total_tokens:1440,estimated_cost_usd:0.0027}}]],drop:1},
+  {s:"mwout",n:"<b>6 · User gets their 200 in ~1 s — identical to the happy path.</b> The outage is invisible to customers.",
+   e:[["REQUEST_COMPLETED",{span_id:"A",status:"success",latency_ms:1041.3,http_status:200,payload:{method:"POST",path:"/generate"}}]],drop:1},
+  {s:"emit",warn:1,n:"<b>7 · In the background</b> librdkafka retries; when the delivery timeout passes (or the 100k queue fills) events are <b>dropped with a warning</b> and <code>dropped++</code> in <code>emitter_stats()</code>. The trade is deliberate and visible: <b>telemetry may be lossy — the product may never be slow.</b>"}]},
+
+/* ── Agentic Orchestration ──────────────────────────────────── */
+orch:{svc:"agentic-orchestration",corr:"task-7781",user:"SOE12345",
+ ready:"A user asks the platform to run a task. <b>Agentic Orchestration</b> plans it and dispatches it to the Agent Executor over the <i>business</i> Kafka topic — note how lifecycle facts use plain <code>emit_event()</code> calls, no decorators needed.",
+ stages:[
+  {id:"client",who:"Caller",what:"User task request via the platform API"},
+  {id:"mwin",who:"SDK · middleware.py",what:"ObsContext bound — correlation task-7781 born HERE, will follow the task everywhere",chip:"span A"},
+  {id:"auth",who:"Service · auth + config",what:"COIN JWT verified, usecase config loaded",chip:"span A"},
+  {id:"plan",who:"Service · planner",what:"LLM gate decides the plan: 2 steps, agent kyc-review",chip:"span A"},
+  {id:"dispatch",who:"Service · Kafka producer",what:"Execution request → business topic; traceparent + correlation_id ride in the message headers",chip:"span A"},
+  {id:"consume",who:"Service · Kafka consumer",what:"…later: final response consumed from the executor",chip:"span A"},
+  {id:"mwout",who:"SDK · middleware.py",what:"Response built and returned to the user",chip:"span A"},
+  {id:"emit",who:"SDK · emitter.py (background)",what:"7 events shipped, all keyed task-7781"}],
+ steps:[
+  {s:"client",n:"<b>1 · A task request arrives.</b> This service is the platform's front door for agentic work."},
+  {s:"mwin",n:"<b>2 · The correlation_id <code>task-7781</code> is minted here</b> — and because Orchestration passes it downstream in Kafka headers, the Executor's events (next scenario!) will carry the <i>same</i> id. One task = one thread through the whole platform.",
+   e:[["REQUEST_RECEIVED",{span_id:"A",status:"success",payload:{method:"POST",path:"/tasks"}}]]},
+  {s:"auth",n:"<b>3 · Auth + config.</b> Lifecycle facts have no function to wrap — the service calls <code>emit_event()</code> directly. Two lines of code, two events.",
+   e:[["AUTH_COMPLETED",{span_id:"A",status:"success",payload:{auth_method:"coin-jwt"}}],["CONFIG_LOADED",{span_id:"A",status:"success",payload:{usecase_id:"uc-kyc-review"}}]]},
+  {s:"plan",n:"<b>4 · The planner decides.</b> PLAN_CREATED records the decision itself — which agent, how many steps, why. Six months from now, 'why did the platform pick this agent?' is answerable from data.",
+   e:[["PLAN_CREATED",{span_id:"A",status:"success",latency_ms:410.2,payload:{planner_decision:"route to kyc-review agent",step_count:2,agent_id:"kyc-review-v2"}}]]},
+  {s:"dispatch",n:"<b>5 · Dispatch to the Executor</b> over the business topic. The SDK's <code>inject_trace_headers()</code> puts <code>traceparent</code> + <code>correlation_id</code> on that message — the trace does not die at the queue boundary.",
+   e:[["AGENT_EXECUTION_REQUEST_PRODUCED",{span_id:"A",status:"success",payload:{target_agent:"kyc-review-v2",business_topic:"agent-execution-requests"}}],["KAFKA_MESSAGE_PRODUCED",{span_id:"A",status:"success",payload:{topic:"agent-execution-requests",partition:3}}]]},
+  {s:"consume",n:"<b>6 · The executor's answer comes back</b> on the response topic — consumed, correlated by the same id.",
+   e:[["FINAL_RESPONSE_CONSUMED",{span_id:"A",status:"success",payload:{topic:"agent-execution-responses",agent_status:"completed"}}]]},
+  {s:"mwout",n:"<b>7 · Response built and returned.</b>",
+   e:[["RESPONSE_BUILT",{span_id:"A",status:"success",payload:{answer_tokens:220}}],["REQUEST_COMPLETED",{span_id:"A",status:"success",latency_ms:6210.0,http_status:200,payload:{method:"POST",path:"/tasks"}}]]},
+  {s:"emit",n:"<b>8 · Eight events, one key.</b> Everything this service saw of task-7781 is on one partition in order — and the Executor's events (same correlation!) interleave into the same story downstream. Run the next scenario to see the other half."}]},
+
+/* ── Agent Executor with nested tool + LLM ──────────────────── */
+executor:{svc:"agent-executor",corr:"task-7781",user:"SOE12345",
+ ready:"The other half of the story: <b>Agent Executor</b> picks up task-7781 from the business topic. No HTTP, no middleware — watch the <b>manual context binding</b> and a <b>three-level span tree</b>: run → tool → model.",
+ stages:[
+  {id:"kin",who:"Kafka · business topic",what:"Execution request for task-7781 arrives (headers: traceparent, correlation_id)"},
+  {id:"bind",who:"SDK · context.py (manual)",what:"bind_context(ObsContext(correlation_id=hdr)) — the no-middleware pattern",chip:"span A′"},
+  {id:"agent",who:"SDK · @trace_agent",what:"kyc-review-v2 run opens",chip:"span B ← A′"},
+  {id:"tool",who:"SDK · @trace_tool",what:"Step 1: query the KYC case system",chip:"span C ← B"},
+  {id:"llm",who:"SDK · @trace_llm",what:"Step 2: reason over the case data",chip:"span D ← B"},
+  {id:"adone",who:"SDK · @trace_agent",what:"Run completes — steps, tools_used, cost rolled up",chip:"span B"},
+  {id:"kout",who:"Service · Kafka producer",what:"Final response → business response topic"},
+  {id:"emit",who:"SDK · emitter.py (background)",what:"same correlation task-7781 ⇒ interleaves with Orchestration's events"}],
+ steps:[
+  {s:"kin",n:"<b>1 · A message, not a request.</b> This service has no HTTP endpoints for this work — it consumes the business topic. The message headers carry <code>correlation_id: task-7781</code> and <code>traceparent</code>, placed there by Orchestration."},
+  {s:"bind",n:"<b>2 · Manual context binding</b> — the pattern for every non-HTTP service: <code>ctx = ObsContext(correlation_id=headers['correlation_id']); token = bind_context(ctx)</code> …and reset it when this message is done. From here the SDK behaves exactly as if middleware had run.",
+   e:[["KAFKA_MESSAGE_CONSUMED",{span_id:"A2",status:"success",payload:{topic:"agent-execution-requests",partition:3}}]]},
+  {s:"agent",n:"<b>3 · @trace_agent opens the run</b> — span B under A′. Everything the agent does will nest under B.",
+   e:[["AGENT_STARTED",{span_id:"B",parent_span_id:"A2",status:"success",payload:{agent_id:"kyc-review-v2",agent_type:"executor",max_steps:6}}]]},
+  {s:"tool",n:"<b>4 · Step 1 — a tool call, nested.</b> @trace_tool binds span <b>C ← B</b>. The tree is now three levels deep: message → agent → tool.",
+   e:[["AGENT_STEP_COMPLETED",{span_id:"B",status:"success",payload:{step_count:1,planner_decision:"fetch KYC case"}}],["TOOL_CALL_STARTED",{span_id:"C",parent_span_id:"B",status:"success",payload:{tool_id:"kyc-case-api",tool_type:"InternalAPI",called_by_agent_id:"kyc-review-v2"}}],["TOOL_CALL_COMPLETED",{span_id:"C",parent_span_id:"B",status:"success",latency_ms:212.5,payload:{tool_id:"kyc-case-api",http_status_upstream:200,response_size_bytes:18240}}]]},
+  {s:"llm",n:"<b>5 · Step 2 — the model reasons over the case.</b> Another child: span <b>D ← B</b>. Tokens and cost auto-computed as always.",
+   e:[["AGENT_STEP_COMPLETED",{span_id:"B",status:"success",payload:{step_count:2,planner_decision:"assess risk"}}],["LLM_CALL_STARTED",{span_id:"D",parent_span_id:"B",status:"success",payload:{model_name:"gemini-1.5-pro"}}],["LLM_CALL_COMPLETED",{span_id:"D",parent_span_id:"B",status:"success",latency_ms:1310.0,payload:{model_name:"gemini-1.5-pro",input_tokens:4200,output_tokens:380,total_tokens:4580,estimated_cost_usd:0.0072,finish_reason:"stop"}}]]},
+  {s:"adone",n:"<b>6 · The run completes.</b> AGENT_COMPLETED rolls the whole run up: 2 steps, no loops, which tools and models were used, total cost. This one event powers the Agent dashboard's success-rate, steps-per-run and cost-per-run charts.",
+   e:[["AGENT_COMPLETED",{span_id:"B",parent_span_id:"A2",status:"success",latency_ms:2480.9,payload:{agent_id:"kyc-review-v2",step_count:2,loop_count:0,termination_reason:"plan_complete",tools_used:["kyc-case-api"],models_used:["gemini-1.5-pro"],estimated_cost_usd:0.0072}}]]},
+  {s:"kout",n:"<b>7 · The answer goes back</b> to Orchestration over the response topic — traceparent forwarded again.",
+   e:[["KAFKA_MESSAGE_PRODUCED",{span_id:"A2",status:"success",payload:{topic:"agent-execution-responses",partition:1}}]]},
+  {s:"emit",n:"<b>8 · The payoff:</b> Orchestration's 8 events and the Executor's 9 all carry <code>correlation_id task-7781</code>. Downstream they merge into ONE story: request → plan → dispatch → agent run → tool → LLM → response. That cross-service thread is the whole point of the platform."}]},
+
+/* ── Agent Executor tool timeout ────────────────────────────── */
+timeout:{svc:"agent-executor",corr:"task-7790",user:"SOE12345",
+ ready:"Same executor — but this time the tool (ServiceNow) hangs. Watch <code>TimeoutError</code> become a first-class <b>TOOL_CALL_TIMEOUT</b> while the request still succeeds.",
+ stages:[
+  {id:"kin",who:"Kafka · business topic",what:"Execution request for task-7790 arrives"},
+  {id:"bind",who:"SDK · context.py (manual)",what:"Context bound from message headers",chip:"span A′"},
+  {id:"agent",who:"SDK · @trace_agent",what:"Run opens",chip:"span B ← A′"},
+  {id:"tool",who:"SDK · @trace_tool",what:"⏱ ServiceNow never answers…",chip:"span C ← B"},
+  {id:"adone",who:"SDK · @trace_agent",what:"Agent degrades gracefully, run still completes",chip:"span B"},
+  {id:"emit",who:"SDK · emitter.py (background)",what:"a SUCCESSFUL request containing a FAILED tool call"}],
+ steps:[
+  {s:"kin",n:"<b>1 · Task arrives</b>, context bound as before.",e:[["KAFKA_MESSAGE_CONSUMED",{span_id:"A2",status:"success",payload:{topic:"agent-execution-requests"}}]]},
+  {s:"agent",n:"<b>2 · Agent run opens.</b>",e:[["AGENT_STARTED",{span_id:"B",parent_span_id:"A2",status:"success",payload:{agent_id:"kyc-review-v2"}}]]},
+  {s:"tool",n:"<b>3 · The tool call starts…</b>",e:[["TOOL_CALL_STARTED",{span_id:"C",parent_span_id:"B",status:"success",payload:{tool_id:"servicenow-tickets",tool_type:"ServiceNow"}}]]},
+  {s:"tool",err:1,n:"<b>4 · ⏱ 10 s pass — <code>TimeoutError</code>.</b> The decorator maps it to <b>TOOL_CALL_TIMEOUT</b>, not a generic failure — so timeout-rate per tool is a first-class dashboard number, separate from auth errors and 500s. Then it re-raises to the agent.",
+   e:[["TOOL_CALL_TIMEOUT",{span_id:"C",parent_span_id:"B",status:"failed",latency_ms:10004.2,error_code:"TimeoutError",payload:{tool_id:"servicenow-tickets",error_message:"deadline exceeded"}}]]},
+  {s:"adone",n:"<b>5 · The agent catches it and degrades</b> — queues the ticket for retry, finishes the rest of the plan. The run completes successfully; <code>termination_reason</code> tells the truth.",
+   e:[["AGENT_COMPLETED",{span_id:"B",parent_span_id:"A2",status:"success",latency_ms:11200.0,payload:{agent_id:"kyc-review-v2",step_count:2,termination_reason:"plan_complete_with_degradation",tools_used:["servicenow-tickets"]}}]]},
+  {s:"emit",n:"<b>6 · Note what the data shows:</b> a <i>successful</i> run containing a <i>failed</i> tool call. Users saw no error — but the Tool dashboard sees ServiceNow's p95 breach and rising timeout rate. Without span-level events this slow rot would be invisible."}]},
+
+/* ── GSSP QS: RAG query ─────────────────────────────────────── */
+rag:{svc:"gssp-qs",corr:"q-5512",user:"SOE77001",
+ ready:"A knowledge question hits <b>GSSP QS</b>: retrieve from the vector store → guardrail check → generate a grounded answer. Three different signal types from one request.",
+ stages:[
+  {id:"client",who:"Caller",what:"“What is our KYC document retention policy?”"},
+  {id:"mwin",who:"SDK · middleware.py",what:"ObsContext bound",chip:"span A"},
+  {id:"ragdec",who:"SDK · @trace_rag",what:"Retrieval from pgvector kb-policies",chip:"span B ← A"},
+  {id:"guard",who:"Service · guardrails",what:"Policy check on retrieved context — emit_event() direct",chip:"span A"},
+  {id:"llmdec",who:"SDK · @trace_llm",what:"Grounded generation over the chunks",chip:"span C ← A"},
+  {id:"mwout",who:"SDK · middleware.py",what:"Answer + citations returned",chip:"span A"},
+  {id:"emit",who:"SDK · emitter.py (background)",what:"retrieval quality + safety + cost, one story"}],
+ steps:[
+  {s:"client",n:"<b>1 · A question arrives.</b> RAG quality problems (bad retrieval, ungrounded answers) are invisible in HTTP logs — this scenario shows what makes them visible."},
+  {s:"mwin",n:"<b>2 · Identity bound.</b>",e:[["REQUEST_RECEIVED",{span_id:"A",status:"success",payload:{method:"POST",path:"/query"}}]]},
+  {s:"ragdec",n:"<b>3 · @trace_rag wraps the retrieval.</b> Note <code>query_hash</code> — the question text is fingerprinted, so identical questions group across thousands of events without shipping the text.",
+   e:[["RAG_RETRIEVAL_STARTED",{span_id:"B",parent_span_id:"A",status:"success",payload:{vector_db_index:"kb-policies",embedding_model:"text-embedding-004",top_k:8,query_hash:"a3f9c2d114e08b77"}}]]},
+  {s:"ragdec",n:"<b>4 · 8 chunks come back.</b> The result's <code>obs_payload</code> carries the quality numbers: relevance 0.82, citation coverage 0.88, no truncation. These exact fields feed the RAG dashboard's hit-rate and relevance trends.",
+   e:[["RAG_RETRIEVAL_COMPLETED",{span_id:"B",parent_span_id:"A",status:"success",latency_ms:96.4,payload:{vector_db_index:"kb-policies",chunk_count:8,avg_relevance_score:0.82,citation_coverage:0.88,context_tokens:2100,no_result_flag:false,truncation_flag:false}}]]},
+  {s:"guard",n:"<b>5 · Guardrail check</b> — a lifecycle fact, so a direct <code>emit_event(GUARDRAIL_EVALUATED)</code>. Decision, policy id and risk score are now queryable for compliance review.",
+   e:[["GUARDRAIL_EVALUATED",{span_id:"A",status:"success",payload:{policy_id:"pol-data-access-3",decision:"allow",risk_score:0.06}}]]},
+  {s:"llmdec",n:"<b>6 · Grounded generation.</b> A second child span (C) — sibling of the retrieval span (B). The waterfall will show retrieval 96 ms, generation 780 ms.",
+   e:[["LLM_CALL_STARTED",{span_id:"C",parent_span_id:"A",status:"success",payload:{model_name:"gemini-1.5-pro"}}],["LLM_CALL_COMPLETED",{span_id:"C",parent_span_id:"A",status:"success",latency_ms:780.1,payload:{model_name:"gemini-1.5-pro",input_tokens:2400,output_tokens:310,total_tokens:2710,estimated_cost_usd:0.0046,finish_reason:"stop"}}]]},
+  {s:"mwout",n:"<b>7 · Answer returned with citations.</b>",e:[["REQUEST_COMPLETED",{span_id:"A",status:"success",latency_ms:1010.6,http_status:200,payload:{method:"POST",path:"/query"}}]]},
+  {s:"emit",n:"<b>8 · One request, three qualities measured:</b> retrieval quality (relevance, coverage), safety (guardrail decision), and cost. Downstream, ~5% of these get sampled for LLM-as-judge faithfulness scoring — the <code>quality_sample</code> flag the enrichment consumer adds."}]},
+
+/* ── User Feedback ──────────────────────────────────────────── */
+feedback:{svc:"user-feedback",corr:"fb-2201",user:"SOE77001",
+ ready:"The user who asked q-5512 clicks 👎 on the answer. Watch the <b>one field that makes feedback actionable</b>: the payload carries the ANSWER's correlation id.",
+ stages:[
+  {id:"client",who:"Frontend",what:"👎 clicked — the UI still remembers the answer's X-Correlation-ID: q-5512"},
+  {id:"mwin",who:"SDK · middleware.py",what:"New request, NEW correlation fb-2201",chip:"span A"},
+  {id:"handler",who:"Service · feedback handler",what:"emit_event(FEEDBACK_SUBMITTED) — payload links to q-5512",chip:"span A"},
+  {id:"mwout",who:"SDK · middleware.py",what:"201 Created",chip:"span A"},
+  {id:"emit",who:"SDK · emitter.py (background)",what:"the 👎 is now joined to the exact trace that earned it"}],
+ steps:[
+  {s:"client",n:"<b>1 · The 👎 click.</b> When the platform answered q-5512, it echoed <code>X-Correlation-ID</code> — and the frontend kept it. Now it sends it back with the rating. <b>This is the frontend's one job in the whole observability story.</b>"},
+  {s:"mwin",n:"<b>2 · A new request, its own correlation.</b> The feedback submission is its own request (fb-2201) — the link to the answer lives in the payload, not the envelope.",
+   e:[["REQUEST_RECEIVED",{span_id:"A",status:"success",payload:{method:"POST",path:"/feedback"}}]]},
+  {s:"handler",n:"<b>3 · FEEDBACK_SUBMITTED</b> — rating, category, and <code>response_correlation_id: q-5512</code>. Free text will be PII-redacted downstream by the enrichment consumer's GLiNER stage.",
+   e:[["FEEDBACK_SUBMITTED",{span_id:"A",status:"success",payload:{feedback_id:"fbk-88421",rating:2,thumbs:"down",feedback_category:"wrong-answer",response_correlation_id:"q-5512",free_text:"policy quoted is the 2023 version"}}]]},
+  {s:"mwout",n:"<b>4 · 201 Created.</b>",e:[["REQUEST_COMPLETED",{span_id:"A",status:"success",latency_ms:38.2,http_status:201,payload:{method:"POST",path:"/feedback"}}]]},
+  {s:"emit",n:"<b>5 · Why this matters:</b> a quality reviewer opens the Feedback dashboard, clicks this 👎, and lands on the FULL trace of q-5512 — which chunks were retrieved (relevance 0.82…), which prompt version, which model, what it cost. Feedback stops being a number and becomes a diagnosis."}]},
+
+/* ── Consumer Service ingestion ─────────────────────────────── */
+ingest:{svc:"consumer-service",corr:"ingest-run-88",user:null,
+ ready:"3 AM. No users anywhere. <b>Consumer Service</b>'s scheduler wakes up to ingest a new policy document into the knowledge base — proving the SDK works with <b>no HTTP and no middleware at all</b>.",
+ stages:[
+  {id:"sched",who:"APScheduler",what:"Nightly ingestion job fires — no request, no user"},
+  {id:"bind",who:"SDK · context.py (manual)",what:"Fresh ObsContext per unit of work: ingest-run-88",chip:"span A″"},
+  {id:"extract",who:"Service · parser",what:"PDF → text extraction",chip:"span A″"},
+  {id:"embed",who:"Service · embeddings",what:"Chunks → vectors (this usage used to be thrown away!)",chip:"span A″"},
+  {id:"index",who:"Service · pgvector",what:"Vectors written to the knowledge base",chip:"span A″"},
+  {id:"emit",who:"SDK · emitter.py (background)",what:"the KB's freshness and cost are now observable"}],
+ steps:[
+  {s:"sched",n:"<b>1 · A scheduler tick, not a request.</b> There is no middleware to mint a correlation id — so the job does it itself, once per unit of work."},
+  {s:"bind",n:"<b>2 · The manual pattern</b> — and the one rule that matters: <code>bind_context()</code> at the START of each document, <code>reset_context(token)</code> at the END. Skip the reset and the next document inherits this one's correlation id.",
+   e:[["DOCUMENT_UPLOADED",{span_id:"A3",status:"success",payload:{doc_id:"pol-2026-retention.pdf",source:"s3://docs-inbox/",size_bytes:412000}}]]},
+  {s:"extract",n:"<b>3 · Extraction</b> — STARTED/COMPLETED pair emitted around the parse, page count and duration captured.",
+   e:[["DOCUMENT_EXTRACTION_STARTED",{span_id:"A3",status:"success",payload:{doc_id:"pol-2026-retention.pdf"}}],["DOCUMENT_EXTRACTION_COMPLETED",{span_id:"A3",status:"success",latency_ms:2140.0,payload:{doc_id:"pol-2026-retention.pdf",pages:34,chunks_created:96}}]]},
+  {s:"embed",n:"<b>4 · Embeddings — with their cost.</b> Before the SDK, embedding token usage was discarded; now every nightly run's spend is visible. Small numbers — until someone ingests 40 000 documents.",
+   e:[["DOCUMENT_EMBEDDING_CREATED",{span_id:"A3",status:"success",latency_ms:5320.0,payload:{doc_id:"pol-2026-retention.pdf",embedding_model:"text-embedding-004",chunks:96,embedding_tokens:48800,estimated_cost_usd:0.00122}}]]},
+  {s:"index",n:"<b>5 · Indexed into pgvector.</b> The knowledge base <code>kb-policies</code> just got fresher — and that freshness is now a queryable fact.",
+   e:[["DOCUMENT_INDEXED",{span_id:"A3",status:"success",latency_ms:410.0,payload:{doc_id:"pol-2026-retention.pdf",vector_db_index:"kb-policies",vectors_written:96}}]]},
+  {s:"emit",n:"<b>6 · Close the loop with the RAG scenario:</b> when tomorrow's q-5512-style question retrieves chunks of <i>this</i> document, the RAG dashboard can answer “how fresh is the knowledge behind our answers?” — because ingestion and retrieval are both events in the same pipeline. (Note <code>user_id: null</code> — no human was involved, and that's fine.)"}]}
+};
+
+let scen=SCEN.success,idx=-1,timer=null,counts={d:0,x:0,i:0};
+const $=id=>document.getElementById(id);
+const feed=$("feed"),narr=$("narrate"),lane=$("lane");
+
+function buildLane(){
+  lane.innerHTML="";
+  scen.stages.forEach((st,i)=>{
+    if(i>0){const a=document.createElement('div');a.className='arrow';a.textContent='▼';lane.appendChild(a)}
+    const d=document.createElement('div');d.className='stage';d.dataset.s=st.id;
+    d.innerHTML=`<span class="who">${st.who}</span><div class="what">${st.what}</div>`+
+      (st.chip?`<span class="spanchip">${st.chip}</span>`:'');
+    lane.appendChild(d);
+  });
+}
+function reset(){
+  clearInterval(timer);timer=null;$("play").textContent="▶ Play";
+  idx=-1;counts={d:0,x:0,i:0};updCounters();
+  CUR={svc:scen.svc,corr:scen.corr,user:scen.user};
+  $("topicline").textContent=`kafka://ai-obs-events-raw · key=${scen.corr}`;
+  feed.innerHTML='<div class="evt-note">— topic is quiet, waiting —</div>';
+  buildLane();
+  narr.className='narrate';
+  narr.innerHTML='<b>Ready.</b> '+scen.ready;
+}
+function updCounters(){$("c-del").textContent=counts.d;$("c-drop").textContent=counts.x;$("c-inv").textContent=counts.i}
+function addEvent(spec,drop){
+  const e=ev(spec[0],spec[1]);
+  if(feed.firstElementChild&&feed.firstElementChild.classList.contains('evt-note'))feed.innerHTML='';
+  const bad=e.status==="failed";
+  const div=document.createElement('div');
+  div.className='evt'+(drop?' dropped':'');
+  div.innerHTML=`<div class="head"><span class="tag ${bad?'bad':'ok'}">${e.event_type}</span>
+    <span class="meta">span ${e.span_id||'—'}${e.parent_span_id?'←'+e.parent_span_id:''} · ${e.latency_ms?e.latency_ms+'ms':'—'}</span></div>
+    <pre>${JSON.stringify(e,null,2)}</pre>`;
+  div.addEventListener('click',()=>div.classList.toggle('open'));
+  feed.appendChild(div);feed.scrollTop=feed.scrollHeight;
+  drop?counts.x++:counts.d++;updCounters();
+}
+function addLog(t){const d=document.createElement('div');d.className='evt-note evt-log';d.textContent=t;feed.appendChild(d);feed.scrollTop=feed.scrollHeight}
+function step(){
+  const steps=scen.steps;
+  if(idx>=steps.length-1){clearInterval(timer);timer=null;$("play").textContent="▶ Play";return}
+  idx++;
+  const st=steps[idx];
+  document.querySelectorAll('.stage').forEach(s=>s.classList.remove('active'));
+  const stage=document.querySelector(`.stage[data-s="${st.s}"]`);
+  if(stage){stage.classList.add('active');stage.classList.add(st.err?'err':'done')}
+  narr.className='narrate'+(st.err?' err':st.warn?' warn':'');
+  narr.innerHTML=st.n;
+  if(st.log)addLog(st.log);
+  (st.e||[]).forEach(spec=>addEvent(spec,st.drop));
+}
+$("step").addEventListener('click',()=>{if(timer){clearInterval(timer);timer=null;$("play").textContent="▶ Play"}step()});
+$("play").addEventListener('click',()=>{
+  if(timer){clearInterval(timer);timer=null;$("play").textContent="▶ Play";return}
+  if(idx>=scen.steps.length-1)reset();
+  $("play").textContent="⏸ Pause";step();timer=setInterval(step,3000);});
+$("reset").addEventListener('click',reset);
+$("scenario").addEventListener('change',e=>{scen=SCEN[e.target.value];reset()});
+reset();
+</script>
+</body>
+</html>
