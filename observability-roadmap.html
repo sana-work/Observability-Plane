@@ -7,23 +7,25 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
   :root {
-    --bg: #060f1e;
-    --surface: #0a1929;
-    --surface2: #0f2238;
-    --border: rgba(255,255,255,0.07);
-    --primary: #3b7ae8;
-    --primary-glow: rgba(59,122,232,0.32);
-    --accent: #0ecdb0;
-    --accent2: #f0a832;
-    --accent3: #f0a832;
-    --accent4: #3b7ae8;
-    --text: #edf2fa;
-    --muted: rgba(237,242,250,0.5);
-    --muted2: rgba(237,242,250,0.25);
-    --card-bg: rgba(8,20,40,0.9);
-    --gradient1: linear-gradient(135deg, #3b7ae8 0%, #0ecdb0 100%);
-    --gradient2: linear-gradient(135deg, #f0a832 0%, #e06040 100%);
-    --gradient3: linear-gradient(135deg, #0ecdb0 0%, #3b7ae8 100%);
+    /* Light theme aligned with ai-observability-sdk/docs/sdk-request-flow.html */
+    --bg: #f4f6fa;
+    --surface: #ffffff;
+    --surface2: #fbfcfe;
+    --border: #dfe5ef;
+    --primary: #4353ff;
+    --primary-glow: rgba(67,83,255,0.16);
+    --accent: #4353ff;          /* primary brand (was teal) */
+    --success: #0e9f6e;         /* built / ✓  */
+    --accent2: #c27803;
+    --accent3: #c27803;
+    --accent4: #4353ff;
+    --text: #1a2233;
+    --muted: #5b6b85;
+    --muted2: #93a1b8;
+    --card-bg: #ffffff;
+    --gradient1: linear-gradient(135deg, #4353ff 0%, #0e9f6e 100%);
+    --gradient2: linear-gradient(135deg, #c27803 0%, #e02424 100%);
+    --gradient3: linear-gradient(135deg, #0e9f6e 0%, #4353ff 100%);
   }
   * { margin:0; padding:0; box-sizing:border-box; }
   html { scroll-behavior:smooth; }
@@ -35,7 +37,7 @@
   /* NAV */
   nav {
     position:fixed; top:0; left:0; right:0; z-index:100;
-    background:rgba(9,9,15,0.9); backdrop-filter:blur(20px);
+    background:rgba(255,255,255,0.85); backdrop-filter:blur(20px);
     border-bottom:1px solid var(--border);
     padding:0 2rem; height:60px;
     display:flex; align-items:center;
@@ -53,8 +55,8 @@
     text-decoration:none; color:var(--muted); font-size:0.76rem; font-weight:500;
     padding:0.38rem 0.8rem; border-radius:6px; white-space:nowrap; transition:all 0.2s;
   }
-  .nav-links a:hover { color:var(--text); background:rgba(59,122,232,0.12); }
-  .nav-links a.active { color:var(--primary); background:rgba(59,122,232,0.15); }
+  .nav-links a:hover { color:var(--text); background:rgba(67,83,255,0.12); }
+  .nav-links a.active { color:var(--primary); background:rgba(67,83,255,0.15); }
 
   /* SECTIONS */
   section { padding:100px 2rem 60px; max-width:1400px; margin:0 auto; }
@@ -68,14 +70,14 @@
   .hero-bg {
     position:fixed; inset:0; z-index:-1; pointer-events:none;
     background:
-      radial-gradient(ellipse 80% 60% at 20% 20%, rgba(59,122,232,0.14) 0%, transparent 60%),
-      radial-gradient(ellipse 60% 50% at 80% 80%, rgba(14,205,176,0.09) 0%, transparent 55%),
-      radial-gradient(ellipse 40% 40% at 50% 50%, rgba(240,168,50,0.05) 0%, transparent 50%);
+      radial-gradient(ellipse 80% 60% at 20% 20%, rgba(67,83,255,0.07) 0%, transparent 60%),
+      radial-gradient(ellipse 60% 50% at 80% 80%, rgba(14,159,110,0.06) 0%, transparent 55%),
+      radial-gradient(ellipse 40% 40% at 50% 50%, rgba(194,120,3,0.04) 0%, transparent 50%);
   }
   .hero-eyebrow {
     font-family:'JetBrains Mono',monospace; font-size:0.78rem;
     letter-spacing:0.15em; text-transform:uppercase; color:var(--accent);
-    background:rgba(0,212,170,0.1); border:1px solid rgba(0,212,170,0.25);
+    background:rgba(14,159,110,0.1); border:1px solid rgba(14,159,110,0.25);
     padding:0.4rem 1.2rem; border-radius:100px; margin-bottom:1.8rem; display:inline-block;
   }
   .hero h1 {
@@ -94,7 +96,89 @@
   /* SECTION HEADINGS */
   .section-tag { font-family:'JetBrains Mono',monospace; font-size:0.72rem; letter-spacing:0.15em; text-transform:uppercase; color:var(--primary); margin-bottom:0.75rem; }
   .section-title { font-family:'Space Grotesk',sans-serif; font-size:clamp(1.8rem,3vw,2.8rem); font-weight:700; letter-spacing:-0.02em; margin-bottom:0.6rem; }
-  .section-desc { color:var(--muted); font-size:1rem; max-width:700px; line-height:1.7; margin-bottom:3rem; }
+  .section-desc { color:var(--muted); font-size:1rem; max-width:104ch; line-height:1.7; margin-bottom:3rem; }
+
+  /* ---- build-status (added 2026-08: phases 0/1/3 are now delivered) ---- */
+  .build-strip { display:flex; flex-wrap:wrap; gap:0.6rem; justify-content:center; margin:0 auto 2.5rem; max-width:1160px; }
+  .bchip { display:flex; align-items:center; gap:0.5rem; padding:0.5rem 0.9rem; border-radius:10px;
+           border:1px solid var(--border); background:var(--card-bg); font-size:0.78rem; }
+  .bchip .dot { width:8px; height:8px; border-radius:50%; flex:none; }
+  .bchip.built { border-color:rgba(14,159,110,0.45); }
+  .bchip.built .dot { background:var(--success); box-shadow:0 0 0 3px rgba(14,159,110,0.18); }
+  .bchip.planned .dot { background:var(--muted2); }
+  .bchip b { font-weight:600; }
+  .bchip .tests { font-family:'JetBrains Mono',monospace; font-size:0.68rem; color:var(--success); }
+
+  .tl-dot.wip { border-color:var(--accent2); background:var(--accent2); box-shadow:0 0 0 3px rgba(194,120,3,0.20); }
+  .tl-phase.wip { color:var(--accent2); }
+  .bchip.wip { border-color:rgba(194,120,3,0.45); }
+  .bchip.wip .dot { background:var(--accent2); box-shadow:0 0 0 3px rgba(194,120,3,0.18); }
+  .bchip.wip .tests { color:var(--accent2); }
+  .pill-amber { background:#fdf6e3; color:#c27803; border:1px solid rgba(194,120,3,0.30); }
+  .tl-evidence.wip { color:var(--accent2); background:rgba(194,120,3,0.08); border-color:rgba(194,120,3,0.25); }
+  .tl-dot.built { border-color:var(--success); background:var(--success); box-shadow:0 0 0 3px rgba(14,159,110,0.20); }
+  .tl-phase.built { color:var(--success); }
+  .tl-evidence { font-family:'JetBrains Mono',monospace; font-size:0.7rem; color:var(--success);
+                 background:rgba(14,159,110,0.08); border:1px solid rgba(14,159,110,0.25);
+                 border-radius:8px; padding:0.45rem 0.7rem; margin-top:0.75rem; display:inline-block; }
+
+  /* ---- interactive controls ---- */
+  .ctl-row { display:flex; flex-wrap:wrap; gap:0.5rem; align-items:center; margin-bottom:1.25rem; }
+  .ctl { font:inherit; font-size:0.78rem; padding:0.45rem 0.9rem; border-radius:9px; cursor:pointer;
+         background:rgba(20,30,55,0.04); color:var(--muted); border:1px solid var(--border); transition:all 0.18s; }
+  .ctl:hover { color:var(--text); border-color:rgba(67,83,255,0.4); }
+  .ctl.on { background:rgba(67,83,255,0.14); color:var(--accent); border-color:rgba(67,83,255,0.5); }
+  .ctl-search { font:inherit; font-size:0.8rem; padding:0.5rem 0.9rem; border-radius:9px; min-width:230px;
+                background:rgba(20,30,55,0.04); color:var(--text); border:1px solid var(--border); }
+  .ctl-search::placeholder { color:var(--muted2); }
+  .ctl-count { font-family:'JetBrains Mono',monospace; font-size:0.72rem; color:var(--muted); margin-left:auto; }
+
+  /* ---- clickable pipeline ---- */
+  .pipeline-step { cursor:pointer; }
+  .pipeline-step.sel { border-color:var(--accent); background:rgba(67,83,255,0.09); }
+  .stage-detail { background:var(--card-bg); border:1px solid rgba(67,83,255,0.3); border-left:3px solid var(--accent);
+                  border-radius:12px; padding:1.1rem 1.25rem; margin-top:1rem; }
+  .stage-detail h4 { font-size:0.95rem; margin-bottom:0.5rem; color:var(--accent); }
+  .stage-detail p { font-size:0.84rem; color:var(--muted); line-height:1.7; margin-bottom:0.6rem; }
+  .stage-detail .kv { font-family:'JetBrains Mono',monospace; font-size:0.72rem; color:var(--muted); }
+  .stage-detail .kv b { color:var(--text); font-weight:500; }
+
+  /* ---- infrastructure monitoring mock ---- */
+  .mon-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(380px,1fr)); gap:1.25rem; margin-bottom:2rem; }
+  .mon-panel { background:var(--card-bg); border:1px solid var(--border); border-radius:16px; overflow:hidden; }
+  .mon-head { display:flex; align-items:center; gap:0.5rem; padding:0.85rem 1.1rem; font-size:0.86rem; font-weight:600;
+              border-bottom:1px solid var(--border); background:rgba(20,30,55,0.02); }
+  .mon-tag { margin-left:auto; font-family:'JetBrains Mono',monospace; font-size:0.66rem; color:var(--muted);
+             border:1px solid var(--border); border-radius:6px; padding:1px 7px; }
+  .mon-body { padding:1.1rem; }
+  .mon-foot { padding:0.7rem 1.1rem; font-size:0.73rem; color:var(--muted); border-top:1px solid var(--border);
+              background:rgba(20,30,55,0.015); line-height:1.5; }
+  .wf-meta { font-family:'JetBrains Mono',monospace; font-size:0.7rem; color:var(--muted); margin-bottom:0.75rem; }
+  .wf-row { position:relative; height:26px; margin-bottom:0.3rem; }
+  .wf-lbl { position:absolute; left:0; top:4px; font-family:'JetBrains Mono',monospace; font-size:0.68rem; color:var(--text); width:44%; }
+  .wf-bar { position:absolute; top:7px; height:11px; border-radius:3px; margin-left:44%; opacity:0.85; }
+  .wf-ms  { position:absolute; right:0; top:4px; font-family:'JetBrains Mono',monospace; font-size:0.66rem; color:var(--muted); }
+  .tile-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:0.55rem; }
+  .tile { background:rgba(20,30,55,0.025); border:1px solid var(--border); border-radius:10px; padding:0.6rem 0.7rem; }
+  .t-lbl { display:block; font-size:0.62rem; letter-spacing:0.05em; text-transform:uppercase; color:var(--muted); }
+  .t-val { display:block; font-family:'JetBrains Mono',monospace; font-size:1.15rem; font-weight:700; color:var(--text); margin:0.15rem 0; }
+  .t-val.ok { color:#0e9f6e; } .t-val.warn { color:#c27803; }
+  .t-sub { display:block; font-size:0.6rem; color:var(--muted2); }
+  .spark { display:flex; align-items:flex-end; gap:3px; height:56px; margin-top:0.9rem; position:relative; padding-bottom:14px; }
+  .sp { flex:1; background:linear-gradient(180deg,#4353ff 0%,rgba(67,83,255,0.35) 100%); border-radius:2px 2px 0 0; }
+  .sp-lbl { position:absolute; bottom:0; left:0; font-size:0.6rem; color:var(--muted2); font-family:'JetBrains Mono',monospace; }
+
+  /* ---- event catalog ---- */
+  .evt-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(215px,1fr)); gap:0.5rem; }
+  .evt-chip { font-family:'JetBrains Mono',monospace; font-size:0.7rem; padding:0.5rem 0.7rem; border-radius:8px;
+              background:rgba(20,30,55,0.03); border:1px solid var(--border); color:var(--muted); }
+  .evt-chip .cat { display:block; font-size:0.6rem; letter-spacing:0.08em; text-transform:uppercase; margin-bottom:0.15rem; }
+  .evt-chip.c-request .cat{color:var(--accent4)} .evt-chip.c-agent .cat{color:#0e9f6e}
+  .evt-chip.c-llm .cat{color:#7c3aed} .evt-chip.c-tool .cat{color:var(--accent2)}
+  .evt-chip.c-rag .cat{color:#0284c7} .evt-chip.c-guardrail .cat{color:#e11d48}
+  .evt-chip.c-feedback .cat{color:#db2777} .evt-chip.c-document .cat{color:#4d7c0f}
+  .evt-chip.c-kafka .cat{color:#475569} .evt-chip.c-orchestration .cat{color:#a16207}
+  .evt-chip:hover { border-color:rgba(67,83,255,0.35); color:var(--text); }
 
   /* FLOW DIAGRAM */
   .flow-outer {
@@ -108,12 +192,12 @@
     width:100%;
   }
   .flow-node {
-    background:linear-gradient(135deg,rgba(59,122,232,0.15) 0%,rgba(0,212,170,0.08) 100%);
-    border:1px solid rgba(59,122,232,0.35); border-radius:12px;
+    background:linear-gradient(135deg,rgba(67,83,255,0.15) 0%,rgba(14,159,110,0.08) 100%);
+    border:1px solid rgba(67,83,255,0.35); border-radius:12px;
     padding:0.9rem 0.75rem; text-align:center; flex:1 1 0; min-width:0; max-width:160px;
     transition:all 0.3s; cursor:default;
   }
-  .flow-node:hover { border-color:var(--primary); background:linear-gradient(135deg,rgba(59,122,232,0.28) 0%,rgba(0,212,170,0.15) 100%); transform:translateY(-3px); box-shadow:0 8px 32px var(--primary-glow); }
+  .flow-node:hover { border-color:var(--primary); background:linear-gradient(135deg,rgba(67,83,255,0.28) 0%,rgba(14,159,110,0.15) 100%); transform:translateY(-3px); box-shadow:0 8px 32px var(--primary-glow); }
   .flow-node .icon { font-size:1.5rem; margin-bottom:0.5rem; }
   .flow-node .name { font-size:0.75rem; font-weight:600; color:var(--text); line-height:1.35; }
   .flow-arrow { color:var(--primary); font-size:1.3rem; opacity:0.6; flex-shrink:0; }
@@ -127,20 +211,20 @@
     padding:1.5rem; transition:all 0.3s; position:relative; overflow:hidden;
   }
   .card::before { content:''; position:absolute; top:0; left:0; right:0; height:2px; background:var(--gradient1); opacity:0; transition:opacity 0.3s; }
-  .card:hover { border-color:rgba(59,122,232,0.3); transform:translateY(-3px); box-shadow:0 12px 40px rgba(0,0,0,0.4); }
+  .card:hover { border-color:rgba(67,83,255,0.3); transform:translateY(-3px); box-shadow:0 10px 28px rgba(20,30,55,0.10); }
   .card:hover::before { opacity:1; }
   .card-icon { font-size:2rem; margin-bottom:1rem; }
   .card-title { font-family:'Space Grotesk',sans-serif; font-size:1.05rem; font-weight:600; margin-bottom:0.4rem; }
   .card-tech { display:inline-block; font-size:0.7rem; font-weight:600; padding:0.2rem 0.6rem; border-radius:4px; margin-bottom:0.75rem; font-family:'JetBrains Mono',monospace; letter-spacing:0.03em; }
-  .tech-es { background:rgba(255,214,0,0.12); color:#FFD940; border:1px solid rgba(255,214,0,0.2); }
-  .tech-pg { background:rgba(51,103,255,0.12); color:#6B9EFF; border:1px solid rgba(51,103,255,0.2); }
-  .tech-s3 { background:rgba(255,153,0,0.12); color:#FFB340; border:1px solid rgba(255,153,0,0.2); }
-  .tech-grafana { background:rgba(255,111,0,0.12); color:#FF8C40; border:1px solid rgba(255,111,0,0.2); }
-  .tech-kibana { background:rgba(0,212,170,0.12); color:#00D4AA; border:1px solid rgba(0,212,170,0.2); }
-  .tech-kafka { background:rgba(59,122,232,0.12); color:#7db4f5; border:1px solid rgba(59,122,232,0.2); }
-  .tech-sf { background:rgba(41,182,246,0.12); color:#29B6F6; border:1px solid rgba(41,182,246,0.2); }
+  .tech-es { background:rgba(255,214,0,0.12); color:#b79300; border:1px solid rgba(255,214,0,0.2); }
+  .tech-pg { background:rgba(51,103,255,0.12); color:#003fb7; border:1px solid rgba(51,103,255,0.2); }
+  .tech-s3 { background:rgba(255,153,0,0.12); color:#b76e00; border:1px solid rgba(255,153,0,0.2); }
+  .tech-grafana { background:rgba(255,111,0,0.12); color:#b74900; border:1px solid rgba(255,111,0,0.2); }
+  .tech-kibana { background:rgba(14,159,110,0.12); color:#0e9f6e; border:1px solid rgba(14,159,110,0.2); }
+  .tech-kafka { background:rgba(67,83,255,0.12); color:#0d55aa; border:1px solid rgba(67,83,255,0.2); }
+  .tech-sf { background:rgba(41,182,246,0.12); color:#077bb0; border:1px solid rgba(41,182,246,0.2); }
   .tech-redis { background:rgba(220,38,38,0.12); color:#F87171; border:1px solid rgba(220,38,38,0.2); }
-  .tech-custom { background:rgba(59,122,232,0.12); color:#7db4f5; border:1px solid rgba(59,122,232,0.2); }
+  .tech-custom { background:rgba(67,83,255,0.12); color:#0d55aa; border:1px solid rgba(67,83,255,0.2); }
   .card-desc { font-size:0.83rem; color:var(--muted); line-height:1.65; }
 
   /* TABLE */
@@ -148,70 +232,70 @@
   .table-header { padding:1.2rem 1.5rem; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:0.75rem; }
   .table-header h3 { font-family:'Space Grotesk',sans-serif; font-size:1rem; font-weight:600; }
   table { width:100%; border-collapse:collapse; }
-  th { text-align:left; font-size:0.72rem; font-weight:600; letter-spacing:0.08em; text-transform:uppercase; color:var(--muted); padding:0.85rem 1.25rem; background:rgba(255,255,255,0.02); border-bottom:1px solid var(--border); }
-  td { padding:0.8rem 1.25rem; font-size:0.83rem; border-bottom:1px solid rgba(255,255,255,0.04); vertical-align:top; line-height:1.6; }
+  th { text-align:left; font-size:0.72rem; font-weight:600; letter-spacing:0.08em; text-transform:uppercase; color:var(--muted); padding:0.85rem 1.25rem; background:rgba(20,30,55,0.02); border-bottom:1px solid var(--border); }
+  td { padding:0.8rem 1.25rem; font-size:0.83rem; border-bottom:1px solid rgba(20,30,55,0.04); vertical-align:top; line-height:1.6; }
   tr:last-child td { border-bottom:none; }
-  tr:hover td { background:rgba(59,122,232,0.04); }
+  tr:hover td { background:rgba(67,83,255,0.04); }
   td.mono { font-family:'JetBrains Mono',monospace; font-size:0.78rem; color:var(--accent); }
   td.muted { color:var(--muted); }
 
   /* PILL */
   .pill { display:inline-block; padding:0.18rem 0.55rem; border-radius:4px; font-size:0.68rem; font-weight:600; font-family:'JetBrains Mono',monospace; letter-spacing:0.02em; white-space:nowrap; }
-  .pill-purple { background:rgba(59,122,232,0.15); color:#7db4f5; }
-  .pill-green  { background:rgba(0,212,170,0.12); color:#00D4AA; }
-  .pill-yellow { background:rgba(240,168,50,0.12); color:#f0a832; }
+  .pill-purple { background:rgba(67,83,255,0.15); color:#0d55aa; }
+  .pill-green  { background:#e2f7ef; color:#0e9f6e; border:1px solid rgba(14,159,110,0.28); }
+  .pill-yellow { background:rgba(194,120,3,0.12); color:#c27803; }
   .pill-red    { background:rgba(232,80,60,0.12); color:#e86060; }
-  .pill-blue   { background:rgba(59,122,232,0.12); color:#7db4f5; }
-  .pill-orange { background:rgba(240,168,50,0.12); color:#f0a832; }
-  .pill-gray   { background:rgba(255,255,255,0.06); color:var(--muted); }
+  .pill-blue   { background:rgba(67,83,255,0.12); color:#0d55aa; }
+  .pill-orange { background:rgba(194,120,3,0.12); color:#c27803; }
+  .pill-gray   { background:rgba(20,30,55,0.06); color:var(--muted); }
 
   /* TELEMETRY */
   .telem-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(340px,1fr)); gap:1.25rem; }
   .telem-card { background:var(--card-bg); border:1px solid var(--border); border-radius:16px; overflow:hidden; transition:all 0.3s; }
-  .telem-card:hover { border-color:rgba(59,122,232,0.3); transform:translateY(-2px); box-shadow:0 8px 32px rgba(0,0,0,0.3); }
-  .telem-head { padding:1.1rem 1.3rem; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:0.75rem; background:linear-gradient(90deg,rgba(59,122,232,0.08) 0%,transparent 100%); }
+  .telem-card:hover { border-color:rgba(67,83,255,0.3); transform:translateY(-2px); box-shadow:0 8px 32px rgba(20,30,55,0.10); }
+  .telem-head { padding:1.1rem 1.3rem; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:0.75rem; background:linear-gradient(90deg,rgba(67,83,255,0.08) 0%,transparent 100%); }
   .telem-head .icon { font-size:1.35rem; }
   .telem-head h3 { font-family:'Space Grotesk',sans-serif; font-size:0.95rem; font-weight:600; }
   .telem-fields { padding:1rem 1.3rem; display:flex; flex-wrap:wrap; gap:0.4rem; }
-  .telem-field { font-family:'JetBrains Mono',monospace; font-size:0.72rem; padding:0.25rem 0.6rem; background:rgba(255,255,255,0.04); border:1px solid var(--border); border-radius:5px; color:var(--accent); transition:all 0.2s; }
-  .telem-field:hover { background:rgba(59,122,232,0.12); border-color:rgba(59,122,232,0.3); color:var(--text); }
+  .telem-field { font-family:'JetBrains Mono',monospace; font-size:0.72rem; padding:0.25rem 0.6rem; background:rgba(20,30,55,0.04); border:1px solid var(--border); border-radius:5px; color:var(--accent); transition:all 0.2s; }
+  .telem-field:hover { background:rgba(67,83,255,0.12); border-color:rgba(67,83,255,0.3); color:var(--text); }
   .telem-metrics { padding:0 1.3rem 1rem; }
   .telem-metrics .label { font-size:0.7rem; text-transform:uppercase; letter-spacing:0.1em; color:var(--muted2); margin-bottom:0.5rem; }
   .telem-kpi-list { display:flex; flex-wrap:wrap; gap:0.35rem; }
-  .telem-kpi { font-size:0.73rem; padding:0.2rem 0.55rem; background:rgba(0,212,170,0.07); border:1px solid rgba(0,212,170,0.15); border-radius:4px; color:var(--accent); }
+  .telem-kpi { font-size:0.73rem; padding:0.2rem 0.55rem; background:rgba(14,159,110,0.07); border:1px solid rgba(14,159,110,0.15); border-radius:4px; color:var(--accent); }
 
   /* DASHBOARD */
   .dash-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); gap:1.25rem; }
   .dash-card { background:var(--card-bg); border:1px solid var(--border); border-radius:16px; overflow:hidden; transition:all 0.3s; }
-  .dash-card:hover { border-color:rgba(59,122,232,0.3); transform:translateY(-3px); box-shadow:0 12px 40px rgba(0,0,0,0.4); }
+  .dash-card:hover { border-color:rgba(67,83,255,0.3); transform:translateY(-3px); box-shadow:0 10px 28px rgba(20,30,55,0.10); }
   .dash-head { padding:1.1rem 1.3rem; border-bottom:1px solid var(--border); }
   .dash-head h3 { font-family:'Space Grotesk',sans-serif; font-size:0.92rem; font-weight:600; display:flex; align-items:center; gap:0.5rem; }
   .dash-body { padding:1rem 1.3rem; }
-  .metric-row { display:flex; justify-content:space-between; align-items:flex-start; padding:0.5rem 0; border-bottom:1px solid rgba(255,255,255,0.04); gap:1rem; }
+  .metric-row { display:flex; justify-content:space-between; align-items:flex-start; padding:0.5rem 0; border-bottom:1px solid rgba(20,30,55,0.04); gap:1rem; }
   .metric-row:last-child { border-bottom:none; }
   .metric-name { font-size:0.8rem; color:var(--muted); flex:1; }
-  .metric-badge { font-family:'JetBrains Mono',monospace; font-size:0.68rem; padding:0.15rem 0.45rem; border-radius:3px; background:rgba(59,122,232,0.12); color:#7db4f5; white-space:nowrap; }
+  .metric-badge { font-family:'JetBrains Mono',monospace; font-size:0.68rem; padding:0.15rem 0.45rem; border-radius:3px; background:rgba(67,83,255,0.12); color:#0d55aa; white-space:nowrap; }
 
   /* ROADMAP TIMELINE */
   .timeline { position:relative; padding-left:2rem; }
-  .timeline::before { content:''; position:absolute; left:7px; top:0; bottom:0; width:2px; background:linear-gradient(to bottom, rgba(59,122,232,0.4), rgba(59,122,232,0.1), transparent); }
+  .timeline::before { content:''; position:absolute; left:7px; top:0; bottom:0; width:2px; background:linear-gradient(to bottom, rgba(67,83,255,0.4), rgba(67,83,255,0.1), transparent); }
   .tl-item { position:relative; margin-bottom:2rem; }
   .tl-dot { position:absolute; left:-2rem; top:0.15rem; width:16px; height:16px; border-radius:50%; background:var(--bg); border:2px solid var(--muted2); display:flex; align-items:center; justify-content:center; }
-  .tl-dot.planned { border-color:rgba(59,122,232,0.4); }
+  .tl-dot.planned { border-color:rgba(67,83,255,0.4); }
   .tl-dot.optional { border-color:rgba(255,217,61,0.4); }
 
   .tl-content { background:var(--card-bg); border:1px solid var(--border); border-radius:14px; padding:1.25rem 1.4rem; transition:all 0.3s; }
-  .tl-content:hover { border-color:rgba(59,122,232,0.25); }
+  .tl-content:hover { border-color:rgba(67,83,255,0.25); }
   .tl-phase { font-family:'JetBrains Mono',monospace; font-size:0.7rem; letter-spacing:0.1em; text-transform:uppercase; margin-bottom:0.4rem; }
   .tl-phase.planned { color:var(--muted2); }
   .tl-phase.optional { color:var(--accent3); }
   .tl-title { font-family:'Space Grotesk',sans-serif; font-size:1.05rem; font-weight:600; margin-bottom:0.5rem; }
   .tl-weeks { font-size:0.75rem; color:var(--muted2); margin-bottom:0.75rem; font-family:'JetBrains Mono',monospace; }
   .tl-items { list-style:none; display:flex; flex-wrap:wrap; gap:0.4rem; }
-  .tl-items li { font-size:0.78rem; padding:0.2rem 0.6rem; background:rgba(255,255,255,0.04); border:1px solid var(--border); border-radius:5px; color:var(--muted); }
+  .tl-items li { font-size:0.78rem; padding:0.2rem 0.6rem; background:rgba(20,30,55,0.04); border:1px solid var(--border); border-radius:5px; color:var(--muted); }
 
   /* HIGHLIGHT BOX */
-  .highlight-box { background:linear-gradient(135deg,rgba(59,122,232,0.08) 0%,rgba(0,212,170,0.05) 100%); border:1px solid rgba(59,122,232,0.2); border-radius:16px; padding:1.5rem 2rem; margin-bottom:2rem; display:flex; align-items:flex-start; gap:1rem; }
+  .highlight-box { background:linear-gradient(135deg,rgba(67,83,255,0.08) 0%,rgba(14,159,110,0.05) 100%); border:1px solid rgba(67,83,255,0.2); border-radius:16px; padding:1.5rem 2rem; margin-bottom:2rem; display:flex; align-items:flex-start; gap:1rem; }
   .highlight-box.warn { background:linear-gradient(135deg,rgba(255,217,61,0.07) 0%,rgba(255,107,107,0.04) 100%); border-color:rgba(255,217,61,0.2); }
   .highlight-box .icon { font-size:1.8rem; flex-shrink:0; }
   .highlight-box h3 { font-family:'Space Grotesk',sans-serif; font-size:1rem; font-weight:600; margin-bottom:0.4rem; }
@@ -220,8 +304,8 @@
   /* TABS */
   .tab-nav { display:flex; gap:0.5rem; margin-bottom:1.5rem; flex-wrap:wrap; }
   .tab-btn { padding:0.5rem 1.1rem; border:1px solid var(--border); background:transparent; color:var(--muted); border-radius:8px; font-size:0.82rem; font-weight:500; cursor:pointer; transition:all 0.2s; font-family:'Inter',sans-serif; }
-  .tab-btn:hover { color:var(--text); border-color:rgba(59,122,232,0.3); }
-  .tab-btn.active { background:rgba(59,122,232,0.15); color:var(--primary); border-color:rgba(59,122,232,0.4); }
+  .tab-btn:hover { color:var(--text); border-color:rgba(67,83,255,0.3); }
+  .tab-btn.active { background:rgba(67,83,255,0.15); color:var(--primary); border-color:rgba(67,83,255,0.4); }
   .tab-content { display:none; }
   .tab-content.active { display:block; }
 
@@ -233,8 +317,8 @@
   .event-flow { display:flex; flex-direction:column; gap:0; }
   .event-step { display:flex; align-items:stretch; gap:1rem; }
   .event-step-left { display:flex; flex-direction:column; align-items:center; }
-  .event-num { width:32px; height:32px; border-radius:50%; flex-shrink:0; background:rgba(59,122,232,0.15); border:1px solid rgba(59,122,232,0.4); display:flex; align-items:center; justify-content:center; font-family:'JetBrains Mono',monospace; font-size:0.72rem; font-weight:600; color:var(--primary); }
-  .event-line { flex:1; width:1px; background:rgba(59,122,232,0.2); margin:4px 0; }
+  .event-num { width:32px; height:32px; border-radius:50%; flex-shrink:0; background:rgba(67,83,255,0.15); border:1px solid rgba(67,83,255,0.4); display:flex; align-items:center; justify-content:center; font-family:'JetBrains Mono',monospace; font-size:0.72rem; font-weight:600; color:var(--primary); }
+  .event-line { flex:1; width:1px; background:rgba(67,83,255,0.2); margin:4px 0; }
   .event-step:last-child .event-line { display:none; }
   .event-body { padding-bottom:1.2rem; flex:1; }
   .event-name { font-family:'JetBrains Mono',monospace; font-size:0.82rem; font-weight:600; color:var(--accent); margin-bottom:0.25rem; }
@@ -242,8 +326,8 @@
 
   /* ENRICHMENT PIPELINE */
   .pipeline { display:flex; flex-direction:column; gap:0.5rem; }
-  .pipeline-step { display:flex; align-items:center; gap:1rem; padding:0.85rem 1.25rem; background:rgba(255,255,255,0.03); border:1px solid var(--border); border-radius:10px; transition:all 0.2s; }
-  .pipeline-step:hover { border-color:rgba(59,122,232,0.25); background:rgba(59,122,232,0.05); }
+  .pipeline-step { display:flex; align-items:center; gap:1rem; padding:0.85rem 1.25rem; background:rgba(20,30,55,0.03); border:1px solid var(--border); border-radius:10px; transition:all 0.2s; }
+  .pipeline-step:hover { border-color:rgba(67,83,255,0.25); background:rgba(67,83,255,0.05); }
   .pipeline-num { font-family:'JetBrains Mono',monospace; font-size:0.72rem; color:var(--primary); width:22px; flex-shrink:0; }
   .pipeline-name { font-family:'Space Grotesk',sans-serif; font-size:0.88rem; font-weight:600; min-width:200px; }
   .pipeline-desc { font-size:0.8rem; color:var(--muted); }
@@ -293,33 +377,33 @@
   .cov-legend span{font-size:0.73rem;padding:0.15rem 0.65rem;border-radius:20px;font-weight:600;border:1px solid transparent}
   .cov-tbl-wrap{width:100%;overflow-x:auto;border-radius:14px;border:1px solid var(--border)}
   .cov-tbl{width:100%;border-collapse:collapse;font-size:0.78rem}
-  .cov-tbl th{background:rgba(59,122,232,0.18);color:var(--text);font-weight:600;padding:0.55rem 0.7rem;text-align:center;border-bottom:1px solid var(--border);font-size:0.71rem;white-space:nowrap}
+  .cov-tbl th{background:rgba(67,83,255,0.18);color:var(--text);font-weight:600;padding:0.55rem 0.7rem;text-align:center;border-bottom:1px solid var(--border);font-size:0.71rem;white-space:nowrap}
   .cov-tbl th:first-child{text-align:left;min-width:165px;white-space:normal}
-  .cov-tbl td{padding:0.42rem 0.7rem;border-bottom:1px solid rgba(255,255,255,0.04);text-align:center;vertical-align:top}
+  .cov-tbl td{padding:0.42rem 0.7rem;border-bottom:1px solid rgba(20,30,55,0.04);text-align:center;vertical-align:top}
   .cov-tbl td:first-child{text-align:left;font-family:'JetBrains Mono',monospace;font-size:0.71rem;color:var(--text);white-space:normal}
-  .cov-tbl tr:hover td{background:rgba(59,122,232,0.05)}
-  .cov-tbl .gr td{background:rgba(59,122,232,0.1);color:var(--primary);font-family:'JetBrains Mono',monospace;font-size:0.68rem;font-weight:700;letter-spacing:0.06em;padding:0.3rem 0.7rem;text-align:left}
-  .cov-p{color:#00d464;font-weight:700;font-size:0.95rem}
-  .cov-q{color:#ffbe00;font-weight:700;font-size:0.9rem}
-  .cov-m{color:rgba(255,255,255,0.2);font-size:0.9rem}
-  .cov-r{color:#a89fff;font-weight:700;font-size:0.9rem}
-  .cov-n{color:rgba(255,255,255,0.13);font-size:0.88rem}
+  .cov-tbl tr:hover td{background:rgba(67,83,255,0.05)}
+  .cov-tbl .gr td{background:rgba(67,83,255,0.1);color:var(--primary);font-family:'JetBrains Mono',monospace;font-size:0.68rem;font-weight:700;letter-spacing:0.06em;padding:0.3rem 0.7rem;text-align:left}
+  .cov-p{color:#00b756;font-weight:700;font-size:0.95rem}
+  .cov-q{color:#b78800;font-weight:700;font-size:0.9rem}
+  .cov-m{color:#d92020;font-weight:700;font-size:0.9rem}
+  .cov-r{color:#d92020;font-weight:700;font-size:0.9rem}
+  .cov-n{color:rgba(20,30,55,0.28);font-size:0.88rem}
   .cov-nt{font-family:'Inter',sans-serif;font-size:0.63rem;color:var(--muted);display:block;text-align:left;white-space:normal;margin-top:0.05rem}
   .cov-note{font-size:0.79rem;color:var(--muted);margin:0 0 1.1rem;line-height:1.55}
   .cov-sub{font-size:0.8rem;color:var(--text);margin:1.4rem 0 0.6rem;font-weight:600;letter-spacing:0.02em}
   .svc-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(268px,1fr));gap:0.9rem;margin-top:0.75rem}
   .svc-card{background:var(--card-bg);border:1px solid var(--border);border-radius:14px;padding:1.2rem;transition:border-color 0.2s}
-  .svc-card:hover{border-color:rgba(59,122,232,0.35)}
+  .svc-card:hover{border-color:rgba(67,83,255,0.35)}
   .svc-card h4{font-size:0.88rem;color:var(--text);margin:0 0 0.25rem}
   .svc-card .role{font-size:0.73rem;color:var(--muted);margin-bottom:0.7rem;line-height:1.45}
   .svc-card .trow{display:flex;flex-wrap:wrap;gap:0.3rem;margin-top:0.45rem}
-  .stag{font-size:0.63rem;padding:0.12rem 0.42rem;border-radius:7px;border:1px solid rgba(255,255,255,0.1);color:var(--muted);line-height:1.4;white-space:nowrap}
-  .stag.k{border-color:rgba(0,212,170,0.35);color:var(--accent)}
-  .stag.s{border-color:rgba(59,122,232,0.3);color:var(--primary)}
+  .stag{font-size:0.63rem;padding:0.12rem 0.42rem;border-radius:7px;border:1px solid rgba(20,30,55,0.1);color:var(--muted);line-height:1.4;white-space:nowrap}
+  .stag.k{border-color:rgba(14,159,110,0.35);color:var(--accent)}
+  .stag.s{border-color:rgba(67,83,255,0.3);color:var(--primary)}
   .stag.nk{opacity:0.38}
-  .stag.warn{border-color:rgba(255,190,0,0.3);color:#ffbe00}
-  .stag.ok{border-color:rgba(0,212,170,0.3);color:var(--accent)}
-  .stag.bad{border-color:rgba(255,80,80,0.3);color:#ff8080}
+  .stag.warn{border-color:rgba(255,190,0,0.3);color:#b78800}
+  .stag.ok{border-color:rgba(14,159,110,0.3);color:var(--accent)}
+  .stag.bad{border-color:rgba(255,80,80,0.3);color:#b70000}
 </style>
 </head>
 <body>
@@ -343,27 +427,37 @@
 
 <!-- HERO -->
 <section class="hero" id="overview">
-  <div class="hero-eyebrow anim-1">AI Services Platform · Observability Initiative · June 2026</div>
+  <div class="hero-eyebrow anim-1">AI Services Platform · Observability Initiative · updated August 2026</div>
   <h1 class="anim-2">
     <span class="line1">AI Services Observability</span>
     <span class="line2">Platform Plan</span>
   </h1>
   <p class="hero-sub anim-3">
-    A full-spectrum observability platform delivering end-to-end visibility across 8 AI services — enabling cost governance, SLO tracking, AI quality measurement, and compliance-grade audit trails from a single unified pipeline.
+    A full-spectrum observability platform delivering end-to-end visibility across 8+ AI services — enabling cost governance, SLO tracking, AI quality measurement, and compliance-grade audit trails from a single unified pipeline.
   </p>
 
   <div class="hero-stats anim-4">
-    <div class="hero-stat"><div class="num">8</div><div class="label">AI Services</div></div>
+    <div class="hero-stat"><div class="num">8+</div><div class="label">AI Services</div></div>
     <div class="hero-stat"><div class="num">50</div><div class="label">Event Types</div></div>
     <div class="hero-stat"><div class="num">5</div><div class="label">Storage Layers</div></div>
     <div class="hero-stat"><div class="num">9</div><div class="label">Enrichment Stages</div></div>
     <div class="hero-stat"><div class="num">8</div><div class="label">Delivery Phases</div></div>
+    <div class="hero-stat"><div class="num" style="color:var(--accent2)">3</div><div class="label">Phases In Progress</div></div>
+  </div>
+
+  <!-- BUILD STATUS — added Aug 2026: three phases are now code-complete and tested -->
+  <div class="build-strip anim-4">
+    <div class="bchip wip"><span class="dot"></span><b>Phase 0 · Foundation</b><span class="tests">in progress</span></div>
+    <div class="bchip wip"><span class="dot"></span><b>Phase 1 · SDK</b><span class="tests">in progress</span></div>
+    <div class="bchip wip"><span class="dot"></span><b>Phase 3 · Enrichment</b><span class="tests">in progress</span></div>
+    <div class="bchip planned"><span class="dot"></span><b>Phase 2 · Instrumentation</b><span class="tests">next — 8 service teams</span></div>
+    <div class="bchip planned"><span class="dot"></span><b>Phases 4 · Q · 5 · 6 · 7</b><span class="tests">planned</span></div>
   </div>
 
   <!-- DATA FLOW -->
   <div class="flow-outer anim-4" style="width:min(100%,1160px)">
     <div class="flow-wrap">
-      <div class="flow-node"><div class="icon">🤖</div><div class="name">8 AI Services (Producers)</div></div>
+      <div class="flow-node"><div class="icon">🤖</div><div class="name">8+ AI Services (Producers)</div></div>
       <div class="flow-arrow">→</div>
       <div class="flow-node"><div class="icon">📡</div><div class="name">Observability SDK</div></div>
       <div class="flow-arrow">→</div>
@@ -395,11 +489,11 @@
   <div class="section-tag">Data Storage</div>
   <h2 class="section-title">Multi-Layer Storage Strategy</h2>
   <p class="section-desc">
-    Five purpose-built storage layers — each optimised for a distinct access pattern. Snowflake and Redis are under active evaluation; PostgreSQL and an in-process cache serve as production-ready interim solutions until onboarding is confirmed.
+    Five purpose-built storage layers — each optimised for a distinct access pattern. A long-term analytics warehouse — <b>either Snowflake or Databricks</b> — is a future addition; PostgreSQL and an in-process cache serve as production-ready solutions until one is chosen.
   </p>
 
-  <div class="deferred-banner" style="border-color:rgba(59,122,232,0.35);background:rgba(59,122,232,0.08);">
-    🔎 &nbsp;Snowflake &amp; Redis are <strong>under evaluation</strong> — onboarding is being discussed but not yet approved. The current interim (PostgreSQL <code>obs_events.*</code> + in-process TTL cache) is production-ready and the swap path is contained.
+  <div class="deferred-banner" style="border-color:rgba(67,83,255,0.35);background:rgba(67,83,255,0.08);">
+    🔎 &nbsp;A long-term warehouse — <strong>Snowflake or Databricks</strong> — is a <strong>future</strong> addition, not yet selected. Redis is likewise deferred. Today PostgreSQL <code>obs_events.*</code> + an in-process TTL cache carry the load, and the swap path is contained.
   </div>
 
   <div class="cards-grid">
@@ -419,13 +513,13 @@
       <div class="card-icon">📊</div>
       <div class="card-title">PostgreSQL — Event Firehose (Interim)</div>
       <span class="card-tech tech-pg">PostgreSQL <code>obs_events.*</code></span>
-      <p class="card-desc">Interim while Snowflake evaluation is ongoing. Monthly partitioned tables for all enriched events with JSONB payload. ~90-day hot window; old partitions archived to S3. Swap to Snowflake if/when approved — identical <code>event_id</code>/<code>correlation_id</code> model.</p>
+      <p class="card-desc">Carries analytics today, ahead of a warehouse decision. Monthly partitioned tables for all enriched events with JSONB payload. ~90-day hot window; old partitions archived to S3. Swap to the chosen warehouse when one is selected — identical <code>event_id</code>/<code>correlation_id</code> model.</p>
     </div>
     <div class="card">
       <div class="card-icon">☁️</div>
-      <div class="card-title">Snowflake — Analytics / Forever</div>
-      <span class="card-tech tech-sf">Snowflake · Under Evaluation</span>
-      <p class="card-desc">Target analytics store: all events, forever retention, on-demand heavy queries for chatbot and trend dashboards. No pre-aggregation. Per-LOB RBAC. Onboarding in discussion — PostgreSQL <code>obs_events.*</code> bridges the gap until confirmed.</p>
+      <div class="card-title">Snowflake or Databricks — Long-Term Analytics</div>
+      <span class="card-tech tech-sf">Snowflake or Databricks · Future</span>
+      <p class="card-desc">Future long-term store: all events, forever retention, on-demand heavy queries for chatbot and trend dashboards. No pre-aggregation. Per-LOB RBAC. Either platform fits — the decision is open. PostgreSQL <code>obs_events.*</code> carries analytics until one is chosen.</p>
     </div>
     <div class="card">
       <div class="card-icon">📦</div>
@@ -446,7 +540,7 @@
 <section id="pipeline">
   <div class="section-tag">Event Pipeline</div>
   <h2 class="section-title">Centralised Event Processing</h2>
-  <p class="section-desc">Every event from all 8 services passes through a single 9-stage enrichment pipeline before reaching any storage. PII redaction, cost calculation, SLO evaluation, and quality flagging are handled centrally — services are never burdened with this cross-cutting work.</p>
+  <p class="section-desc">Every event from all 8+ services passes through a single 9-stage enrichment pipeline before reaching any storage. PII redaction, cost calculation, SLO evaluation, and quality flagging are handled centrally — services are never burdened with this cross-cutting work.</p>
 
   <div class="two-col" style="margin-bottom:2rem">
     <div>
@@ -455,7 +549,7 @@
         <table>
           <thead><tr><th>Topic</th><th>Retention</th><th>Purpose</th></tr></thead>
           <tbody>
-            <tr><td class="mono">ai-obs-events-raw</td><td><span class="pill pill-yellow">7 days</span></td><td class="muted">All 8 services, all 50 event types — unvalidated, unredacted</td></tr>
+            <tr><td class="mono">ai-obs-events-raw</td><td><span class="pill pill-yellow">7 days</span></td><td class="muted">All 8+ services, all 50 event types — unvalidated, unredacted</td></tr>
             <tr><td class="mono">ai-obs-events-processed</td><td><span class="pill pill-green">3 days</span></td><td class="muted">Enriched, validated, PII-redacted — consumed by Storage + Eval consumers</td></tr>
             <tr><td class="mono">ai-obs-dead-letter</td><td><span class="pill pill-red">14 days</span></td><td class="muted">Failed validation/enrichment — quarantined for debug and replay</td></tr>
           </tbody>
@@ -465,18 +559,26 @@
 
     <div>
       <div class="table-wrap" style="height:fit-content">
-        <div class="table-header"><span>⚙️</span><h3>9-Stage Enrichment Pipeline</h3></div>
+        <div class="table-header"><span>⚙️</span><h3>9-Stage Enrichment Pipeline</h3>
+          <span class="pill pill-amber" style="margin-left:auto">⏳ In progress</span></div>
         <div style="padding:1.25rem">
-          <div class="pipeline">
-            <div class="pipeline-step"><div class="pipeline-num">01</div><div class="pipeline-name">Schema Validator</div><div class="pipeline-desc">Validate structure; invalid events routed to dead-letter topic</div></div>
-            <div class="pipeline-step"><div class="pipeline-num">02</div><div class="pipeline-name">Trace Context Extractor</div><div class="pipeline-desc">Extract and propagate <code style="font-size:0.8em;color:var(--accent)">correlation_id</code> + W3C traceparent across all hops</div></div>
-            <div class="pipeline-step"><div class="pipeline-num">03</div><div class="pipeline-name">PII Redactor</div><div class="pipeline-desc">GLiNER NER model — hash user identifiers, redact names, card numbers, emails</div></div>
-            <div class="pipeline-step"><div class="pipeline-num">04</div><div class="pipeline-name">Metadata Enricher</div><div class="pipeline-desc">Enrich with app, agent, tool, and RAG registry context via in-process cache</div></div>
-            <div class="pipeline-step"><div class="pipeline-num">05</div><div class="pipeline-name">Error Code Normaliser</div><div class="pipeline-desc">Map raw errors to the standard error catalog taxonomy</div></div>
-            <div class="pipeline-step"><div class="pipeline-num">06</div><div class="pipeline-name">Cost Calculator</div><div class="pipeline-desc">Compute <code style="font-size:0.8em;color:var(--accent)">estimated_cost_usd</code> per request; update budget accumulators</div></div>
-            <div class="pipeline-step"><div class="pipeline-num">07</div><div class="pipeline-name">S3 Archiver</div><div class="pipeline-desc">Off-load large prompts, responses, and RAG contexts to object storage</div></div>
-            <div class="pipeline-step"><div class="pipeline-num">08</div><div class="pipeline-name">SLO Evaluator</div><div class="pipeline-desc">Multi-window burn-rate calculation (1h + 6h); write daily SLO compliance records</div></div>
-            <div class="pipeline-step"><div class="pipeline-num">09</div><div class="pipeline-name">AI Quality Hook</div><div class="pipeline-desc">Flag RAG and LLM events for sampling by the quality evaluation service</div></div>
+          <p style="font-size:0.8rem;color:var(--muted);margin-bottom:1rem">👆 Click any stage to see what it does, why it exists, and how failures behave.</p>
+          <div class="pipeline" id="pipeline">
+            <div class="pipeline-step" data-st="1"><div class="pipeline-num">01</div><div class="pipeline-name">Schema Validator</div><div class="pipeline-desc">Validate structure; invalid events routed to dead-letter topic</div></div>
+            <div class="pipeline-step" data-st="2"><div class="pipeline-num">02</div><div class="pipeline-name">Trace Context Extractor</div><div class="pipeline-desc">Extract and propagate <code style="font-size:0.8em;color:var(--accent)">correlation_id</code> + W3C traceparent across all hops</div></div>
+            <div class="pipeline-step" data-st="3"><div class="pipeline-num">03</div><div class="pipeline-name">PII Redactor</div><div class="pipeline-desc">GLiNER NER + regex — redact names, cards, emails in free text (never <code style="font-size:0.8em;color:var(--accent)">user_id</code>)</div></div>
+            <div class="pipeline-step" data-st="4"><div class="pipeline-num">04</div><div class="pipeline-name">Metadata Enricher</div><div class="pipeline-desc">Enrich with app, agent, tool, and RAG registry context via in-process cache</div></div>
+            <div class="pipeline-step" data-st="5"><div class="pipeline-num">05</div><div class="pipeline-name">Error Code Normaliser</div><div class="pipeline-desc">Map raw errors to the standard error catalog taxonomy</div></div>
+            <div class="pipeline-step" data-st="6"><div class="pipeline-num">06</div><div class="pipeline-name">Cost Calculator</div><div class="pipeline-desc">Compute <code style="font-size:0.8em;color:var(--accent)">estimated_cost_usd</code> per request; update budget accumulators</div></div>
+            <div class="pipeline-step" data-st="7"><div class="pipeline-num">07</div><div class="pipeline-name">S3 Archiver</div><div class="pipeline-desc">Off-load large prompts, responses, and RAG contexts to object storage</div></div>
+            <div class="pipeline-step" data-st="8"><div class="pipeline-num">08</div><div class="pipeline-name">SLO Evaluator</div><div class="pipeline-desc">Multi-window burn-rate calculation (1h + 6h); write daily SLO compliance records</div></div>
+            <div class="pipeline-step" data-st="9"><div class="pipeline-num">09</div><div class="pipeline-name">AI Quality Hook</div><div class="pipeline-desc">Flag RAG and LLM events for sampling by the quality evaluation service</div></div>
+          </div>
+          <div class="stage-detail" id="stage-detail">
+            <h4>Error policy — how the whole pipeline behaves</h4>
+            <p><b>Stage 1 is the only gate.</b> An event that fails validation is <i>wrong</i>, so it is quarantined to <code>ai-obs-dead-letter</code> wrapped as <code>{reason, failed_at, original}</code> — debuggable and replayable, never silently dropped.</p>
+            <p><b>Stages 2–9 degrade, they don't die.</b> If Postgres or S3 is unavailable, that stage logs, increments <code>obs_enrich_stage_errors_total</code>, and the event continues with that one enrichment missing. An infrastructure hiccup must never poison the dead-letter queue with perfectly valid events.</p>
+            <p class="kv">Select a stage above for detail →</p>
           </div>
         </div>
       </div>
@@ -498,7 +600,7 @@
 <section id="elasticsearch">
   <div class="section-tag">Data Storage · Search Layer</div>
   <h2 class="section-title">Elasticsearch — Operational Search</h2>
-  <p class="section-desc">Per-LOB namespaced indices with one document per event. Sub-second full-text search and error drill-down for all 8 service types. Default 30-day retention; extended to 180 days for regulated lines of business.</p>
+  <p class="section-desc">Per-LOB namespaced indices with one document per event. Sub-second full-text search and error drill-down for all 8+ service types. Default 30-day retention; extended to 180 days for regulated lines of business.</p>
 
   <div class="table-wrap">
     <div class="table-header"><span>🔍</span><h3>Elasticsearch Indices</h3></div>
@@ -532,10 +634,10 @@
 <section id="postgresql">
   <div class="section-tag">Data Storage · Control Plane</div>
   <h2 class="section-title">PostgreSQL — Configuration &amp; Analytics</h2>
-  <p class="section-desc">Two schemas with distinct roles: <code style="color:var(--accent)">observability.*</code> holds the authoritative registries, SLO records, budget limits, and governance config; <code style="color:var(--accent)">obs_events.*</code> serves as the interim event analytics store while Snowflake onboarding is evaluated.</p>
+  <p class="section-desc">Two schemas with distinct roles: <code style="color:var(--accent)">observability.*</code> holds the authoritative registries, SLO records, budget limits, and governance config; <code style="color:var(--accent)">obs_events.*</code> serves as the event analytics store ahead of a future warehouse.</p>
 
-  <div class="deferred-banner" style="border-color:rgba(59,122,232,0.35);background:rgba(59,122,232,0.08);">
-    🔎 &nbsp;Snowflake onboarding is <strong>under evaluation</strong>. <code>obs_events.*</code> is production-ready as a bounded ~90-day window. The swap path is contained — identical <code>event_id</code>/<code>correlation_id</code> model means only the Storage Consumer + dashboard queries change.
+  <div class="deferred-banner" style="border-color:rgba(67,83,255,0.35);background:rgba(67,83,255,0.08);">
+    🔎 &nbsp;A long-term warehouse (<strong>Snowflake or Databricks</strong>) is a <strong>future</strong> addition. <code>obs_events.*</code> is production-ready as a bounded ~90-day window. The swap path is contained — identical <code>event_id</code>/<code>correlation_id</code> model means only the Storage Consumer + dashboard queries change.
   </div>
 
   <div class="tab-nav" id="pg-tabs">
@@ -599,7 +701,7 @@
   </div>
 
   <div id="pg-firehose" class="tab-content">
-    <div class="deferred-banner" style="border-color:rgba(59,122,232,0.35);background:rgba(59,122,232,0.08);">🔎 &nbsp;This schema bridges while Snowflake onboarding is under evaluation. Bounded ~90-day retention (monthly partitions via pg_partman). Identical event_id/correlation_id model — swap is contained to Storage Consumer + dashboard queries.</div>
+    <div class="deferred-banner" style="border-color:rgba(67,83,255,0.35);background:rgba(67,83,255,0.08);">🔎 &nbsp;This schema carries analytics ahead of a future Snowflake-or-Databricks decision. Bounded ~90-day retention (monthly partitions via pg_partman). Identical event_id/correlation_id model — swap is contained to Storage Consumer + dashboard queries.</div>
     <div class="table-wrap">
       <div class="table-header"><span>🔥</span><h3>Event Firehose Tables — <code>obs_events.*</code></h3></div>
       <table>
@@ -641,56 +743,59 @@
   <div class="section-tag">Monitoring · Infrastructure Layer</div>
   <h2 class="section-title">Infrastructure Observability</h2>
   <p class="section-desc">
-    Grafana Tempo provides distributed tracing; kube-prometheus-stack delivers infrastructure metrics — both feed the custom dashboard backend directly. Grafana's own visualisation layer is intentionally disabled: the platform requires COIN-JWT auth, per-LOB RBAC, and business KPI views that Grafana cannot model cleanly.
+    Distributed traces from Grafana Tempo and infrastructure metrics from Prometheus, feeding the custom dashboard. Here is what the platform team actually sees.
   </p>
 
-  <div class="highlight-box warn">
-    <div class="icon">⚠️</div>
-    <div>
-      <h3>Deliberate Design Decision — Grafana Visualisation Disabled</h3>
-      <p>kube-prometheus-stack is deployed with <code style="color:var(--accent3)">grafana.enabled=false</code>. Prometheus metrics are consumed directly by the Custom Dashboard Service via PromQL. This gives us COIN-JWT SSO, per-LOB row-level access control, and business KPI views natively — capabilities that would require significant workarounds in Grafana.</p>
-    </div>
-  </div>
+  <div class="mon-grid">
 
-  <div class="grafana-split">
-
-    <div class="card">
-      <div class="card-icon">🔭</div>
-      <div class="card-title">Grafana Tempo — Distributed Traces</div>
-      <span class="card-tech tech-grafana">Grafana Tempo · OTEL → S3 backend</span>
-      <p class="card-desc" style="margin-bottom:1rem">Receives OTEL spans from all 8 services via auto-instrumentation (FastAPI/httpx/asyncpg). S3 backend at ~$5/mo per million spans/day. Cross-service span view via TraceQL. Keyed by the same <code style="color:var(--accent)">correlation_id</code> as the event pipeline.</p>
-      <div style="display:flex;flex-direction:column;gap:0.4rem">
-        <div class="pipeline-step" style="background:rgba(255,111,0,0.05);border-color:rgba(255,111,0,0.2)"><div class="pipeline-name" style="font-size:0.82rem">OTEL Auto-Instrumentation</div><div class="pipeline-desc">FastAPI server spans, outbound httpx spans, asyncpg query spans</div></div>
-        <div class="pipeline-step" style="background:rgba(255,111,0,0.05);border-color:rgba(255,111,0,0.2)"><div class="pipeline-name" style="font-size:0.82rem">W3C traceparent propagation</div><div class="pipeline-desc">Injected on every outbound call + Kafka message header</div></div>
-        <div class="pipeline-step" style="background:rgba(255,111,0,0.05);border-color:rgba(255,111,0,0.2)"><div class="pipeline-name" style="font-size:0.82rem">Grafana Tempo (720h retention)</div><div class="pipeline-desc">Cross-service infra spans — complementary to the AI-quality Trace Explorer</div></div>
-        <div class="pipeline-step" style="background:rgba(255,111,0,0.05);border-color:rgba(255,111,0,0.2)"><div class="pipeline-name" style="font-size:0.82rem">Chosen over Jaeger</div><div class="pipeline-desc">S3 backend ~10× cheaper than Jaeger/Cassandra at our span volume + native TraceQL</div></div>
+    <!-- trace waterfall mock -->
+    <div class="mon-panel">
+      <div class="mon-head"><span>🔭</span> Trace view — one request, where the time went
+        <span class="mon-tag">Grafana Tempo</span></div>
+      <div class="mon-body">
+        <div class="wf-meta">correlation_id <b>d4f7c2e8</b> · total <b>1041 ms</b></div>
+        <div class="wf-row"><span class="wf-lbl">POST /generate</span><span class="wf-bar" style="left:0%;width:100%;background:#4353ff"></span><span class="wf-ms">1041 ms</span></div>
+        <div class="wf-row"><span class="wf-lbl" style="padding-left:14px">↳ rag.retrieve</span><span class="wf-bar" style="left:4%;width:9%;background:#0284c7"></span><span class="wf-ms">96 ms</span></div>
+        <div class="wf-row"><span class="wf-lbl" style="padding-left:14px">↳ llm.generate</span><span class="wf-bar" style="left:14%;width:75%;background:#7c3aed"></span><span class="wf-ms">780 ms</span></div>
+        <div class="wf-row"><span class="wf-lbl" style="padding-left:28px">↳ httpx POST vertex</span><span class="wf-bar" style="left:16%;width:71%;background:#a78bfa"></span><span class="wf-ms">742 ms</span></div>
+        <div class="wf-row"><span class="wf-lbl" style="padding-left:14px">↳ asyncpg INSERT</span><span class="wf-bar" style="left:90%;width:6%;background:#0e9f6e"></span><span class="wf-ms">61 ms</span></div>
       </div>
+      <div class="mon-foot">Spans arrive automatically — FastAPI, httpx and asyncpg are auto-instrumented by the SDK. Same <code>correlation_id</code> as the events.</div>
     </div>
 
-    <div class="card">
-      <div class="card-icon">📈</div>
-      <div class="card-title">kube-prometheus-stack — Infra Metrics</div>
-      <span class="card-tech tech-grafana">kube-prometheus-stack · grafana.enabled=false</span>
-      <p class="card-desc" style="margin-bottom:1rem">Industry-standard Helm chart for K8s infrastructure metrics. Grafana visualization disabled — Prometheus is scraped directly by the Custom Dashboard backend via PromQL queries.</p>
-      <div style="display:flex;flex-direction:column;gap:0.4rem">
-        <div class="pipeline-step" style="background:rgba(255,111,0,0.05);border-color:rgba(255,111,0,0.2)"><div class="pipeline-name" style="font-size:0.82rem">prometheus-fastapi-instrumentator</div><div class="pipeline-desc">One line per service → auto p50/p95/p99 HTTP latency histograms</div></div>
-        <div class="pipeline-step" style="background:rgba(255,111,0,0.05);border-color:rgba(255,111,0,0.2)"><div class="pipeline-name" style="font-size:0.82rem">kminion → Prometheus</div><div class="pipeline-desc">Kafka consumer lag per topic/partition/group — watches all 3 consumer groups</div></div>
-        <div class="pipeline-step" style="background:rgba(255,111,0,0.05);border-color:rgba(255,111,0,0.2)"><div class="pipeline-name" style="font-size:0.82rem">Pod CPU / memory / restarts</div><div class="pipeline-desc">Crash-loop detection, GLiNER memory pressure, DB pool gauges</div></div>
-        <div class="pipeline-step" style="background:rgba(255,111,0,0.05);border-color:rgba(255,111,0,0.2)"><div class="pipeline-name" style="font-size:0.82rem">Alert thresholds</div><div class="pipeline-desc">Consumer lag > 1000 sustained 10m → page. DLQ rate > 1% → runbook trigger.</div></div>
+    <!-- metrics tiles mock -->
+    <div class="mon-panel">
+      <div class="mon-head"><span>📈</span> Pipeline health — what alerts fire on
+        <span class="mon-tag">Prometheus</span></div>
+      <div class="mon-body">
+        <div class="tile-grid">
+          <div class="tile"><span class="t-lbl">consumer lag</span><span class="t-val ok">42</span><span class="t-sub">page &gt; 1000 / 10m</span></div>
+          <div class="tile"><span class="t-lbl">dead-letter rate</span><span class="t-val ok">0.02%</span><span class="t-sub">warn &gt; 1%</span></div>
+          <div class="tile"><span class="t-lbl">p95 latency</span><span class="t-val ok">312 ms</span><span class="t-sub">per route</span></div>
+          <div class="tile"><span class="t-lbl">events / sec</span><span class="t-val">1.4k</span><span class="t-sub">raw topic</span></div>
+          <div class="tile"><span class="t-lbl">enrichment pods</span><span class="t-val ok">3/3</span><span class="t-sub">page if 0</span></div>
+          <div class="tile"><span class="t-lbl">spend today</span><span class="t-val warn">$182</span><span class="t-sub">80% of cap</span></div>
+        </div>
+        <div class="spark">
+          <span class="sp" style="height:38%"></span><span class="sp" style="height:52%"></span><span class="sp" style="height:44%"></span>
+          <span class="sp" style="height:61%"></span><span class="sp" style="height:55%"></span><span class="sp" style="height:72%"></span>
+          <span class="sp" style="height:64%"></span><span class="sp" style="height:80%"></span><span class="sp" style="height:58%"></span>
+          <span class="sp" style="height:69%"></span><span class="sp" style="height:47%"></span><span class="sp" style="height:56%"></span>
+          <span class="sp-lbl">event throughput · last 12h</span>
+        </div>
       </div>
+      <div class="mon-foot">Consumer lag and dead-letter rate are the two golden signals — a pipeline that silently stops is worse than no pipeline.</div>
     </div>
-
   </div>
 
   <div class="table-wrap">
-    <div class="table-header"><span>🌡️</span><h3>Grafana Tempo vs Trace Explorer — Two Complementary Views</h3></div>
+    <div class="table-header"><span>🌡️</span><h3>Two complementary trace views</h3></div>
     <table>
       <thead><tr><th>Dimension</th><th>Grafana Tempo</th><th>Custom Trace Explorer (Phase Q)</th></tr></thead>
       <tbody>
-        <tr><td class="muted">What it shows</td><td class="muted">Cross-service infra spans (HTTP, DB, outbound calls)</td><td class="muted">AI-quality business trace tree (tokens, cost, prompt version, eval scores, feedback)</td></tr>
-        <tr><td class="muted">Data source</td><td class="muted">OTEL auto-instrumentation → Tempo (S3)</td><td class="muted">ES event indices + obs_events.quality_scores + observability.feedback_case</td></tr>
-        <tr><td class="muted">Key identifier</td><td class="muted"><code style="color:var(--accent)">correlation_id</code> / W3C trace_id</td><td class="muted"><code style="color:var(--accent)">correlation_id</code> (same value)</td></tr>
-        <tr><td class="muted">Best for</td><td class="muted">Latency breakdown, DB slow queries, service-to-service hop timing</td><td class="muted">Why did the LLM respond this way? What prompt version? Was the RAG retrieval faithful?</td></tr>
+        <tr><td class="muted">Shows</td><td class="muted">Infra spans — HTTP, DB, outbound calls</td><td class="muted">Business trace — tokens, cost, prompt version, eval scores</td></tr>
+        <tr><td class="muted">Best for</td><td class="muted">Where did the latency go?</td><td class="muted">Why did the model answer this way?</td></tr>
+        <tr><td class="muted">Joined by</td><td class="muted"><code style="color:var(--accent)">correlation_id</code></td><td class="muted"><code style="color:var(--accent)">correlation_id</code> — the same value</td></tr>
       </tbody>
     </table>
   </div>
@@ -718,7 +823,84 @@
 <section id="telemetry">
   <div class="section-tag">Telemetry Schema</div>
   <h2 class="section-title">8 Signal Streams · 50 Event Types</h2>
-  <p class="section-desc">Every signal across all 8 services is captured in one of 8 telemetry schemas. Each schema shares a common mandatory envelope for correlation and governance, then extends it with domain-specific fields.</p>
+  <p class="section-desc">Every signal across all 8+ services is captured in one of 8 telemetry schemas. Each schema shares a common mandatory envelope for correlation and governance, then extends it with domain-specific fields.</p>
+
+  <!-- EVENT CATALOG (interactive) — generated from observability-iac/contracts/event_types.py -->
+  <div class="table-wrap" style="margin-bottom:3rem">
+    <div class="table-header"><span>🔠</span><h3>The 50 Event Types — searchable catalog</h3>
+      <span class="pill pill-green" style="margin-left:auto">✓ Contract frozen</span></div>
+    <div style="padding:1.25rem">
+      <p style="font-size:0.8rem;color:var(--muted);margin-bottom:1rem">The controlled vocabulary every service must use — the SDK validates against it before an event leaves the process, and the enrichment consumer rejects anything outside it, so a typo can never create a junk dimension. Search, or filter by category.</p>
+      <div class="ctl-row">
+        <input class="ctl-search" id="evt-search" placeholder="Search event types…" autocomplete="off">
+        <button class="ctl evt-f on" data-cat="all">all 50</button>
+        <button class="ctl evt-f" data-cat="request">request <span style="opacity:.6">4</span></button>
+        <button class="ctl evt-f" data-cat="orchestration">orchestration <span style="opacity:.6">6</span></button>
+        <button class="ctl evt-f" data-cat="kafka">kafka <span style="opacity:.6">4</span></button>
+        <button class="ctl evt-f" data-cat="agent">agent <span style="opacity:.6">8</span></button>
+        <button class="ctl evt-f" data-cat="llm">llm <span style="opacity:.6">5</span></button>
+        <button class="ctl evt-f" data-cat="tool">tool <span style="opacity:.6">4</span></button>
+        <button class="ctl evt-f" data-cat="rag">rag <span style="opacity:.6">5</span></button>
+        <button class="ctl evt-f" data-cat="guardrail">guardrail <span style="opacity:.6">4</span></button>
+        <button class="ctl evt-f" data-cat="feedback">feedback <span style="opacity:.6">3</span></button>
+        <button class="ctl evt-f" data-cat="document">document <span style="opacity:.6">7</span></button>
+        <span class="ctl-count" id="evt-count"></span>
+      </div>
+      <div class="evt-grid" id="evt-grid">
+          <div class="evt-chip c-request" data-cat="request" data-name="REQUEST_RECEIVED"><span class="cat">request</span>REQUEST_RECEIVED</div>
+          <div class="evt-chip c-request" data-cat="request" data-name="REQUEST_COMPLETED"><span class="cat">request</span>REQUEST_COMPLETED</div>
+          <div class="evt-chip c-request" data-cat="request" data-name="REQUEST_FAILED"><span class="cat">request</span>REQUEST_FAILED</div>
+          <div class="evt-chip c-request" data-cat="request" data-name="RESPONSE_DELIVERED"><span class="cat">request</span>RESPONSE_DELIVERED</div>
+          <div class="evt-chip c-orchestration" data-cat="orchestration" data-name="AUTH_COMPLETED"><span class="cat">orchestration</span>AUTH_COMPLETED</div>
+          <div class="evt-chip c-orchestration" data-cat="orchestration" data-name="CONFIG_LOADED"><span class="cat">orchestration</span>CONFIG_LOADED</div>
+          <div class="evt-chip c-orchestration" data-cat="orchestration" data-name="PLAN_CREATED"><span class="cat">orchestration</span>PLAN_CREATED</div>
+          <div class="evt-chip c-orchestration" data-cat="orchestration" data-name="AGENT_EXECUTION_REQUEST_PRODUCED"><span class="cat">orchestration</span>AGENT_EXECUTION_REQUEST_PRODUCED</div>
+          <div class="evt-chip c-orchestration" data-cat="orchestration" data-name="FINAL_RESPONSE_CONSUMED"><span class="cat">orchestration</span>FINAL_RESPONSE_CONSUMED</div>
+          <div class="evt-chip c-orchestration" data-cat="orchestration" data-name="RESPONSE_BUILT"><span class="cat">orchestration</span>RESPONSE_BUILT</div>
+          <div class="evt-chip c-kafka" data-cat="kafka" data-name="KAFKA_MESSAGE_PRODUCED"><span class="cat">kafka</span>KAFKA_MESSAGE_PRODUCED</div>
+          <div class="evt-chip c-kafka" data-cat="kafka" data-name="KAFKA_MESSAGE_CONSUMED"><span class="cat">kafka</span>KAFKA_MESSAGE_CONSUMED</div>
+          <div class="evt-chip c-kafka" data-cat="kafka" data-name="KAFKA_MESSAGE_DLQ"><span class="cat">kafka</span>KAFKA_MESSAGE_DLQ</div>
+          <div class="evt-chip c-kafka" data-cat="kafka" data-name="KAFKA_LAG_RECORDED"><span class="cat">kafka</span>KAFKA_LAG_RECORDED</div>
+          <div class="evt-chip c-agent" data-cat="agent" data-name="AGENT_STARTED"><span class="cat">agent</span>AGENT_STARTED</div>
+          <div class="evt-chip c-agent" data-cat="agent" data-name="AGENT_STEP_STARTED"><span class="cat">agent</span>AGENT_STEP_STARTED</div>
+          <div class="evt-chip c-agent" data-cat="agent" data-name="AGENT_STEP_COMPLETED"><span class="cat">agent</span>AGENT_STEP_COMPLETED</div>
+          <div class="evt-chip c-agent" data-cat="agent" data-name="AGENT_LOOP_ITERATION"><span class="cat">agent</span>AGENT_LOOP_ITERATION</div>
+          <div class="evt-chip c-agent" data-cat="agent" data-name="AGENT_HANDOFF"><span class="cat">agent</span>AGENT_HANDOFF</div>
+          <div class="evt-chip c-agent" data-cat="agent" data-name="AGENT_COMPLETED"><span class="cat">agent</span>AGENT_COMPLETED</div>
+          <div class="evt-chip c-agent" data-cat="agent" data-name="AGENT_FAILED"><span class="cat">agent</span>AGENT_FAILED</div>
+          <div class="evt-chip c-agent" data-cat="agent" data-name="AGENT_TIMEOUT"><span class="cat">agent</span>AGENT_TIMEOUT</div>
+          <div class="evt-chip c-llm" data-cat="llm" data-name="LLM_CALL_STARTED"><span class="cat">llm</span>LLM_CALL_STARTED</div>
+          <div class="evt-chip c-llm" data-cat="llm" data-name="LLM_CALL_COMPLETED"><span class="cat">llm</span>LLM_CALL_COMPLETED</div>
+          <div class="evt-chip c-llm" data-cat="llm" data-name="LLM_CALL_FAILED"><span class="cat">llm</span>LLM_CALL_FAILED</div>
+          <div class="evt-chip c-llm" data-cat="llm" data-name="LLM_RATE_LIMITED"><span class="cat">llm</span>LLM_RATE_LIMITED</div>
+          <div class="evt-chip c-llm" data-cat="llm" data-name="LLM_SAFETY_BLOCKED"><span class="cat">llm</span>LLM_SAFETY_BLOCKED</div>
+          <div class="evt-chip c-tool" data-cat="tool" data-name="TOOL_CALL_STARTED"><span class="cat">tool</span>TOOL_CALL_STARTED</div>
+          <div class="evt-chip c-tool" data-cat="tool" data-name="TOOL_CALL_COMPLETED"><span class="cat">tool</span>TOOL_CALL_COMPLETED</div>
+          <div class="evt-chip c-tool" data-cat="tool" data-name="TOOL_CALL_FAILED"><span class="cat">tool</span>TOOL_CALL_FAILED</div>
+          <div class="evt-chip c-tool" data-cat="tool" data-name="TOOL_CALL_TIMEOUT"><span class="cat">tool</span>TOOL_CALL_TIMEOUT</div>
+          <div class="evt-chip c-rag" data-cat="rag" data-name="RAG_RETRIEVAL_STARTED"><span class="cat">rag</span>RAG_RETRIEVAL_STARTED</div>
+          <div class="evt-chip c-rag" data-cat="rag" data-name="RAG_RETRIEVAL_COMPLETED"><span class="cat">rag</span>RAG_RETRIEVAL_COMPLETED</div>
+          <div class="evt-chip c-rag" data-cat="rag" data-name="RAG_RETRIEVAL_FAILED"><span class="cat">rag</span>RAG_RETRIEVAL_FAILED</div>
+          <div class="evt-chip c-rag" data-cat="rag" data-name="RAG_NO_RESULT"><span class="cat">rag</span>RAG_NO_RESULT</div>
+          <div class="evt-chip c-rag" data-cat="rag" data-name="RAG_INDEX_HEALTH_CHECKED"><span class="cat">rag</span>RAG_INDEX_HEALTH_CHECKED</div>
+          <div class="evt-chip c-guardrail" data-cat="guardrail" data-name="GUARDRAIL_EVALUATED"><span class="cat">guardrail</span>GUARDRAIL_EVALUATED</div>
+          <div class="evt-chip c-guardrail" data-cat="guardrail" data-name="GUARDRAIL_BLOCKED"><span class="cat">guardrail</span>GUARDRAIL_BLOCKED</div>
+          <div class="evt-chip c-guardrail" data-cat="guardrail" data-name="GUARDRAIL_REDACTED"><span class="cat">guardrail</span>GUARDRAIL_REDACTED</div>
+          <div class="evt-chip c-guardrail" data-cat="guardrail" data-name="GUARDRAIL_ESCALATED"><span class="cat">guardrail</span>GUARDRAIL_ESCALATED</div>
+          <div class="evt-chip c-feedback" data-cat="feedback" data-name="FEEDBACK_SUBMITTED"><span class="cat">feedback</span>FEEDBACK_SUBMITTED</div>
+          <div class="evt-chip c-feedback" data-cat="feedback" data-name="FEEDBACK_REVIEWED"><span class="cat">feedback</span>FEEDBACK_REVIEWED</div>
+          <div class="evt-chip c-feedback" data-cat="feedback" data-name="FEEDBACK_CLOSED"><span class="cat">feedback</span>FEEDBACK_CLOSED</div>
+          <div class="evt-chip c-document" data-cat="document" data-name="DOCUMENT_UPLOADED"><span class="cat">document</span>DOCUMENT_UPLOADED</div>
+          <div class="evt-chip c-document" data-cat="document" data-name="DOCUMENT_STORED_IN_S3"><span class="cat">document</span>DOCUMENT_STORED_IN_S3</div>
+          <div class="evt-chip c-document" data-cat="document" data-name="DOCUMENT_EXTRACTION_STARTED"><span class="cat">document</span>DOCUMENT_EXTRACTION_STARTED</div>
+          <div class="evt-chip c-document" data-cat="document" data-name="DOCUMENT_EXTRACTION_COMPLETED"><span class="cat">document</span>DOCUMENT_EXTRACTION_COMPLETED</div>
+          <div class="evt-chip c-document" data-cat="document" data-name="DOCUMENT_EXTRACTION_FAILED"><span class="cat">document</span>DOCUMENT_EXTRACTION_FAILED</div>
+          <div class="evt-chip c-document" data-cat="document" data-name="DOCUMENT_INDEXED"><span class="cat">document</span>DOCUMENT_INDEXED</div>
+          <div class="evt-chip c-document" data-cat="document" data-name="DOCUMENT_EMBEDDING_CREATED"><span class="cat">document</span>DOCUMENT_EMBEDDING_CREATED</div>
+      </div>
+    </div>
+  </div>
+
 
   <div class="telem-grid">
 
@@ -813,7 +995,7 @@
 
   <div class="dash-grid">
     <div class="dash-card">
-      <div class="dash-head" style="background:linear-gradient(90deg,rgba(59,122,232,0.1) 0%,transparent 100%)"><h3>🌐 Usecase / Overview Dashboard</h3></div>
+      <div class="dash-head" style="background:linear-gradient(90deg,rgba(67,83,255,0.1) 0%,transparent 100%)"><h3>🌐 Usecase / Overview Dashboard</h3></div>
       <div class="dash-body">
         <div class="metric-row"><span class="metric-name">Total requests / Successful responses</span><span class="metric-badge">Request count</span></div>
         <div class="metric-row"><span class="metric-name">Total errors / Error rate</span><span class="metric-badge">Error count</span></div>
@@ -824,7 +1006,7 @@
       </div>
     </div>
     <div class="dash-card">
-      <div class="dash-head" style="background:linear-gradient(90deg,rgba(0,212,170,0.1) 0%,transparent 100%)"><h3>🕵️ Agent Observability</h3></div>
+      <div class="dash-head" style="background:linear-gradient(90deg,rgba(14,159,110,0.1) 0%,transparent 100%)"><h3>🕵️ Agent Observability</h3></div>
       <div class="dash-body">
         <div class="metric-row"><span class="metric-name">Agent request count</span><span class="metric-badge">Trace timeline</span></div>
         <div class="metric-row"><span class="metric-name">Agent success / failure rate</span><span class="metric-badge">Planner decision</span></div>
@@ -875,7 +1057,7 @@
       </div>
     </div>
     <div class="dash-card">
-      <div class="dash-head" style="background:linear-gradient(90deg,rgba(59,122,232,0.1) 0%,transparent 100%)"><h3>⭐ User Feedback Dashboard</h3></div>
+      <div class="dash-head" style="background:linear-gradient(90deg,rgba(67,83,255,0.1) 0%,transparent 100%)"><h3>⭐ User Feedback Dashboard</h3></div>
       <div class="dash-body">
         <div class="metric-row"><span class="metric-name">Total / Positive / Negative feedback</span><span class="metric-badge">Rating average</span></div>
         <div class="metric-row"><span class="metric-name">Feedback by application / tool</span><span class="metric-badge">Feedback by model</span></div>
@@ -884,7 +1066,7 @@
       </div>
     </div>
     <div class="dash-card">
-      <div class="dash-head" style="background:linear-gradient(90deg,rgba(0,212,170,0.08) 0%,transparent 100%)"><h3>🔧 Tool Observability</h3></div>
+      <div class="dash-head" style="background:linear-gradient(90deg,rgba(14,159,110,0.08) 0%,transparent 100%)"><h3>🔧 Tool Observability</h3></div>
       <div class="dash-body">
         <div class="metric-row"><span class="metric-name">Total tool calls</span><span class="metric-badge">Tool success rate</span></div>
         <div class="metric-row"><span class="metric-name">Tool failure rate / timeout rate</span><span class="metric-badge">Latency p95</span></div>
@@ -899,38 +1081,45 @@
 <section id="roadmap">
   <div class="section-tag">Delivery Plan</div>
   <h2 class="section-title">8-Phase Delivery Roadmap</h2>
-  <p class="section-desc">Indicative week estimates — not committed dates. Phases 2–4 and Q overlap. All phases are planned; no work is in progress or complete.</p>
+  <p class="section-desc">Indicative week estimates — not committed dates. Phases 2–4 and Q overlap. <b style="color:var(--accent2)">Status as of August 2026: Phases 0, 1 and 3 are in progress</b> — the foundation IaC, the shared SDK and the enrichment consumer all exist and pass their test suites, but none is finished: they await live-broker integration, hardening, review and deployment to a shared environment. No phase is signed off yet. Phase 2 — instrumenting the 8+ services — begins once the SDK is published.</p>
 
   <div class="deferred-banner">
-    ⚠️ &nbsp;No phase is complete. All checkboxes are open. Status = Planned. Weeks are relative effort, not calendar dates.
+    ⏳ &nbsp;<b>Phases 0, 1 and 3 are in progress</b> — observability-iac, ai-observability-sdk and obs-enrichment-consumer are code-complete and passing their test suites, but none is signed off: live-broker integration, hardening, review and deployment remain. Remaining phases are planned; weeks are relative effort, not calendar dates. <b>Nothing is deployed to a shared environment yet.</b>
+  </div>
+
+  <div class="ctl-row" id="tl-filter">
+    <button class="ctl on" data-mode="all">All phases</button>
+    <button class="ctl" data-mode="wip">⏳ In progress (3)</button>
+    <button class="ctl" data-mode="planned">Planned (6)</button>
   </div>
 
   <div class="timeline">
 
     <div class="tl-item">
-      <div class="tl-dot planned"></div>
+      <div class="tl-dot wip"></div>
       <div class="tl-content">
-        <div class="tl-phase planned">Phase 0 · Planned</div>
+        <div class="tl-phase wip">Phase 0 · ⏳ In Progress</div>
         <div class="tl-title">Foundation — Infrastructure &amp; Contract</div>
         <div class="tl-weeks">Weeks 1–3 · WS-A, WS-X</div>
         <ul class="tl-items">
           <li>Freeze ObsEvent model + 50-type EventType enum</li>
           <li>Create Kafka topics (raw / processed / dead-letter)</li>
           <li>Apply PostgreSQL <code>observability</code> schema + seed catalogs</li>
-          <li>Apply PostgreSQL <code>obs_events</code> schema (interim Snowflake)</li>
+          <li>Apply PostgreSQL <code>obs_events</code> schema (ahead of a future warehouse)</li>
           <li>Apply Elasticsearch index templates + ILM via IaC</li>
           <li>Create S3 buckets + lifecycle (SSE-KMS)</li>
           <li>Confirm interim Redis stand-ins (Postgres budget_accumulator + in-process TTL cache)</li>
           <li>Scaffold <code>observability-iac</code> CI pipeline</li>
           <li>Provision Grafana Tempo (S3 backend) + Prometheus + kminion + Fluent Bit DaemonSet</li>
         </ul>
+          <div class="tl-evidence wip">observability-iac/ · remaining: apply to a real environment, CI dry-run against live Postgres, secrets per env</div>
       </div>
     </div>
 
     <div class="tl-item">
-      <div class="tl-dot planned"></div>
+      <div class="tl-dot wip"></div>
       <div class="tl-content">
-        <div class="tl-phase planned">Phase 1 · Planned</div>
+        <div class="tl-phase wip">Phase 1 · ⏳ In Progress</div>
         <div class="tl-title">Shared SDK — ai-observability-sdk</div>
         <div class="tl-weeks">Weeks 3–6 · WS-B</div>
         <ul class="tl-items">
@@ -942,6 +1131,7 @@
           <li><code>get_prompt()</code> prompt registry fetch + prompt_hash</li>
           <li>Unit + contract tests; CI gate on schema validation</li>
         </ul>
+          <div class="tl-evidence wip">ai-observability-sdk/ · emit + trace + log + prompt working · remaining: publish 0.1.0, COIN-JWT claim extraction, pricing review</div>
       </div>
     </div>
 
@@ -949,7 +1139,7 @@
       <div class="tl-dot planned"></div>
       <div class="tl-content">
         <div class="tl-phase planned">Phase 2 · Planned</div>
-        <div class="tl-title">Per-Service Instrumentation — All 8 Services</div>
+        <div class="tl-title">Per-Service Instrumentation — All Services</div>
         <div class="tl-weeks">Weeks 4–8 · WS-C</div>
         <ul class="tl-items">
           <li>Agentic Orchestration — LLM cost/tokens, agent events</li>
@@ -966,9 +1156,9 @@
     </div>
 
     <div class="tl-item">
-      <div class="tl-dot planned"></div>
+      <div class="tl-dot wip"></div>
       <div class="tl-content">
-        <div class="tl-phase planned">Phase 3 · Planned</div>
+        <div class="tl-phase wip">Phase 3 · ⏳ In Progress</div>
         <div class="tl-title">Enrichment Consumer — obs-enrichment-consumer</div>
         <div class="tl-weeks">Weeks 6–10 · WS-D</div>
         <ul class="tl-items">
@@ -980,6 +1170,7 @@
           <li>SLO burn-rate 1h + 6h → daily_slo_compliance row</li>
           <li>K8s: 3 replicas, manual commit (commit only after produce to processed)</li>
         </ul>
+          <div class="tl-evidence wip">obs-enrichment-consumer/ · 9 stages implemented · remaining: live-broker integration, GLiNER prod image, deploy</div>
       </div>
     </div>
 
@@ -1030,7 +1221,7 @@
           <li>Pages: Platform Overview, Cost Governance, Business KPIs, Kafka Health, RAG Quality, Anomaly View, Feedback Trends, Trace Explorer</li>
           <li>All 8 Kibana dashboards live with per-LOB isolation</li>
           <li>Prometheus scraping via custom dashboard backend (PromQL)</li>
-          <li>kube-prometheus-stack grafana.enabled=false confirmed</li>
+          <li>Grafana confirmed internal-only (ClusterIP, no ingress, platform team via port-forward)</li>
         </ul>
       </div>
     </div>
@@ -1076,10 +1267,10 @@
     <table>
       <thead><tr><th>Phase</th><th>Weeks</th><th>Exit Signal</th><th>Status</th></tr></thead>
       <tbody>
-        <tr><td>Phase 0 — Foundation</td><td>1–3</td><td class="muted">Contract frozen; infra live; CI green</td><td><span class="pill pill-gray">Planned</span></td></tr>
-        <tr><td>Phase 1 — Shared SDK</td><td>3–6</td><td class="muted">One import → emit + trace + log + prompt works</td><td><span class="pill pill-gray">Planned</span></td></tr>
-        <tr><td>Phase 2 — Instrumentation</td><td>4–8</td><td class="muted">Full event chain per request across all 8 services</td><td><span class="pill pill-gray">Planned</span></td></tr>
-        <tr><td>Phase 3 — Enrichment</td><td>6–10</td><td class="muted">raw→processed redacted/enriched/costed; DLQ works</td><td><span class="pill pill-gray">Planned</span></td></tr>
+        <tr><td>Phase 0 — Foundation</td><td>1–3</td><td class="muted">Contract frozen; infra live; CI green</td><td><span class="pill pill-amber">⏳ In Progress</span></td></tr>
+        <tr><td>Phase 1 — Shared SDK</td><td>3–6</td><td class="muted">One import → emit + trace + log + prompt works</td><td><span class="pill pill-amber">⏳ In Progress</span></td></tr>
+        <tr><td>Phase 2 — Instrumentation</td><td>4–8</td><td class="muted">Full event chain per request across all 8+ services</td><td><span class="pill pill-gray">Planned</span></td></tr>
+        <tr><td>Phase 3 — Enrichment</td><td>6–10</td><td class="muted">raw→processed redacted/enriched/costed; DLQ works</td><td><span class="pill pill-amber">⏳ In Progress</span></td></tr>
         <tr><td>Phase 4 — Storage</td><td>8–12</td><td class="muted">ES + obs_events (PG) + S3 populated; dedup + replay verified</td><td><span class="pill pill-gray">Planned</span></td></tr>
         <tr><td>Phase Q — AI Quality</td><td>10–15</td><td class="muted">Trace Explorer + prompt versioning + eval scores</td><td><span class="pill pill-gray">Planned</span></td></tr>
         <tr><td>Phase 5 — Presentation</td><td>12–16</td><td class="muted">Dashboards + Kibana, COIN-JWT RBAC enforced</td><td><span class="pill pill-gray">Planned</span></td></tr>
@@ -1094,14 +1285,14 @@
 <section id="coverage">
   <div class="section-tag">Gap Assessment</div>
   <h2 class="section-title">Current State — Field Coverage by Service</h2>
-  <p class="section-desc">Baseline telemetry coverage across all 8 AI Platform services, mapped from the Observability Coverage assessment. This gap analysis defines the instrumentation work in Phases 1 and 2.</p>
+  <p class="section-desc">Baseline telemetry coverage across all 8+ AI Platform services, mapped from the Observability Coverage assessment. This gap analysis defines the instrumentation work in Phases 1 and 2.</p>
 
   <div class="cov-legend">
-    <span style="background:rgba(0,212,100,0.12);color:#00d464;border-color:rgba(0,212,100,0.3)">✓ Present</span>
-    <span style="background:rgba(255,190,0,0.1);color:#ffbe00;border-color:rgba(255,190,0,0.3)">⚠ Partial</span>
-    <span style="background:rgba(255,255,255,0.05);color:rgba(255,255,255,0.3);border-color:rgba(255,255,255,0.12)">✗ Missing</span>
-    <span style="background:rgba(59,122,232,0.12);color:#a89fff;border-color:rgba(59,122,232,0.35)">● PII Risk</span>
-    <span style="background:rgba(255,255,255,0.03);color:rgba(255,255,255,0.2);border-color:rgba(255,255,255,0.08)">— N/A</span>
+    <span style="background:rgba(0,212,100,0.12);color:#00b756;border-color:rgba(0,212,100,0.3)">✓ Present</span>
+    <span style="background:rgba(255,190,0,0.1);color:#b78800;border-color:rgba(255,190,0,0.3)">⚠ Partial</span>
+    <span style="background:rgba(217,32,32,0.08);color:#d92020;border-color:rgba(217,32,32,0.3)">✗ Missing</span>
+    <span style="background:rgba(67,83,255,0.12);color:#1100b7;border-color:rgba(67,83,255,0.35)">● PII Risk</span>
+    <span style="background:rgba(20,30,55,0.03);color:rgba(20,30,55,0.38);border-color:rgba(20,30,55,0.10)">— N/A</span>
   </div>
 
   <div class="tab-nav" id="cov-tabs">
@@ -1118,7 +1309,7 @@
 
   <!-- OVERVIEW -->
   <div id="cov-overview" class="cov-panel active">
-    <p class="cov-note">8 services in scope. 2 emit to Kafka today (Agent Executor, Agentic Orchestration). Remaining 6 will onboard via the Observability SDK in Phase 2. All services use Python / FastAPI with COIN JWT auth except Consumer Service (internal scheduler).</p>
+    <p class="cov-note">8+ services in scope. 2 emit to Kafka today (Agent Executor, Agentic Orchestration). The rest onboard via the Observability SDK in Phase 2. All services use Python / FastAPI with COIN JWT auth except Consumer Service (internal scheduler).</p>
     <div class="svc-grid">
       <div class="svc-card">
         <h4>Agent Executor</h4>
@@ -1253,7 +1444,7 @@
 
   <!-- EVENT FIELDS -->
   <div id="cov-events" class="cov-panel">
-    <p class="cov-note"><code>span_id</code>, <code>parent_span_id</code>, <code>schema_version</code>, <code>usecase_id</code>, <code>lob</code>, and <code>tenant_id</code> are universally missing — these are the core SDK envelope gaps to close in Phase 1. <code>user_hash</code> is a PII risk in two services where user identity is logged as plain text.</p>
+    <p class="cov-note"><code>span_id</code>, <code>parent_span_id</code>, <code>schema_version</code>, <code>usecase_id</code>, <code>lob</code>, and <code>tenant_id</code> are universally missing — these are the core SDK envelope gaps the shared SDK closes automatically. User identity is carried as <code>user_hash</code>, hashed before it leaves the service; two services log the SOE ID in plain text today, which the SDK removes.</p>
     <div class="cov-tbl-wrap">
       <table class="cov-tbl">
         <thead>
@@ -1534,8 +1725,9 @@
 </section>
 
 <footer>
-  AI Services Platform · Observability Plan · June 2026 &nbsp;·&nbsp;
-  <span class="glow-dot yellow"></span>&nbsp; All phases planned — no work in progress &nbsp;·&nbsp;
+  AI Services Platform · Observability Plan · updated August 2026 &nbsp;·&nbsp;
+  <span class="glow-dot" style="background:#0e9f6e;box-shadow:0 0 0 3px rgba(14,159,110,0.2)"></span>&nbsp;
+  Phases 0, 1 &amp; 3 in progress · nothing deployed yet &nbsp;·&nbsp;
   Confidential — Internal Use Only
 </footer>
 
@@ -1548,6 +1740,100 @@
       const key = id === 'firehose' ? 'obs_events' : id.substring(0,4);
       btn.classList.toggle('active', btn.textContent.toLowerCase().includes(key.toLowerCase()));
     });
+  }
+
+  /* ============ INTERACTIVE ADDITIONS (Aug 2026) ============ */
+
+  /* --- 1. Enrichment pipeline: click a stage for detail --- */
+  const STAGES = {
+    1:{t:"Stage 1 · Schema Validator",
+       w:"Parses the JSON and validates it against the frozen ObsEvent contract — envelope shape, known event_type, known service_name.",
+       y:"This is the <b>only</b> gate in the pipeline. An event that fails here is genuinely malformed, so it is quarantined rather than guessed at.",
+       f:"→ <b>ai-obs-dead-letter</b>, wrapped as <code>{reason, failed_at, original}</code> — debuggable and replayable via scripts/replay_dead_letter.py"},
+    2:{t:"Stage 2 · Trace Context Extractor",
+       w:"Reads the W3C <code>traceparent</code> header off the Kafka message and fills any missing trace_id / parent_span_id on the event.",
+       y:"Without this the distributed trace dies at the queue boundary — a consumer would start a brand-new trace instead of continuing the producer's.",
+       f:"Best-effort: a malformed header is ignored, the event continues."},
+    3:{t:"Stage 3 · PII Redactor",
+       w:"Scans free-text payload strings and masks emails, card numbers, phone numbers and (with GLiNER enabled) names and addresses.",
+       y:"Free text is unbounded — a user can paste anything into a prompt or feedback box. <b>Note: user_id is deliberately NOT touched</b>; it is the raw SOE ID by platform decision, protected by store-level RBAC instead.",
+       f:"GLiNER unavailable ⇒ silently degrades to regex-only. Never crash-loops on a bad model image."},
+    4:{t:"Stage 4 · Metadata Enricher",
+       w:"Joins the control-plane registries: fills lob, and adds owner team, criticality and usecase_id from application_registry.",
+       y:"Raw events carry only IDs. This is what lets a dashboard say <i>whose</i> app is failing and page the right team.",
+       f:"Registry lookup fails ⇒ event flows on without ownership fields; unregistered apps are marked <code>app_registered:false</code>."},
+    5:{t:"Stage 5 · Error Code Normaliser",
+       w:"Matches the raw error text against error_code_catalog regexes (in priority order) and rewrites error_code to the standard taxonomy — L0001, T0001, A0001…",
+       y:"Turns eight services' worth of inconsistent exception strings into a stable set of codes you can group, alert and write runbooks against.",
+       f:"No rule matches ⇒ the catch-all P0999 applies. The original is preserved as <code>raw_error_code</code>."},
+    6:{t:"Stage 6 · Cost Calculator",
+       w:"Recomputes estimated_cost_usd from the authoritative model_pricing table (overwriting the SDK's producer-side estimate), then calls the atomic add_spend() to update the running budget.",
+       y:"The SDK's estimate makes cost visible immediately; this stage makes it <i>correct</i>. add_spend() reports a threshold crossing <b>exactly once</b> even with 3 replicas running concurrently.",
+       f:"Budget alert ⇒ <code>payload.budget_alert</code> + warn log + Prometheus counter. Cap breach ⇒ <code>budget_cap_breached</code> + error log."},
+    7:{t:"Stage 7 · S3 Archiver",
+       w:"Any configured payload field larger than the threshold (prompts, responses, RAG contexts, traces) is uploaded to S3 and replaced in the event by an s3:// pointer.",
+       y:"Keeps Kafka messages under the 1 MiB cap and Elasticsearch documents lean, while the full text stays available for audit and debugging.",
+       f:"S3 unavailable ⇒ the field stays inline and the event still flows. Nothing is lost."},
+    8:{t:"Stage 8 · SLO Evaluator",
+       w:"Feeds terminal request events into sliding 1h and 6h windows, computes burn rate = observed bad fraction ÷ error budget, and upserts the daily compliance row.",
+       y:"Burn rate answers “are we consuming the error budget faster than the month allows?”. A 1h burn above 14.4× would exhaust a 30-day budget in about two days — that's the page threshold.",
+       f:"Each replica sees only its own partitions, so the daily upsert merges counts across replicas and keeps the MAX burn rate — deliberately conservative for alerting."},
+    9:{t:"Stage 9 · AI Quality Hook",
+       w:"Randomly flags a configurable percentage (default 5%) of successful LLM and RAG events with <code>quality_sample:true</code>.",
+       y:"LLM-as-judge evaluation is far too expensive to run on every event. This marks a representative sample for the Phase Q eval service to score for faithfulness and hallucination.",
+       f:"Purely additive — a flag on the payload. Nothing downstream breaks if it is absent."}
+  };
+  const sd = document.getElementById('stage-detail');
+  const sdDefault = sd ? sd.innerHTML : '';
+  document.querySelectorAll('.pipeline-step[data-st]').forEach(el => el.addEventListener('click', () => {
+    const already = el.classList.contains('sel');
+    document.querySelectorAll('.pipeline-step').forEach(x => x.classList.remove('sel'));
+    if (already) { sd.innerHTML = sdDefault; return; }
+    el.classList.add('sel');
+    const d = STAGES[el.dataset.st];
+    sd.innerHTML = `<h4>${d.t}</h4><p><b>What it does.</b> ${d.w}</p>
+      <p><b>Why it exists.</b> ${d.y}</p><p class="kv"><b>On failure:</b> ${d.f}</p>`;
+  }));
+
+  /* --- 2. Event-type catalog: search + category filter --- */
+  const grid = document.getElementById('evt-grid');
+  if (grid) {
+    const chips = [...grid.querySelectorAll('.evt-chip')];
+    const search = document.getElementById('evt-search');
+    const countEl = document.getElementById('evt-count');
+    let cat = 'all';
+    const apply = () => {
+      const q = (search.value || '').trim().toLowerCase();
+      let shown = 0;
+      chips.forEach(c => {
+        const ok = (cat === 'all' || c.dataset.cat === cat) &&
+                   (!q || c.dataset.name.toLowerCase().includes(q));
+        c.style.display = ok ? '' : 'none';
+        if (ok) shown++;
+      });
+      countEl.textContent = `${shown} of ${chips.length} shown`;
+    };
+    document.querySelectorAll('.evt-f').forEach(b => b.addEventListener('click', () => {
+      document.querySelectorAll('.evt-f').forEach(x => x.classList.remove('on'));
+      b.classList.add('on'); cat = b.dataset.cat; apply();
+    }));
+    search.addEventListener('input', apply);
+    apply();
+  }
+
+  /* --- 3. Delivery plan: filter phases by build status --- */
+  const tlFilter = document.getElementById('tl-filter');
+  if (tlFilter) {
+    tlFilter.querySelectorAll('.ctl').forEach(b => b.addEventListener('click', () => {
+      tlFilter.querySelectorAll('.ctl').forEach(x => x.classList.remove('on'));
+      b.classList.add('on');
+      const mode = b.dataset.mode;
+      document.querySelectorAll('.tl-item').forEach(it => {
+        const st = it.querySelector('.tl-phase.built') ? 'built'
+                 : it.querySelector('.tl-phase.wip')   ? 'wip' : 'planned';
+        it.style.display = (mode === 'all' || mode === st) ? '' : 'none';
+      });
+    }));
   }
 
   // Nav active on scroll

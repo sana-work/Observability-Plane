@@ -137,7 +137,7 @@
 
   <span class="pill">AI SERVICES PLATFORM · OBSERVABILITY PLANE</span>
   <h1>How <code>ai-observability-sdk</code> captures a request</h1>
-  <p class="sub lead">The SDK is a small Python library each of the 8 AI services installs. One line at startup +
+  <p class="sub lead">The SDK is a small Python library each of the 8+ AI services installs. One line at startup +
      one decorator per hot path, and every request produces structured <b>events</b> on Kafka, a <b>trace</b> in Tempo,
      and JSON <b>logs</b> — all three joined by one <code>correlation_id</code> — while also contributing to Prometheus
      <b>metrics</b> (aggregate counters, no per-request identity) for alerting.
@@ -146,7 +146,7 @@
   <div class="hero-grid">
     <div class="card"><span class="ic">🔌</span><b>1-line integration</b><small><code>init_observability(app)</code> — logging, tracing, middleware, /metrics wired at once</small></div>
     <div class="card"><span class="ic">🪶</span><b>Zero request overhead</b><small>fire-and-forget: never blocks, never raises on the request path</small></div>
-    <div class="card"><span class="ic">🧬</span><b>One frozen contract</b><small>50 event types · 8 services · every event validated before it leaves</small></div>
+    <div class="card"><span class="ic">🧬</span><b>One frozen contract</b><small>50 event types · one contract · every event validated before it leaves</small></div>
     <div class="card"><span class="ic">🔗</span><b>One join key</b><small><code>correlation_id</code> ties events + spans + logs of a request together</small></div>
   </div>
 
@@ -318,7 +318,7 @@ async def run_agent(task): ...</pre>
   <section>
     <h2>🗺 Where the captured data goes next</h2>
     <div class="down">
-      <div class="node"><b>8 services</b><small>+ this SDK</small></div><span class="a">▶</span>
+      <div class="node"><b>8+ services</b><small>+ this SDK</small></div><span class="a">▶</span>
       <div class="node mono">ai-obs-events-raw<small>Kafka · 7 days</small></div><span class="a">▶</span>
       <div class="node"><b>Enrichment</b><small>validate · redact PII · cost · SLO</small></div><span class="a">▶</span>
       <div class="node mono">ai-obs-events-processed<small>Kafka · 3 days</small></div><span class="a">▶</span>
@@ -339,7 +339,7 @@ const FIELDS={
  event_type:["IDENTITY","One of the frozen 50 types (LLM_CALL_COMPLETED, TOOL_CALL_TIMEOUT…). Validated at construction — unknown types can never reach the topic."],
  telemetry_type:["IDENTITY","event | log | metric. The SDK emits only 'event' today; reserved so log/metric-shaped records could ride the pipeline later without a migration."],
  timestamp:["TIME","When it happened — UTC ISO-8601, auto-set. Partitions the Postgres firehose and orders Kibana timelines."],
- correlation_id:["CORRELATION","⭐ THE join key. One value for the entire user request across all 8 services, every event, log line and span. Also the Kafka partition key (= ordering). Echoed back to the caller in X-Correlation-ID."],
+ correlation_id:["CORRELATION","⭐ THE join key. One value for the entire user request across all services, every event, log line and span. Also the Kafka partition key (= ordering). Echoed back to the caller in X-Correlation-ID."],
  request_id:["CORRELATION","The CALLER'S own id (X-Request-ID) captured verbatim — bridges our data to gateway logs & support tickets. Null if not sent."],
  trace_id:["CORRELATION","OpenTelemetry/W3C trace id — what Grafana Tempo indexes by. Lets you jump from this event to the timing waterfall."],
  span_id:["CORRELATION","Which operation inside the request: this LLM call = span B. Comes from the SDK's ObsContext — one consistent id space for the event tree."],
