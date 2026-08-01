@@ -39,8 +39,8 @@
     position:fixed; top:0; left:0; right:0; z-index:100;
     background:rgba(255,255,255,0.85); backdrop-filter:blur(20px);
     border-bottom:1px solid var(--border);
-    padding:0 2rem; height:60px;
-    display:flex; align-items:center;
+    padding:0.35rem 2rem; min-height:60px;
+    display:flex; align-items:center; flex-wrap:wrap;
   }
   nav::-webkit-scrollbar { height:2px; }
   .nav-brand {
@@ -49,7 +49,7 @@
     display:flex; align-items:center; gap:0.5rem;
   }
   .nav-brand span { background:var(--gradient1); -webkit-background-clip:text; -webkit-text-fill-color:transparent; }
-  .nav-links { display:flex; gap:0.2rem; align-items:center; overflow-x:auto; }
+  .nav-links { display:flex; flex-wrap:wrap; gap:0.2rem 0.15rem; align-items:center; row-gap:0.1rem; }
   .nav-links::-webkit-scrollbar { height:2px; }
   .nav-links a {
     text-decoration:none; color:var(--muted); font-size:0.76rem; font-weight:500;
@@ -168,6 +168,28 @@
   .sp { flex:1; background:linear-gradient(180deg,#4353ff 0%,rgba(67,83,255,0.35) 100%); border-radius:2px 2px 0 0; }
   .sp-lbl { position:absolute; bottom:0; left:0; font-size:0.6rem; color:var(--muted2); font-family:'JetBrains Mono',monospace; }
 
+  /* ---- onboarding box ---- */
+  .onboard-box { background:var(--card-bg); border:1px solid var(--border); border-left:3px solid var(--accent);
+                 border-radius:14px; padding:1.1rem 1.3rem; margin-bottom:1.5rem; }
+  .ob-head { font-size:0.92rem; font-weight:600; margin-bottom:0.9rem; }
+  .ob-steps { display:grid; grid-template-columns:repeat(auto-fit,minmax(215px,1fr)); gap:0.7rem; }
+  .ob-step { display:flex; flex-direction:column; gap:0.15rem; background:rgba(67,83,255,0.04);
+             border:1px solid rgba(67,83,255,0.15); border-radius:10px; padding:0.6rem 0.75rem; position:relative; }
+  .ob-step b { font-size:0.82rem; }
+  .ob-step span:last-child { font-size:0.73rem; color:var(--muted); line-height:1.5; }
+  .ob-n { position:absolute; right:0.6rem; top:0.45rem; font-family:'JetBrains Mono',monospace;
+          font-size:0.9rem; font-weight:700; color:rgba(67,83,255,0.3); }
+  .ob-foot { font-size:0.75rem; color:var(--muted); margin-top:0.8rem; line-height:1.55; }
+
+  /* ---- collapsible phase cards ---- */
+  .tl-content { cursor:pointer; }
+  .tl-content .tl-items, .tl-content .tl-evidence { display:none; }
+  .tl-content.open .tl-items, .tl-content.open .tl-evidence { display:flex; }
+  .tl-content.open .tl-evidence { display:inline-block; }
+  .tl-toggle { float:right; font-size:0.68rem; font-family:'JetBrains Mono',monospace; color:var(--muted);
+               border:1px solid var(--border); border-radius:6px; padding:1px 7px; margin-left:0.5rem; }
+  .tl-content:hover .tl-toggle { color:var(--accent); border-color:rgba(67,83,255,0.4); }
+
   /* ---- event catalog ---- */
   .evt-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(215px,1fr)); gap:0.5rem; }
   .evt-chip { font-family:'JetBrains Mono',monospace; font-size:0.7rem; padding:0.5rem 0.7rem; border-radius:8px;
@@ -250,7 +272,7 @@
   .pill-gray   { background:rgba(20,30,55,0.06); color:var(--muted); }
 
   /* TELEMETRY */
-  .telem-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(340px,1fr)); gap:1.25rem; }
+  .telem-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(255px,1fr)); gap:1rem; }
   .telem-card { background:var(--card-bg); border:1px solid var(--border); border-radius:16px; overflow:hidden; transition:all 0.3s; }
   .telem-card:hover { border-color:rgba(67,83,255,0.3); transform:translateY(-2px); box-shadow:0 8px 32px rgba(20,30,55,0.10); }
   .telem-head { padding:1.1rem 1.3rem; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:0.75rem; background:linear-gradient(90deg,rgba(67,83,255,0.08) 0%,transparent 100%); }
@@ -439,7 +461,7 @@
   <div class="hero-stats anim-4">
     <div class="hero-stat"><div class="num">8+</div><div class="label">AI Services</div></div>
     <div class="hero-stat"><div class="num">50</div><div class="label">Event Types</div></div>
-    <div class="hero-stat"><div class="num">5</div><div class="label">Storage Layers</div></div>
+    <div class="hero-stat"><div class="num">6</div><div class="label">Storage Layers</div></div>
     <div class="hero-stat"><div class="num">9</div><div class="label">Enrichment Stages</div></div>
     <div class="hero-stat"><div class="num">8</div><div class="label">Delivery Phases</div></div>
     <div class="hero-stat"><div class="num" style="color:var(--accent2)">3</div><div class="label">Phases In Progress</div></div>
@@ -478,6 +500,9 @@
 <section id="arch-diagram">
   <div class="section-tag">Architecture</div>
   <h2 class="section-title">End-to-End Platform Architecture</h2>
+  <div class="deferred-banner" style="border-color:rgba(194,120,3,0.4);background:rgba(194,120,3,0.07);margin-bottom:1.25rem">
+    📌 &nbsp;<strong>Reference diagram — some labels predate current decisions.</strong> The event catalog is now <strong>50 types</strong> (shown as 38), the long-term warehouse is <strong>Snowflake or Databricks and still open</strong> (shown as Snowflake), and <strong>Redis is deferred</strong> (shown as live). The sections below are authoritative.
+  </div>
   <p class="section-desc">Full view of the AI Services Observability Plane — from service instrumentation through Kafka event processing, multi-layer storage, to the observability dashboards.</p>
   <div style="width:100%;border-radius:20px;overflow:hidden;border:1px solid var(--border);background:var(--card-bg);backdrop-filter:blur(10px);padding:1.5rem;">
     <img src="Observability Arch Latest.png" alt="AI Services Platform Observability Plane — Detailed Architecture" style="width:100%;height:auto;border-radius:12px;display:block;" />
@@ -530,7 +555,7 @@
     <div class="card">
       <div class="card-icon">⚡</div>
       <div class="card-title">Redis — Runtime State</div>
-      <span class="card-tech tech-redis">Redis / ElastiCache · Under Evaluation</span>
+      <span class="card-tech tech-redis">Redis / ElastiCache · Future</span>
       <p class="card-desc">Target: sub-ms budget accumulator (<code>INCRBYFLOAT</code>), shared registry cache (cross-pod), dedup fast-path (<code>SETNX</code>), rate limits, active correlation context. Onboarding in discussion — interim: Postgres <code>budget_accumulator</code> + in-process TTL cache.</p>
     </div>
   </div>
@@ -636,9 +661,8 @@
   <h2 class="section-title">PostgreSQL — Configuration &amp; Analytics</h2>
   <p class="section-desc">Two schemas with distinct roles: <code style="color:var(--accent)">observability.*</code> holds the authoritative registries, SLO records, budget limits, and governance config; <code style="color:var(--accent)">obs_events.*</code> serves as the event analytics store ahead of a future warehouse.</p>
 
-  <div class="deferred-banner" style="border-color:rgba(67,83,255,0.35);background:rgba(67,83,255,0.08);">
-    🔎 &nbsp;A long-term warehouse (<strong>Snowflake or Databricks</strong>) is a <strong>future</strong> addition. <code>obs_events.*</code> is production-ready as a bounded ~90-day window. The swap path is contained — identical <code>event_id</code>/<code>correlation_id</code> model means only the Storage Consumer + dashboard queries change.
-  </div>
+  <p class="cov-note" style="margin-bottom:1.5rem">🔎 A long-term warehouse (<strong>Snowflake or Databricks</strong>) is a <strong>future</strong> addition. <code>obs_events.*</code> is production-ready as a bounded ~90-day window. The swap path is contained — identical <code>event_id</code>/<code>correlation_id</code> model means only the Storage Consumer + dashboard queries change.
+  </p>
 
   <div class="tab-nav" id="pg-tabs">
     <button class="tab-btn active" onclick="switchTab('pg','registries')">Registries</button>
@@ -701,7 +725,7 @@
   </div>
 
   <div id="pg-firehose" class="tab-content">
-    <div class="deferred-banner" style="border-color:rgba(67,83,255,0.35);background:rgba(67,83,255,0.08);">🔎 &nbsp;This schema carries analytics ahead of a future Snowflake-or-Databricks decision. Bounded ~90-day retention (monthly partitions via pg_partman). Identical event_id/correlation_id model — swap is contained to Storage Consumer + dashboard queries.</div>
+    <p class="cov-note" style="margin-bottom:1.25rem">🔎 This schema carries analytics ahead of a future Snowflake-or-Databricks decision. Bounded ~90-day retention (monthly partitions via pg_partman). Identical event_id/correlation_id model — swap is contained to Storage Consumer + dashboard queries.</p>
     <div class="table-wrap">
       <div class="table-header"><span>🔥</span><h3>Event Firehose Tables — <code>obs_events.*</code></h3></div>
       <table>
@@ -1081,10 +1105,22 @@
 <section id="roadmap">
   <div class="section-tag">Delivery Plan</div>
   <h2 class="section-title">8-Phase Delivery Roadmap</h2>
-  <p class="section-desc">Indicative week estimates — not committed dates. Phases 2–4 and Q overlap. <b style="color:var(--accent2)">Status as of August 2026: Phases 0, 1 and 3 are in progress</b> — the foundation IaC, the shared SDK and the enrichment consumer all exist and pass their test suites, but none is finished: they await live-broker integration, hardening, review and deployment to a shared environment. No phase is signed off yet. Phase 2 — instrumenting the 8+ services — begins once the SDK is published.</p>
+  <p class="section-desc"><b style="color:var(--accent2)">Status — August 2026:</b> Phases 0, 1 and 3 are in progress. The foundation IaC, the shared SDK and the enrichment consumer all exist and pass their test suites, but none is finished and <b>nothing is deployed to a shared environment yet</b>.</p>
+  <p class="section-desc" style="margin-bottom:2rem"><b>Next:</b> Phase 2 — instrumenting the services — begins once the SDK is published, and is work for the service teams. Week numbers below are relative effort, not committed dates; Phases 2–4 and Q overlap.</p>
 
   <div class="deferred-banner">
     ⏳ &nbsp;<b>Phases 0, 1 and 3 are in progress</b> — observability-iac, ai-observability-sdk and obs-enrichment-consumer are code-complete and passing their test suites, but none is signed off: live-broker integration, hardening, review and deployment remain. Remaining phases are planned; weeks are relative effort, not calendar dates. <b>Nothing is deployed to a shared environment yet.</b>
+  </div>
+
+  <div class="onboard-box">
+    <div class="ob-head">🔌 What onboarding actually costs a service team</div>
+    <div class="ob-steps">
+      <div class="ob-step"><span class="ob-n">1</span><b>Install</b><span>add <code>ai-observability-sdk</code> to requirements</span></div>
+      <div class="ob-step"><span class="ob-n">2</span><b>Configure</b><span>one <code>AI_OBS_*</code> env block in Helm values — no code</span></div>
+      <div class="ob-step"><span class="ob-n">3</span><b>One line</b><span><code>init_observability(app)</code> at startup</span></div>
+      <div class="ob-step"><span class="ob-n">4</span><b>Decorate</b><span>add <code>@trace_llm</code> / <code>@trace_tool</code> to hot paths</span></div>
+    </div>
+    <div class="ob-foot">Steps 1–3 give request events, traces, JSON logs and <code>/metrics</code> immediately — roughly half a day. Step 4 is incremental and can follow.</div>
   </div>
 
   <div class="ctl-row" id="tl-filter">
@@ -1099,7 +1135,7 @@
       <div class="tl-dot wip"></div>
       <div class="tl-content">
         <div class="tl-phase wip">Phase 0 · ⏳ In Progress</div>
-        <div class="tl-title">Foundation — Infrastructure &amp; Contract</div>
+        <span class="tl-toggle">+ detail</span><div class="tl-title">Foundation — Infrastructure &amp; Contract</div>
         <div class="tl-weeks">Weeks 1–3 · WS-A, WS-X</div>
         <ul class="tl-items">
           <li>Freeze ObsEvent model + 50-type EventType enum</li>
@@ -1120,7 +1156,7 @@
       <div class="tl-dot wip"></div>
       <div class="tl-content">
         <div class="tl-phase wip">Phase 1 · ⏳ In Progress</div>
-        <div class="tl-title">Shared SDK — ai-observability-sdk</div>
+        <span class="tl-toggle">+ detail</span><div class="tl-title">Shared SDK — ai-observability-sdk</div>
         <div class="tl-weeks">Weeks 3–6 · WS-B</div>
         <ul class="tl-items">
           <li><code>emit_event()</code> confluent-kafka fire-and-forget producer</li>
@@ -1139,7 +1175,7 @@
       <div class="tl-dot planned"></div>
       <div class="tl-content">
         <div class="tl-phase planned">Phase 2 · Planned</div>
-        <div class="tl-title">Per-Service Instrumentation — All Services</div>
+        <span class="tl-toggle">+ detail</span><div class="tl-title">Per-Service Instrumentation — All Services</div>
         <div class="tl-weeks">Weeks 4–8 · WS-C</div>
         <ul class="tl-items">
           <li>Agentic Orchestration — LLM cost/tokens, agent events</li>
@@ -1159,7 +1195,7 @@
       <div class="tl-dot wip"></div>
       <div class="tl-content">
         <div class="tl-phase wip">Phase 3 · ⏳ In Progress</div>
-        <div class="tl-title">Enrichment Consumer — obs-enrichment-consumer</div>
+        <span class="tl-toggle">+ detail</span><div class="tl-title">Enrichment Consumer — obs-enrichment-consumer</div>
         <div class="tl-weeks">Weeks 6–10 · WS-D</div>
         <ul class="tl-items">
           <li>9-stage pipeline (validate → trace-ctx → PII redact → enrich → errmap → cost → S3 → SLO → quality-hook)</li>
@@ -1178,7 +1214,7 @@
       <div class="tl-dot planned"></div>
       <div class="tl-content">
         <div class="tl-phase planned">Phase 4 · Planned</div>
-        <div class="tl-title">Storage Consumer + Stores</div>
+        <span class="tl-toggle">+ detail</span><div class="tl-title">Storage Consumer + Stores</div>
         <div class="tl-weeks">Weeks 8–12 · WS-E</div>
         <ul class="tl-items">
           <li>obs-storage-consumer fan-out: ES (hot, per-LOB) + obs_events.* (PG interim) + S3 payloads</li>
@@ -1196,7 +1232,7 @@
       <div class="tl-dot planned"></div>
       <div class="tl-content">
         <div class="tl-phase planned">Phase Q · Planned (overlaps Phase 4–5)</div>
-        <div class="tl-title">Custom AI Quality &amp; Trace Layer (replaces Langfuse)</div>
+        <span class="tl-toggle">+ detail</span><div class="tl-title">Custom AI Quality &amp; Trace Layer (replaces Langfuse)</div>
         <div class="tl-weeks">Weeks 10–15 · WS-Q · Open decision: Langfuse vs custom build</div>
         <ul class="tl-items">
           <li>Prompt registry CRUD + version diff + A/B traffic split</li>
@@ -1213,7 +1249,7 @@
       <div class="tl-dot planned"></div>
       <div class="tl-content">
         <div class="tl-phase planned">Phase 5 · Planned</div>
-        <div class="tl-title">Presentation — Custom Dashboard + Kibana</div>
+        <span class="tl-toggle">+ detail</span><div class="tl-title">Presentation — Custom Dashboard + Kibana</div>
         <div class="tl-weeks">Weeks 12–16 · WS-F</div>
         <ul class="tl-items">
           <li>Custom Dashboard Service live (FastAPI + React + Tremor)</li>
@@ -1230,7 +1266,7 @@
       <div class="tl-dot planned"></div>
       <div class="tl-content">
         <div class="tl-phase planned">Phase 6 · Planned</div>
-        <div class="tl-title">Observability Chatbot — obs-chatbot</div>
+        <span class="tl-toggle">+ detail</span><div class="tl-title">Observability Chatbot — obs-chatbot</div>
         <div class="tl-weeks">Weeks 15–19 · WS-G</div>
         <ul class="tl-items">
           <li>IntentClassifier (internal LLM)</li>
@@ -1247,7 +1283,7 @@
       <div class="tl-dot optional"></div>
       <div class="tl-content">
         <div class="tl-phase optional">Phase 7 · Optional — Planned</div>
-        <div class="tl-title">Advanced: Anomaly Detection + Batch RCA</div>
+        <span class="tl-toggle">+ detail</span><div class="tl-title">Advanced: Anomaly Detection + Batch RCA</div>
         <div class="tl-weeks">Weeks 19–24 · WS-H · Not on current architecture diagram — scoped as optional</div>
         <ul class="tl-items">
           <li>Custom Isolation Forest + Kibana ML log anomaly detection</li>
@@ -1794,6 +1830,20 @@
     sd.innerHTML = `<h4>${d.t}</h4><p><b>What it does.</b> ${d.w}</p>
       <p><b>Why it exists.</b> ${d.y}</p><p class="kv"><b>On failure:</b> ${d.f}</p>`;
   }));
+
+  /* --- 4. collapsible phase cards (keeps the delivery plan scannable) --- */
+  document.querySelectorAll('.tl-content').forEach(c => {
+    const t = c.querySelector('.tl-toggle');
+    c.addEventListener('click', () => {
+      const open = c.classList.toggle('open');
+      if (t) t.textContent = open ? '– detail' : '+ detail';
+    });
+  });
+  // open the in-progress phases by default — that is what people came to read
+  document.querySelectorAll('.tl-content').forEach(c => {
+    if (c.querySelector('.tl-phase.wip')) { c.classList.add('open');
+      const t=c.querySelector('.tl-toggle'); if(t) t.textContent='– detail'; }
+  });
 
   /* --- 2. Event-type catalog: search + category filter --- */
   const grid = document.getElementById('evt-grid');
