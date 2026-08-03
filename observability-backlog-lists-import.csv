@@ -1,0 +1,72 @@
+﻿Title,Status,Phase,Workstream,Component,Priority,Type,Assigned To,Target Weeks,Notes
+Freeze ObsEvent model + 50-type EventType enum,Doing,Phase 0 — Foundation,"WS-A, WS-X",observability-iac,High,Build,,Weeks 1–3,
+Create Kafka topics (raw / processed / dead-letter),Doing,Phase 0 — Foundation,"WS-A, WS-X",observability-iac,High,Build,,Weeks 1–3,
+Apply PostgreSQL observability schema + seed catalogs,Doing,Phase 0 — Foundation,"WS-A, WS-X",observability-iac,High,Build,,Weeks 1–3,
+Apply PostgreSQL obs_events schema (ahead of a future warehouse),Doing,Phase 0 — Foundation,"WS-A, WS-X",observability-iac,High,Build,,Weeks 1–3,
+Apply Elasticsearch index templates + ILM via IaC,Doing,Phase 0 — Foundation,"WS-A, WS-X",observability-iac,High,Build,,Weeks 1–3,
+Create S3 buckets + lifecycle (SSE-KMS),Doing,Phase 0 — Foundation,"WS-A, WS-X",observability-iac,High,Build,,Weeks 1–3,
+Confirm interim Redis stand-ins (Postgres budget_accumulator + in-process TTL cache),Doing,Phase 0 — Foundation,"WS-A, WS-X",observability-iac,High,Verify,,Weeks 1–3,
+Scaffold observability-iac CI pipeline,Doing,Phase 0 — Foundation,"WS-A, WS-X",observability-iac,High,Build,,Weeks 1–3,
+Provision Grafana Tempo (S3 backend) + Prometheus + kminion + Fluent Bit DaemonSet,Doing,Phase 0 — Foundation,"WS-A, WS-X",observability-iac,High,Build,,Weeks 1–3,
+Apply to a real environment,Todo,Phase 0 — Foundation,"WS-A, WS-X",observability-iac,High,Build,,Weeks 1–3,Open remaining work in observability-iac/
+CI dry-run against live Postgres,Todo,Phase 0 — Foundation,"WS-A, WS-X",observability-iac,High,Build,,Weeks 1–3,Open remaining work in observability-iac/
+Secrets per env,Todo,Phase 0 — Foundation,"WS-A, WS-X",observability-iac,High,Build,,Weeks 1–3,Open remaining work in observability-iac/
+emit_event() confluent-kafka fire-and-forget producer,Doing,Phase 1 — Shared SDK,WS-B,ai-observability-sdk,High,Build,,Weeks 3–6,
+init_tracing() OTEL + W3C traceparent + Grafana Tempo OTLP,Doing,Phase 1 — Shared SDK,WS-B,ai-observability-sdk,High,Build,,Weeks 3–6,
+configure_logging() structlog JSON + contextvars,Doing,Phase 1 — Shared SDK,WS-B,ai-observability-sdk,High,Build,,Weeks 3–6,
+"ObservabilityMiddleware (binds correlation_id, exposes /metrics)",Doing,Phase 1 — Shared SDK,WS-B,ai-observability-sdk,High,Build,,Weeks 3–6,
+@trace_llm / @trace_rag / @trace_agent / @trace_tool decorators,Doing,Phase 1 — Shared SDK,WS-B,ai-observability-sdk,High,Build,,Weeks 3–6,
+get_prompt() prompt registry fetch + prompt_hash,Doing,Phase 1 — Shared SDK,WS-B,ai-observability-sdk,High,Build,,Weeks 3–6,
+Unit + contract tests; CI gate on schema validation,Doing,Phase 1 — Shared SDK,WS-B,ai-observability-sdk,High,Build,,Weeks 3–6,
+Publish 0.1.0,Todo,Phase 1 — Shared SDK,WS-B,ai-observability-sdk,High,Build,,Weeks 3–6,Open remaining work in ai-observability-sdk/
+COIN-JWT claim extraction,Todo,Phase 1 — Shared SDK,WS-B,ai-observability-sdk,High,Build,,Weeks 3–6,Open remaining work in ai-observability-sdk/
+Pricing review,Todo,Phase 1 — Shared SDK,WS-B,ai-observability-sdk,High,Build,,Weeks 3–6,Open remaining work in ai-observability-sdk/
+"Instrument Agentic Orchestration — LLM cost/tokens, agent events",Backlog,Phase 2 — Instrumentation,WS-C,Agentic Orchestration,High,Build,,Weeks 4–8,
+"Instrument Agent Executor — numeric latency_ms, estimated_cost, finish_reason",Backlog,Phase 2 — Instrumentation,WS-C,Agent Executor,High,Build,,Weeks 4–8,
+"Instrument GSSP GS — cost calc, file/attachment telemetry",Backlog,Phase 2 — Instrumentation,WS-C,GSSP GS,High,Build,,Weeks 4–8,
+"Instrument GSSP QS — RAG quality fields, cache-miss cost",Backlog,Phase 2 — Instrumentation,WS-C,GSSP QS,High,Build,,Weeks 4–8,
+"Instrument GSSP RS — per-stage latency, embedding model/tokens/cost",Backlog,Phase 2 — Instrumentation,WS-C,GSSP RS,High,Build,,Weeks 4–8,
+"Instrument Consumer Service — first Kafka emission, document telemetry, queue depth",Backlog,Phase 2 — Instrumentation,WS-C,Consumer Service,High,Build,,Weeks 4–8,
+"Instrument Data Ingestion — success-path events, UTC timestamps, cost",Backlog,Phase 2 — Instrumentation,WS-C,Data Ingestion,High,Build,,Weeks 4–8,
+"Instrument User Feedback — FEEDBACK_SUBMITTED event, correlation_id linkage, redaction",Backlog,Phase 2 — Instrumentation,WS-C,User Feedback,High,Build,,Weeks 4–8,
+No plaintext SOE_ID / raw body in any raw topic sample,Backlog,Phase 2 — Instrumentation,WS-C,observability-iac,High,Verify,,Weeks 4–8,
+9-stage pipeline (validate → trace-ctx → PII redact → enrich → errmap → cost → S3 → SLO → quality-hook),Doing,Phase 3 — Enrichment,WS-D,obs-enrichment-consumer,High,Build,,Weeks 6–10,
+"GLiNER in-process NER (loads once at startup, ~512Mi)",Doing,Phase 3 — Enrichment,WS-D,obs-enrichment-consumer,High,Build,,Weeks 6–10,
+Postgres budget_accumulator atomic upsert (no Redis),Doing,Phase 3 — Enrichment,WS-D,obs-enrichment-consumer,High,Build,,Weeks 6–10,
+BUDGET_THRESHOLD_EXCEEDED event on cap breach,Doing,Phase 3 — Enrichment,WS-D,obs-enrichment-consumer,High,Build,,Weeks 6–10,
+Invalid events → ai-obs-dead-letter with reason + replay path,Doing,Phase 3 — Enrichment,WS-D,obs-enrichment-consumer,High,Build,,Weeks 6–10,
+SLO burn-rate 1h + 6h → daily_slo_compliance row,Doing,Phase 3 — Enrichment,WS-D,obs-enrichment-consumer,High,Build,,Weeks 6–10,
+"K8s: 3 replicas, manual commit (commit only after produce to processed)",Doing,Phase 3 — Enrichment,WS-D,obs-enrichment-consumer,High,Build,,Weeks 6–10,
+Live-broker integration,Todo,Phase 3 — Enrichment,WS-D,obs-enrichment-consumer,High,Build,,Weeks 6–10,Open remaining work in obs-enrichment-consumer/
+GLiNER prod image,Todo,Phase 3 — Enrichment,WS-D,obs-enrichment-consumer,High,Build,,Weeks 6–10,Open remaining work in obs-enrichment-consumer/
+Deploy,Todo,Phase 3 — Enrichment,WS-D,obs-enrichment-consumer,High,Build,,Weeks 6–10,Open remaining work in obs-enrichment-consumer/
+"obs-storage-consumer fan-out: ES (hot, per-LOB) + obs_events.* (PG interim) + S3 payloads",Backlog,Phase 4 — Storage,WS-E,obs-storage-consumer,High,Build,,Weeks 8–12,
+Control-plane rows → observability.* (budget/SLO),Backlog,Phase 4 — Storage,WS-E,obs-storage-consumer,High,Build,,Weeks 8–12,
+"Idempotent writes (ES _id=event_id, PG ON CONFLICT DO NOTHING)",Backlog,Phase 4 — Storage,WS-E,obs-storage-consumer,High,Build,,Weeks 8–12,
+obs_events batch writer (5s/1000 rows COPY → staging),Backlog,Phase 4 — Storage,WS-E,obs-storage-consumer,High,Build,,Weeks 8–12,
+Monthly partition creation via pg_partman,Backlog,Phase 4 — Storage,WS-E,obs-storage-consumer,High,Build,,Weeks 8–12,
+"kminion shows all 3 consumer groups (enrichment, storage, eval)",Backlog,Phase 4 — Storage,WS-E,obs-storage-consumer,High,Verify,,Weeks 8–12,
+Dead-letter replay script verified,Backlog,Phase 4 — Storage,WS-E,obs-storage-consumer,High,Verify,,Weeks 8–12,
+Prompt registry CRUD + version diff + A/B traffic split,Backlog,Phase Q — AI Quality,WS-Q,obs-eval-service,Medium,Build,,Weeks 10–15,Open decision: Langfuse vs custom build
+"obs-eval-service worker — faithfulness, hallucination, answer-relevance judges",Backlog,Phase Q — AI Quality,WS-Q,obs-eval-service,Medium,Build,,Weeks 10–15,Open decision: Langfuse vs custom build
+LLM-as-judge output → ai-obs-quality-scores-* + obs_events.quality_scores,Backlog,Phase Q — AI Quality,WS-Q,obs-eval-service,Medium,Build,,Weeks 10–15,Open decision: Langfuse vs custom build
+Trace Explorer API GET /api/v1/trace/{correlation_id},Backlog,Phase Q — AI Quality,WS-Q,obs-eval-service,Medium,Build,,Weeks 10–15,Open decision: Langfuse vs custom build
+"React waterfall/tree page with per-span timing, tokens, cost, prompt version, eval scores",Backlog,Phase Q — AI Quality,WS-Q,obs-eval-service,Medium,Build,,Weeks 10–15,Open decision: Langfuse vs custom build
+Feedback → trace join surfaced in Trace Explorer,Backlog,Phase Q — AI Quality,WS-Q,obs-eval-service,Medium,Build,,Weeks 10–15,Open decision: Langfuse vs custom build
+Custom Dashboard Service live (FastAPI + React + Tremor),Backlog,Phase 5 — Presentation,WS-F,obs-dashboard,Medium,Build,,Weeks 12–16,
+COIN-JWT auth + per-LOB index-level RBAC,Backlog,Phase 5 — Presentation,WS-F,obs-dashboard,Medium,Build,,Weeks 12–16,
+"Pages: Platform Overview, Cost Governance, Business KPIs, Kafka Health, RAG Quality, Anomaly View, Feedback Trends, Trace Explorer",Backlog,Phase 5 — Presentation,WS-F,obs-dashboard,Medium,Build,,Weeks 12–16,
+All 8 Kibana dashboards live with per-LOB isolation,Backlog,Phase 5 — Presentation,WS-F,obs-dashboard,Medium,Build,,Weeks 12–16,
+Prometheus scraping via custom dashboard backend (PromQL),Backlog,Phase 5 — Presentation,WS-F,obs-dashboard,Medium,Build,,Weeks 12–16,
+"Grafana confirmed internal-only (ClusterIP, no ingress, platform team via port-forward)",Backlog,Phase 5 — Presentation,WS-F,obs-dashboard,Medium,Verify,,Weeks 12–16,
+IntentClassifier (internal LLM),Backlog,Phase 6 — Chatbot,WS-G,obs-chatbot,Medium,Build,,Weeks 15–19,
+MetricSemanticLayer (metric_catalog),Backlog,Phase 6 — Chatbot,WS-G,obs-chatbot,Medium,Build,,Weeks 15–19,
+AccessController (LOB RBAC from application_registry),Backlog,Phase 6 — Chatbot,WS-G,obs-chatbot,Medium,Build,,Weeks 15–19,
+QueryPlanner (obs_events / ES / S3 / Trace Explorer API),Backlog,Phase 6 — Chatbot,WS-G,obs-chatbot,Medium,Build,,Weeks 15–19,
+AnswerGenerator with source attribution + dashboard deep-links,Backlog,Phase 6 — Chatbot,WS-G,obs-chatbot,Medium,Build,,Weeks 15–19,
+Natural-language answers joining AI-quality + infra context on correlation_id,Backlog,Phase 6 — Chatbot,WS-G,obs-chatbot,Medium,Build,,Weeks 15–19,
+Custom Isolation Forest + Kibana ML log anomaly detection,Backlog,Phase 7 — Anomaly (Optional),WS-H,obs-anomaly,Low,Build,,Weeks 19–24,Not on current architecture diagram — scoped as optional
+Anomaly events → ai-obs-anomalies-* → Anomaly View page,Backlog,Phase 7 — Anomaly (Optional),WS-H,obs-anomaly,Low,Build,,Weeks 19–24,Not on current architecture diagram — scoped as optional
+Nightly RCA CronJob — join errors ↔ traces ↔ KPI aggregates,Backlog,Phase 7 — Anomaly (Optional),WS-H,obs-anomaly,Low,Build,,Weeks 19–24,Not on current architecture diagram — scoped as optional
+RCA report → S3 rca-reports/ + weekly Slack/email digest,Backlog,Phase 7 — Anomaly (Optional),WS-H,obs-anomaly,Low,Build,,Weeks 19–24,Not on current architecture diagram — scoped as optional
+LSTM for metric-level anomalies (advanced),Backlog,Phase 7 — Anomaly (Optional),WS-H,obs-anomaly,Low,Build,,Weeks 19–24,Not on current architecture diagram — scoped as optional
