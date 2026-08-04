@@ -254,7 +254,31 @@ This is the decision that makes the feature possible at all. If AG-UI events go 
 
 Moving the destination to a platform-owned topic breaks that circularity. Orchestration owns both ends, and the caller owns nothing.
 
-**Why a new topic rather than reusing the existing internal one:** the internal topic is control plane — it carries agent dispatch. AG-UI is content, at message or token granularity. Mixing them risks adding lag to dispatch itself, and forces one retention policy on two very different kinds of data. A separate topic also means the consumer never has to tell AG-UI events apart from task payloads.
+### Why a *new* topic, and not the existing internal one
+
+Both are platform-owned, so "just reuse what's there" is a fair question. The answer is that the internal topic and an AG-UI topic are not the same *kind* of traffic, and Kafka makes you pick one retention policy, one volume profile, and one blast radius per topic. Forcing two unlike things onto one topic doesn't save infrastructure — it just makes the riskier one inherit the weaknesses of the safer one.
+
+| | Internal topic | AG-UI topic |
+|---|---|---|
+| Traffic class | Control plane — dispatch | Content — narration |
+| Volume per execution | ~2 messages per agent hop | Dozens to hundreds |
+| Latency sensitivity | High — this is the path that starts work | Low — a dropped frame is cosmetic |
+| Useful lifetime | Long enough to recover a run | Until the stream closes — hours |
+| Consumers | Both services' core loops | Read-only taps |
+
+Row by row, what actually goes wrong if you merge them:
+
+**Traffic class — control plane vs. narration.** The internal topic is the nervous system: `AGENT_EXECUTION_REQUEST` *causes* the executor to run, and `AGENT_EXECUTION_FINAL_RESPONSE` *causes* the caller to get an answer. If one of those messages is delayed, execution is delayed. An AG-UI event, by contrast, is a comment about work already happening — if `TOOL_CALL_START` is late or lost, nothing about the execution changes; a UI just shows a status a second later, or not at all. These are two different reliability contracts. Putting them on the same topic means every consumer, every retention setting, and every capacity plan has to satisfy the *stricter* contract for traffic that never needed it.
+
+**Volume — 2 vs. dozens to hundreds.** A three-hop agent plan puts roughly 4–6 messages on the internal topic total. The same execution can put out a `RUN_STARTED`, several `TOOL_CALL_START/ARGS/END` triples, a run of `TEXT_MESSAGE_CONTENT` chunks, and a `RUN_FINISHED` — easily 50–200+ messages, an order of magnitude more. Merge the topics and the dispatch channel that starts and ends every execution is now mostly filled with narration.
+
+**Latency sensitivity — this is the sharpest risk.** Picture it concretely: a multi-agent plan is mid-run, generating a burst of `TEXT_MESSAGE_CONTENT` deltas as one agent streams its answer. If those deltas sit on the same topic and partition as dispatch, the `AGENT_EXECUTION_REQUEST` for the *next* agent in the plan can end up queued behind them. **The commentary about the work ends up slowing down the work.** That is the one failure mode this whole design exists to avoid — observability traffic must never be able to throttle execution.
+
+**Useful lifetime — hours vs. "long enough to survive a restart."** Internal-topic messages need to survive long enough that a consumer restart can still pick them up and finish an execution correctly — that's a durability requirement. AG-UI events are useful only while a caller has an SSE connection open; once that connection closes or hits the 870-second cap, nobody will ever read those messages again. One shared retention setting forces a bad trade either way: keep it short and you risk losing a dispatch message that mattered, or keep it long and you're paying storage for high-volume narration nobody will read again.
+
+**Consumers — core loops vs. read-only taps.** The internal topic's consumers are the actual execution engines of both services, with real consumer groups, committed offsets, and rebalances that matter if they go wrong. The AG-UI consumers are cheap, throwaway taps (`assign()`, no group — see below) that exist purely to serve HTTP connections. Bolting extra read traffic and — worse — extra *message-shape filtering* (every consumer would need to tell a task payload from an AG-UI event on every single read) onto the topic that must never misbehave is exactly the kind of complexity you don't want near your control plane.
+
+**The net effect of a separate topic:** the internal topic keeps behaving exactly as it does today, under exactly the load it has today. The AG-UI topic can be tuned, scaled, or even wiped and rebuilt independently, because nothing durable depends on it surviving. That independence is the actual point — not saving one topic's worth of infrastructure.
 
 ### Why `assign()` with no consumer group
 
