@@ -1,170 +1,218 @@
-# Sync/Streaming API — Implementation Plan (rev. 2026-08-04)
+# Sync/Streaming API — Implementation Plan (rev. 4, 2026-08-04)
 
-Supersedes the previous revision. The earlier plan was built on `SYNC-API-DISCOVERY-REPORT.md`, which described code that does not exist in these repos. This revision is based on the `audit_log` table and executor source read directly.
+Based on `DISCOVERY-v2.md` plus direct reads of `excutor/models/agui_events.py` and `excutor/service/agui_kafka_stream_service.py`.
 
 ---
 
-## What changed, and why this got much smaller
+## Two delivery modes, chosen by the caller
 
-`gssp_agentic.audit_log` already records **every step of every execution, synchronously, in order**. It is the event source. There is nothing to instrument and no table to create.
+| | **Async (existing, unchanged)** | **Sync (new)** |
+|---|---|---|
+| Caller has Kafka | Yes | **No — that is the point** |
+| Endpoint | `POST .../task-executor` etc. | `POST .../task-executor/stream` |
+| Immediate response | `{"x_correlation_id": ..., "message": "Execution Initiated Successfully"}` | `text/event-stream`, held open |
+| Step visibility | None | Every AG-UI event live |
+| Final result delivered via | Caller's Kafka response topic, or webhook | **The SSE stream itself** |
+| Caller infrastructure needed | Broker credentials, a topic, a consumer | An HTTP client |
 
-Everything below follows from that:
+Teams with Kafka keep using the existing architecture untouched. Teams without Kafka use the sync endpoints and need nothing but HTTP. Nothing about the async path changes.
 
-| Previously planned | Now |
-|---|---|
-| New `agent_run_steps` table + Alembic migration + ORM models in two services | **Deleted.** No schema change. |
-| Instrument 7 sites in the executor step loop | **Deleted.** Already instrumented. |
-| Per-run `seq` counter, terminal-event guarantee, `ON CONFLICT` handling | **Deleted.** `sequence_id` and the `finally`-written terminal row already exist. |
-| Kafka `agent.step.events` producer | **Deferred** to an optional upgrade (see the last section). |
-| Per-worker Kafka consumer, in-memory registry, background thread, startup hooks | **Deleted.** Postgres is the fan-in point; see below. |
-| Key everything on `run_id` | Key everything on **`x_correlation_id`**. |
+**Two consequences that drive the whole design:**
 
-**The executor repository does not change at all.** The entire feature is orchestration-side.
+1. **The event source cannot live on caller infrastructure.** AG-UI events must be published to a platform-owned topic, or a Kafka-less caller produces no events at all. This is why rev. 3 was wrong — see below.
+2. **The final result must travel on the SSE stream.** Today the result reaches the caller through `ResponseService` — webhook or Kafka. A caller with neither would receive every step and then a closed connection with no answer. The stream must emit the final response payload as its last frame, and must not depend on `ResponseService` succeeding.
 
-### ⚠️ Report references are withdrawn
+### Why rev. 3 failed
 
-The previous revision cited `app/agent/runner.py`, `app/services/kafka_consumer.py`, an `agent_runs` table, and an `AgentRunRequest` model. The real executor lives under `excutor/core/…` (`excutor/core/agent/runner.py`, `excutor/core/db/audit_table_pg_store.py`). Treat every `file:line` from the discovery report as unverified, including the Kafka topic names, partition counts, and `max.poll.interval.ms` value quoted in the blockers below.
+`AGUIKafkaStreamService.create()` resolves its topic from the caller's own response config:
+
+```python
+# agui_kafka_stream_service.py:96-109
+if not (usecase_config.metadata and usecase_config.metadata.ag_ui_events_streaming):
+    return None
+kafka_env = build_kafka_environment(usecase_config.response_config.kafka)
+if kafka_env is None:
+    return None
+```
+
+A caller without Kafka has no `response_config.kafka`, so `create()` returns `None` and **no AG-UI events are produced at all**. Bridging the caller's response topic to SSE would therefore have worked only for callers who already consume Kafka — precisely the ones who do not need this API.
+
+**AG-UI events must be published to a platform-owned topic.** That is a change to the executor, and it is unavoidable: the event source cannot depend on caller infrastructure.
+
+---
+
+## Architecture
+
+```
+Caller (no Kafka)
+  │  POST /api/v1/agentic-orchestration/task-executor/stream
+  │  X-Correlation-ID, X-Authorization-Coin, Config-ID, X-Application-ID
+  ▼
+Orchestration ──dispatch──► internal topic ──► Executor
+  │                                              │
+  │                                    AGUIKafkaStreamService
+  │                                              │
+  │         ┌────────────────────────────────────┴───────────────┐
+  │         ▼                                                    ▼
+  │  agui topic (PLATFORM-OWNED, new)          caller response topic (optional,
+  │         │                                   unchanged, only if configured)
+  │         ▼
+  └── assign() at OFFSET_END, no group
+      → registry[x_correlation_id] → SSE frames ──► Caller
+```
+
+The caller touches Kafka nowhere. Existing Kafka-consuming callers keep their response topic exactly as today.
+
+---
+
+## Executor change — small, and currently inert
+
+One file: `excutor/service/agui_kafka_stream_service.py`.
+
+**0. Make streaming request-scoped, not use-case-scoped.** Add an optional defaulted field to the internal envelope:
+
+```python
+# excutor/models/task_payload.py
+ag_ui_streaming: bool = False
+```
+
+The `/stream` endpoints set it `True`; the async endpoints leave it alone. `create()` then enables on `task_payload.ag_ui_streaming or usecase_config.metadata.ag_ui_events_streaming`.
+
+Calling `/stream` becomes the opt-in, so no per-use-case config can be forgotten — which matters because the failure mode of forgetting is a stream that connects successfully and emits nothing but keepalives for 870 seconds. Async callers generate zero AG-UI traffic. The existing use-case flag still works for anyone wanting always-on.
+
+**Deploy the executor before orchestration** so the new field is understood before it is sent. Check `TaskPayloadModel.model_config` first: if it sets `extra='forbid'`, an un-upgraded executor rejects the whole message rather than ignoring the field.
+
+**1. Decouple the flag from the caller's Kafka.** Never require `response_config.kafka`. Resolve a platform Kafka environment from Helm config instead.
+
+**2. Publish to the platform topic.** Decide the destination based on the Phase 0 check:
+
+- **If no use case currently has `ag_ui_events_streaming` enabled** (the expected finding): publish to the platform topic **only**. There is no existing behaviour to preserve, and this is the smaller change.
+- **If some use case does have it enabled**: dual-publish — platform topic always, plus the caller's response topic when `response_config.kafka` is configured, so that consumer sees no change.
+
+`_do_publish` already swallows all exceptions (`:141-147`), so a failure on any destination cannot affect execution.
+
+**3. Everything else stays.** Same `to_dict()` payloads, same key (`self._thread_id` = `x_correlation_id`), same fire-and-forget `_schedule_publish`.
+
+**Why the risk is low:** this class returns `None` and does nothing unless `ag_ui_events_streaming` is enabled on a use case — which today is presumably no use case at all. You are modifying code that does not currently execute. Verify that assumption first (see Phase 0).
+
+**New config**, both repos' Helm values: `internal_kafka_agui_events_topic: 181229_agui_events_NAM_001_{env}`. Reuse the existing `internal_kafka_bootstrap_servers` and credentials.
+
+### Why a dedicated topic rather than reusing the internal one
+
+The internal topic carries agent **dispatch** — `AGENT_EXECUTION_REQUEST` and `AGENT_EXECUTION_FINAL_RESPONSE`. AG-UI emits `TEXT_MESSAGE_CONTENT` at roughly token granularity. Putting that volume onto the control-plane topic risks adding lag to execution dispatch itself, and forces one retention policy on two very different kinds of data. A separate topic also lets the consumer read without discriminating AG-UI events from task payloads.
 
 ---
 
 ## The event source
 
-`gssp_agentic.audit_log`, defined in `excutor/core/db/audit_table_pg_store.py` (`AuditTablePGStore._create_audit_log_table`).
+`AGUIKafkaStreamService` publishes AG-UI protocol events during execution, emitted from `excutor/service/agent_execution_service.py`:
 
-Written by `excutor/core/agent/runner.py:24-120` via `await audit_store.insert_audit_log(...)` at each boundary, blocking until the insert commits (`audit_table_pg_store.py:56-59`).
+| Event | Site |
+|---|---|
+| `RunStartedEvent` | `:94` |
+| `ToolCallStartEvent`, `ToolCallArgsEvent`, `ToolCallEndEvent` | `:111-114` |
+| `TextMessageStartEvent`, `TextMessageContentEvent`, `TextMessageEndEvent` | `:139` |
+| `StateSnapshotEvent`, `RunFinishedEvent` | `:162-163` |
+| `RunErrorEvent` | `:154` |
 
-| `event_type` | `agent_status` / `tool_status` | When |
-|---|---|---|
-| `INVOCATION` | `STARTED` | before the step loop |
-| `LLM_REQUEST` | `RUNNING` | before each LLM call |
-| `LLM_RESPONSE` | `RUNNING` | after each LLM call (carries token counts) |
-| `TOOL_CALL` | `STARTED` | before each tool execution |
-| `TOOL_RESULT` | `COMPLETED` | after each tool returns |
-| `ERROR` | `FAILED` | on any unhandled exception |
-| `INVOCATION` | `COMPLETED` / `FAILED` | in `finally` — always |
+`excutor/models/agui_events.py` is a faithful implementation of the AG-UI spec (14 event types). AG-UI's canonical transport is SSE, so the bridge forwards payloads unchanged and standard AG-UI clients work against this endpoint unmodified.
 
-Columns relevant here: `id` (autoincrement PK), `x_correlation_id` (groups one execution), `sequence_id` (monotonic within an execution), `event_type`, `agent_status`, `tool_name`, `tool_status`, `agent_name`, `root_agent_name`, `model_name`, `input_args`, `agent_response`, `error_type`, `error_message`, `input_token_count` / `output_token_count` / `total_token_count`, `start_timestamp`, `end_timestamp`, `created_at`, `user_id`, `session_id`, `invocation_id`, `usecase_name`, `function_call_id`.
+> **Unverified: whether text is streamed incrementally.** All three text events sit at one site (`agent_execution_service.py:139`), which matches the `emit_text_message()` convenience helper (`agui_kafka_stream_service.py:207-212`) — it generates a `message_id` and fires start → content → end for one *complete* message. If so, you get one `TEXT_MESSAGE_CONTENT` per message, **not** per token. The models and `emit_text_message_content()` support incremental deltas, but the call site may not use them. Check line 139 before promising token-level streaming to anyone; it materially changes how the sync API feels.
 
-`root_agent_name` and `get_sub_executions_by_root_agent()` (`audit_table_pg_store.py:68-75`) indicate **sub-agent executions**. Nested agents share the `x_correlation_id`, so their events stream naturally with no extra work — do not filter them out.
+### Four facts that decide the implementation
+
+**1. Route by the Kafka message key.**
+
+```python
+# :69, :136-139
+self._thread_id = task_payload.x_correlation_id
+await self._producer.push_message_async(topic=self._topic, key=self._thread_id, message=event_dict)
+```
+
+Only `RunStartedEvent` and `RunFinishedEvent` carry any run identifier. `TextMessageContentEvent` has only `message_id` and `delta`; `ToolCallArgsEvent` only `tool_call_id` and `delta`; `StateDeltaEvent` only `delta`. There is **no correlation field on most event types** — filtering on the payload silently drops everything after `RUN_STARTED`.
+
+**2. `run_id` is NOT the correlation id.** `self._run_id = str(uuid.uuid4())` (`:70`), fresh per agent execution. The docstring at `agui_events.py:91` calling it a "correlation ID" is wrong. On the wire, `threadId` is the correlation id.
+
+**3. One stream carries MULTIPLE `RUN_STARTED`/`RUN_FINISHED` pairs.** `create()` is called per agent execution (`agent_execution_service.py:42`); a multi-agent plan runs several hops under one `x_correlation_id`. **Never terminate on `RUN_FINISHED`** — it would truncate the stream after the first agent and present a partial result as complete. Forward those frames as hop boundaries.
+
+**4. Forward payloads verbatim; there is no sequence number.** `to_dict()` is `model_dump(mode="json", by_alias=True)` with `alias_generator=to_camel` (`agui_events.py:66-79`), so the JSON is already correct AG-UI camelCase — `threadId`, `runId`, `messageId`, `toolCallId`. Do not deserialise, rename, or wrap. `BaseEvent` has only `type` and `timestamp`; ordering comes from Kafka partition order, guaranteed because messages are keyed by correlation id.
+
+### Terminating the stream — and delivering the answer on it
+
+Run a **second** consumer on the fixed internal topic (`internal_kafka_agentic_events_topic`), also `assign()` at `OFFSET_END` with no group, watching for `event_type == AGENT_EXECUTION_FINAL_RESPONSE` with a matching `x_correlation_id`.
+
+**Emit that payload to the client as the final SSE frame, then close.** For a Kafka-less caller this frame *is* the answer — the same body that `ResponseService` would have posted to a webhook or produced to a response topic. Suggested framing: `event: execution.completed`, `data: <the final response payload>`. On the failure path the same applies: orchestration assembles an error response at `message_processing_service.py:90-99` (`x_correlation_id`, `status: FAILED`, `response`, `event_type`, `state`) — emit it as `event: execution.failed` and close.
+
+The stream must **not** depend on `ResponseService` succeeding. A sync caller may have neither a webhook nor a response topic configured; whatever that path does or fails to do is irrelevant to the SSE response.
+
+This is additive: it does not touch the existing `agentic_internal_planner_group_{topic}` consumer or `process_message`.
 
 ---
 
-## Design: SSE, sourced by polling `audit_log`
-
-```
-POST /api/v1/agentic-orchestration/task-executor/stream
-  │
-  ├─ auth (existing dependency, unchanged)
-  ├─ resolve x_correlation_id  (incoming X-Correlation-ID header, else generate)
-  ├─ dispatch to the executor  (byte-identical copy of the async twin's dispatch)
-  └─ return StreamingResponse(text/event-stream)
-          │
-          └─ every ~500ms:
-             SELECT … FROM gssp_agentic.audit_log
-             WHERE x_correlation_id = :cid AND sequence_id > :last
-             ORDER BY sequence_id, id
-             → emit each row as an SSE event, advance :last
-             → stop on INVOCATION + (COMPLETED|FAILED)
-```
-
-### Why polling, and what it removes
-
-Postgres is already the shared fan-in point, so the hard part of the original design evaporates:
-
-- **No in-memory registry.** Any worker can serve any execution's stream.
-- **No Kafka consumer, no background thread, no consumer groups, no offset handling.**
-- **No startup/shutdown hooks** — which removes the `lifespan` trap entirely (passing `lifespan=` to `FastAPI()` silently disables existing `@app.on_event` handlers). Nothing in `main.py` changes except one `include_router` line.
-- **No 4-uvicorn-worker fan-in problem.** It was only a problem because events arrived on a per-process Kafka consumer.
-- **No new Kafka topic** to create on the cluster.
-
-Latency cost is ≤ one poll interval — invisible against steps that take seconds. At the executor's current concurrency ceiling this is a handful of indexed lookups per second.
-
----
-
-## Prerequisites — verify all three before building
-
-**1. Can orchestration know the `x_correlation_id` before the executor writes it?** This is the load-bearing assumption. The stream must query on the same value the executor stamps onto its audit rows. Your logs show `X-Correlation-ID` already flowing as a request header, so a middleware almost certainly sets or generates it — confirm it is propagated into the executor and lands in `audit_log.x_correlation_id` unchanged. If orchestration cannot predict this value, nothing else in this plan works.
-
-**2. Is there an index on `x_correlation_id`?** The table definition shows a primary key on `id` and no other index. Polling an unindexed column on a growing audit table means a sequential scan twice a second per stream — that would degrade the database for everything, including the endpoints you are protecting. If it is missing:
-
-```sql
-CREATE INDEX CONCURRENTLY idx_audit_log_correlation
-  ON gssp_agentic.audit_log (x_correlation_id, sequence_id);
-```
-
-`CONCURRENTLY` avoids taking a write lock. This is the one schema change that may be required, it is purely additive, and it also speeds up the existing `get_sub_executions_by_root_agent()` reader.
-
-**3. Does the orchestration DB user have `SELECT` on `gssp_agentic.audit_log`?** Different schema, possibly a different role. Confirm the grant rather than discovering it at runtime.
-
----
-
-## What to build
-
-All in `agentic-orchestration`. Four new routes, one new module.
+## What to build in orchestration
 
 | Existing (frozen) | New |
 |---|---|
-| `POST .../task-executor` | `POST .../task-executor/stream` |
-| `POST .../conversational-task-executor` | `POST .../conversational-task-executor/stream` |
-| `POST .../native-conversational-task-executor` | `POST .../native-conversational-task-executor/stream` |
-| `POST .../agent-testing` | `POST .../agent-testing/stream` |
-
-`agent-testing` is tagged under both *Task Execution* and *Testing* in the current OpenAPI — one route, listed twice. Four new routes, not five.
+| `POST .../task-executor` (`orchestration/api/api.py:55`) | `POST .../task-executor/stream` |
+| `POST .../conversational-task-executor` (`:107`) | `.../conversational-task-executor/stream` |
+| `POST .../native-conversational-task-executor` (`:161`) | `.../native-conversational-task-executor/stream` |
+| `POST .../agent-testing` (`:223`) | `.../agent-testing/stream` |
 
 | File | Change |
 |---|---|
-| `app/api/stream_routes.py` | **New.** All four routes plus one shared SSE generator. |
-| `app/services/audit_stream_reader.py` | **New.** The cursor query and row → SSE-event mapping. Read-only. |
-| `app/main.py` | **One** `include_router` line. Nothing else. |
-| `app/core/config.py` | New keys only: `SSE_ENABLED` (default `False`), `SSE_POLL_INTERVAL_MS` (500), `SSE_MAX_DURATION_SECONDS` (900). |
+| `orchestration/api/stream_routes.py` | **New.** Four routes + one shared SSE generator. |
+| `orchestration/service/agui_stream_registry.py` | **New.** Per-process `dict[x_correlation_id, asyncio.Queue]`, bounded (maxsize 100), capped registration count. |
+| `orchestration/service/agui_consumer_service.py` | **New.** Two `AIOKafkaConsumer`s, both `assign()` at `OFFSET_END`, **no `group_id`**: the platform AG-UI topic (forward events) and the internal topic (detect terminal). Both topics are fixed and known at startup. |
+| `orchestration/main.py` | Consumer start/stop inside the **existing** `lifespan`, plus one `include_router`. |
+| `orchestration/config/environment.py` | New keys only: `SSE_ENABLED` (default `False`), `SSE_MAX_DURATION_SECONDS` (870), the AG-UI topic name. |
+
+### Fan-in
+
+Orchestration runs `--workers 1`, so one process per pod, but `replicaCount` can exceed 1 and an HPA exists. The pod holding the SSE connection is not necessarily the one a consumer group would assign the partition to.
+
+Use `assign()` at `OFFSET_END` with **no consumer group**. Every pod tails every partition and filters locally: no coordinator state, no rebalances, no offset commits, no dead groups accumulating as pods restart. Durability is not needed — a dropped frame is a dropped frame, and the authoritative result still reaches the caller by the existing response path.
+
+Do not reuse `agentic_internal_planner_group_{topic}`; a shared group would shard events across pods so each sees only a fraction.
 
 ### Stream mechanics
 
-- **Never hold a DB session across the stream.** Acquire from the pool per poll and release immediately. A session held for a 15-minute request would exhaust the pool and take the existing endpoints down with it — the one way this feature can break them without editing their code.
-- Emit `run.accepted` immediately on dispatch, before any audit row exists. The executor is serial and an execution may sit queued; a client that connects to silence assumes the endpoint is broken.
-- SSE frame: `id: <sequence_id>`, `event: <event_type>`, `data: <json row>`.
-- Heartbeat `: keepalive` every 15s of idle, or a proxy will drop the connection during a slow LLM call.
-- Terminate on `event_type='INVOCATION'` with `agent_status` in (`COMPLETED`, `FAILED`). Confirm those literals against the code.
-- Cap the stream at `SSE_MAX_DURATION_SECONDS`; emit `stream.timeout` and close. The execution continues.
-- On client disconnect, just stop polling. Nothing to clean up — another advantage of having no registry.
-- Enforce the same ownership check the existing status endpoint uses, against `audit_log.user_id`.
-- Order by `sequence_id, id` and track the last `sequence_id`. (If executor concurrency is added later, revisit: with concurrent inserts a lower `id` can commit after a higher one, so a strict `id >` cursor could skip rows.)
+- **Auth**: `Depends(JWTBearer())`, matching the four existing POSTs. Do **not** copy `GET /execution-status`, which has no authentication (`api.py:292-294`) — a pre-existing gap; do not widen it.
+- Register the stream **before** producing to Kafka, or events in the gap are lost.
+- SSE frame: `event: <payload's `type` field>`, `data: <AG-UI JSON verbatim>`.
+- Emit `run.accepted` immediately after dispatch, before the first `RUN_STARTED`.
+- `: keepalive` every 15s idle, via `asyncio.sleep` — never a blocking sleep.
+- **Terminate on `AGENT_EXECUTION_FINAL_RESPONSE`, never on `RUN_FINISHED`** — and emit that payload as the final frame. It is the caller's answer.
+- Cap at `SSE_MAX_DURATION_SECONDS` = 870, just under the 900s HAProxy Route timeout (`helm/values.yaml:8`). Emit `stream.timeout` and close cleanly rather than letting HAProxy sever it.
+- If the resolved use case has `ag_ui_events_streaming` disabled, fail fast at registration with a clear 4xx rather than streaming keepalives for 870 seconds.
+- **Open no database session in the streaming path.** The pool is `pool_size=5` + default `max_overflow=10` = 15 per pod, shared with the existing endpoints.
+- `unregister()` in a `finally`. On disconnect the execution continues and its result still reaches the caller by the existing path.
 
 ### Zero-impact properties
 
-- Executor repo: **no change**.
-- Database: **no change**, except possibly one `CREATE INDEX CONCURRENTLY`.
-- `main.py`: one line.
-- Existing handlers, models, routes: untouched. Duplicate dispatch logic into the new module rather than extracting shared helpers out of working code.
-- Everything gated behind `SSE_ENABLED=False` — routes are not registered at all when off.
-- Acceptance gate: a test that snapshots `/openapi.json` filtered to the five existing paths and asserts it is unchanged. Write it first.
-
----
-
-## Blockers that remain
-
-**Executor concurrency.** Confirmed: one execution at a time per process — `asyncio.run()` inside a synchronous poll loop. SSE does not make this worse, it makes it visible; async callers already queue, they just can't see it. Fix by running more executor replicas (no code change), not by reworking the consumer loop — offset commits under out-of-order completion are a separate project. Check `max_connections` before scaling; the report's pool figures are unverified but orchestration is multi-worker and each executor replica adds connections.
-
-**Ingress timeouts and buffering.** No K8s or ingress manifests in either repo, so this chain is unknown. Before enabling `SSE_ENABLED` anywhere shared, confirm: idle/read timeout ≥ 900s, response buffering off (`proxy_buffering off`), no compression on `text/event-stream`, HTTP/1.1 not downgraded.
-
----
-
-## Upgrade path: Kafka, when polling stops paying
-
-Polling is right while concurrent streams are in the tens. If that changes, publish each audit row to Kafka instead of polling for it — **without** re-instrumenting the step loop:
-
-Add the publish inside `AuditTablePGStore.insert_audit_log()`, after the commit succeeds. One method, one insertion point, wrapped in try/except so a broker problem can never fail an execution. Orchestration then consumes into a per-process registry and the stream reads from a queue.
-
-That reintroduces the fan-in machinery this revision deleted (registry, consumer thread, startup hooks, the `lifespan` trap), so it is worth doing only when measurement says polling costs more than that complexity. Keep `audit_log` as the replay store either way — the reconnect query is the same.
+- Executor: one file, in a class that does nothing unless `ag_ui_events_streaming` is on. Dual-publish preserves existing caller response topics byte-for-byte.
+- Database: **no change** — no table, no index, no migration, no query.
+- `main.py`: one `include_router` plus consumer start/stop in the existing `lifespan`.
+- Everything behind `SSE_ENABLED=False`; routes not registered when off.
+- Gate: an OpenAPI snapshot test over the seven existing paths, written first.
 
 ---
 
 ## Phasing
 
-**Phase 0 — verify.** The three prerequisites above, plus executor replicas and the ingress chain.
+**Phase 0.** Confirm no use case currently has `ag_ui_events_streaming` enabled (this is what makes the executor change near-zero-risk). Create the platform AG-UI topic. Add the Helm value to both repos. Make the executor change. Enable the flag on one use case. Confirm events land with `kafka-console-consumer`. Confirm SSE flows through the OpenShift Route — `curl -N`, not just against the pod.
 
-**Phase 1 — the four streaming endpoints.** This is now the whole build.
+**Phase 1.** The four streaming endpoints.
 
-**Phase 2 — reconnect.** Support `Last-Event-ID: <sequence_id>` on the four routes and add `GET .../execution-stream` to attach to an execution already in flight. The query is unchanged — the cursor simply starts at the supplied value instead of 0. If the execution already terminated, replay from the table and close.
+**Phase 2.** Reconnect, only if clients need it. Hard: AG-UI has no sequence number and events live only in Kafka. Either seek by timestamp within retention, or accept resume-from-now. Do not add a database table to solve this without asking.
 
-**Phase 3 — cancellation.** Nothing supports it today. This is the only phase that touches the executor's running step loop; keep it to a single flag check at the top of the loop, behind a config flag defaulting to off.
+**Phase 3.** Cancellation. Nothing exists today; the only phase touching the executor's execution path.
+
+---
+
+## Risks
+
+**Pod restart orphans in-flight executions.** Both existing consumers use `auto_offset_reset='latest'` with auto-commit, so an execution in flight when a pod dies is never reprocessed and sits as `IN_PROGRESS` indefinitely. Pre-existing; the duration cap is what stops a client hanging on it.
+
+**AG-UI publishes are fire-and-forget** (`_schedule_publish`, and `drain()` is deliberately not called during execution — `:162-176`). The stream is best-effort; the authoritative result remains the existing response path. Say so in the API contract.
+
+**No cancellation, no DLQ, no retry cap** anywhere in either repo. Unchanged by this work.
