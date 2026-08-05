@@ -4,18 +4,22 @@ Based on `DISCOVERY-v2.md` plus direct reads of `excutor/models/agui_events.py` 
 
 ---
 
-## Two delivery modes, chosen by the caller
+## Three delivery modes, chosen by the caller
 
-| | **Async (existing, unchanged)** | **Sync (new)** |
-|---|---|---|
-| Caller has Kafka | Yes | **No — that is the point** |
-| Endpoint | `POST .../task-executor` etc. | `POST .../task-executor/stream` |
-| Immediate response | `{"x_correlation_id": ..., "message": "Execution Initiated Successfully"}` | `text/event-stream`, held open |
-| Step visibility | None | Every AG-UI event live |
-| Final result delivered via | Caller's Kafka response topic, or webhook | **The SSE stream itself** |
-| Caller infrastructure needed | Broker credentials, a topic, a consumer | An HTTP client |
+| | **Async (existing, unchanged)** | **Sync/streaming — `/stream`** | **Sync/blocking — `/sync`** |
+|---|---|---|---|
+| Caller has Kafka | Yes | **No — that is the point** | **No** |
+| Endpoint | `POST .../task-executor` etc. | `POST .../task-executor/stream` | `POST .../task-executor/sync` |
+| Immediate response | `{"x_correlation_id": ..., "message": "Execution Initiated Successfully"}` | `text/event-stream`, held open | nothing — the connection just waits |
+| Step visibility | None | Every AG-UI event live | None — caller doesn't want it |
+| Final result delivered via | Caller's Kafka response topic, or webhook | **The SSE stream itself** | **The single JSON response body** |
+| If it runs long | N/A, caller polls | `stream.timeout` frame at 870s, connection closes, execution continues | `202` + a status URL at ~20-30s, execution continues |
+| Depends on the executor's AG-UI change | No | **Yes** | **No** |
+| Caller infrastructure needed | Broker credentials, a topic, a consumer | An HTTP client | An HTTP client |
 
-Teams with Kafka keep using the existing architecture untouched. Teams without Kafka use the sync endpoints and need nothing but HTTP. Nothing about the async path changes.
+Teams with Kafka keep using the existing architecture untouched. Teams without Kafka use `/stream` or `/sync` and need nothing but HTTP — `/stream` for step-by-step visibility, `/sync` for a plain "give me the answer" call. Nothing about the async path changes.
+
+**`/sync` is the cheaper of the two new modes, and doesn't need Phase 0 at all.** It never touches AG-UI events or the platform AG-UI topic — it only needs to know when `AGENT_EXECUTION_FINAL_RESPONSE` lands on the *existing* internal topic, which already happens today for every execution, async or not. See "The `/sync` endpoint" below.
 
 **Two consequences that drive the whole design:**
 
@@ -149,14 +153,71 @@ This is additive: it does not touch the existing `agentic_internal_planner_group
 
 ---
 
+## The `/sync` endpoint — same answer, no streaming
+
+A caller who doesn't want step-by-step detail — just "run this and give me the result" — gets a plain `POST .../task-executor/sync` that holds the HTTP connection open and returns **one** `application/json` body when the execution finishes.
+
+### Why it's cheaper than `/stream`
+
+`/stream` needs two consumers: **Consumer A** (AG-UI topic, forwards every step) and **Consumer B** (internal topic, detects the terminal signal). `/sync` needs only **Consumer B** — it never surfaces intermediate steps, so there's nothing for Consumer A to do.
+
+Consequences:
+
+- **No dependency on Phase 0.** `/sync` doesn't touch the AG-UI topic, doesn't need `ag_ui_streaming` set on the payload, and doesn't care whether the executor's AG-UI change has shipped. It only needs `AGENT_EXECUTION_FINAL_RESPONSE` on the *existing* internal topic — which already happens today, unchanged, for every execution.
+- **`/sync` can ship before Phase 0.** It's the fastest path to "a Kafka-less caller gets an answer from one HTTP call." Move it earlier in the phasing (see below).
+- Same registry, same register-before-produce ordering, same "no DB session held across the wait" as `/stream`.
+
+### Registry: extend, don't duplicate
+
+`agui_stream_registry.py` already maps `x_correlation_id → asyncio.Queue` for `/stream`. Add a second registration kind for `/sync`: `x_correlation_id → asyncio.Future`, resolved once by Consumer B and never touched by Consumer A. Both live in the same registry module; `/sync` requests simply never register with Consumer A.
+
+### Response shapes
+
+Success (`200`):
+
+```json
+{ "x_correlation_id": "3f9c1a...", "status": "COMPLETED", "response": {...}, "state": {...} }
+```
+
+Failure (`200`, `status: FAILED` — same error assembly as `message_processing_service.py:90-99`, used consistently with how `/stream`'s `execution.failed` frame is built):
+
+```json
+{ "x_correlation_id": "3f9c1a...", "status": "FAILED", "response": "...", "error": {...} }
+```
+
+Still running when the wait budget elapses (`202` — the long-running-operation pattern, reusing the existing status endpoint rather than inventing a new one):
+
+```json
+{ "x_correlation_id": "3f9c1a...", "status": "IN_PROGRESS",
+  "status_url": "/api/v1/agentic-orchestration/execution-status?x_correlation_id=3f9c1a..." }
+```
+
+### Why the wait budget must be short — shorter than `/stream`'s 870s
+
+SSE sends `: keepalive` bytes every 15s specifically so idle-timeout proxies don't kill the connection. A blocking JSON call sends **nothing** until the very end — to any intermediary doing idle-timeout detection (corporate proxies, API gateways, some HTTP client defaults), that is indistinguishable from a hung connection, and many such intermediaries default to well under 870s.
+
+Do not give `/sync` the same 870s budget as `/stream`. Default the wait to something short — **20-30s**, configurable via `SYNC_WAIT_SECONDS`, with a hard cap around 60s — and degrade to the `202` response above rather than holding longer. Document `/sync` as the right choice for fast, simple executions; point anything that might run long at `/stream` instead.
+
+### What to build
+
+| File | Change |
+|---|---|
+| `orchestration/api/sync_routes.py` | **New.** Four routes (`/task-executor/sync` and its three siblings), sharing dispatch logic with `stream_routes.py` where sensible — both are new code, so sharing between them is fine (unlike sharing with the frozen four). |
+| `orchestration/service/agui_stream_registry.py` | **Extend.** Add the future-based registration kind alongside the existing queue-based one. |
+| `orchestration/config/environment.py` | New keys: `SYNC_ENABLED` (default `False`), `SYNC_WAIT_SECONDS` (default 25, cap 60). |
+
+Same zero-impact properties as `/stream`: no database change, gated behind its own flag, guarded by the same OpenAPI snapshot test, `Depends(JWTBearer())` matching the four existing POSTs.
+
+---
+
 ## What to build in orchestration
 
-| Existing (frozen) | New |
-|---|---|
-| `POST .../task-executor` (`orchestration/api/api.py:55`) | `POST .../task-executor/stream` |
-| `POST .../conversational-task-executor` (`:107`) | `.../conversational-task-executor/stream` |
-| `POST .../native-conversational-task-executor` (`:161`) | `.../native-conversational-task-executor/stream` |
-| `POST .../agent-testing` (`:223`) | `.../agent-testing/stream` |
+| Existing (frozen) | New — streaming | New — blocking |
+|---|---|---|
+| `POST .../task-executor` (`orchestration/api/api.py:55`) | `.../task-executor/stream` | `.../task-executor/sync` |
+| `POST .../conversational-task-executor` (`:107`) | `.../conversational-task-executor/stream` | `.../conversational-task-executor/sync` |
+| `POST .../native-conversational-task-executor` (`:161`) | `.../native-conversational-task-executor/stream` | `.../native-conversational-task-executor/sync` |
+| `POST .../agent-testing` (`:223`) | `.../agent-testing/stream` | `.../agent-testing/sync` |
 
 | File | Change |
 |---|---|
@@ -199,9 +260,11 @@ Do not reuse `agentic_internal_planner_group_{topic}`; a shared group would shar
 
 ## Phasing
 
+**Phase A — `/sync`, ships first.** No executor dependency at all. Registry (future-based), Consumer B, the four `/sync` routes, the short wait budget with `202` fallback. This alone gives every Kafka-less caller a working "get me the answer" path.
+
 **Phase 0.** Confirm no use case currently has `ag_ui_events_streaming` enabled (this is what makes the executor change near-zero-risk). Create the platform AG-UI topic. Add the Helm value to both repos. Make the executor change. Enable the flag on one use case. Confirm events land with `kafka-console-consumer`. Confirm SSE flows through the OpenShift Route — `curl -N`, not just against the pod.
 
-**Phase 1.** The four streaming endpoints.
+**Phase 1.** The four `/stream` endpoints — registry extended with the queue-based kind, Consumer A, the SSE generator. Builds on Phase A's registry and Consumer B.
 
 **Phase 2.** Reconnect, only if clients need it. Hard: AG-UI has no sequence number and events live only in Kafka. Either seek by timestamp within retention, or accept resume-from-now. Do not add a database table to solve this without asking.
 

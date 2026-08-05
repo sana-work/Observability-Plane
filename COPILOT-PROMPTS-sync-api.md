@@ -1,10 +1,17 @@
-# GitHub Copilot Prompts — Sync/Streaming API (rev. 3, 2026-08-04)
+# GitHub Copilot Prompts — Sync/Streaming API (rev. 4, 2026-08-04)
 
 Companion to `SYNC-API-IMPLEMENTATION-PLAN.md`. Run in **Copilot agent mode** in the workspace holding both repos.
 
 Rewritten against `DISCOVERY-v2.md`. Revisions 1 and 2 were built on a fabricated report and contained wrong paths, the wrong Kafka client, the wrong table name, and a design (polling the audit table) that cannot work.
 
 **One prompt per session.** Review, test, and commit between each.
+
+### Order of operations
+
+1. **Step 0** (repo instructions file) — do this first, always.
+2. **Phase A — `/sync`** — no dependency on anything below. Ships the fastest path to "a Kafka-less caller gets an answer." Do this next.
+3. **Pre-flight + Phase 0 + Phase 1 — `/stream`** — the richer step-by-step mode, whenever you're ready for it. Independent of Phase A; the two share a registry module but nothing else forces an order between them beyond Step 0 coming first.
+4. **Phase 2, Phase 3** — later, optional.
 
 ---
 
@@ -123,13 +130,77 @@ kafka-console-consumer --bootstrap-server <broker> --topic <agui-topic> --from-b
 > - GET  /api/v1/agentic-orchestration/registered-agents                   (api.py:297)
 > - POST /api/v1/agentic-orchestration/reload-configs
 >
-> - The executor repository does not change. If a task seems to need an executor edit, stop and say so.
+> There are TWO new endpoint families, not one: `.../stream` (SSE, every step live) and `.../sync` (one
+> blocking JSON response, no step detail). Both are new, additive, gated behind their own config flag.
+> `/sync` needs no executor change at all — it only reads the existing internal topic. `/stream` needs the
+> AG-UI executor change (a separate, later task) — do not add AG-UI wiring while building `/sync`.
+>
+> - Only the AG-UI executor task touches the executor repository. Every other task here is orchestration-only.
+>   If a task other than that one seems to need an executor edit, stop and say so.
 > - No database schema changes, no new tables, no indexes, no migrations.
-> - Do not refactor to share code with existing handlers. Duplicate the logic into the new module instead.
+> - Do not refactor to share code with existing (frozen) handlers. Duplicate the logic into the new module
+>   instead. Sharing code BETWEEN the new `/stream` and `/sync` modules is fine — neither is frozen.
 > - Do not add or modify fields on existing Pydantic models. Subclass instead.
 > - Do not add dependencies without saying so and pinning them in `requirements.txt`.
 > - Do not reformat or reorder imports in files you are not otherwise changing.
 > ```
+
+---
+
+## Phase A — The `/sync` endpoints (do this first — no dependencies)
+
+> ## Goal
+>
+> The orchestration service has four task-execution endpoints. Add a **blocking twin for each**: `POST .../task-executor/sync` and its three siblings. A caller POSTs, the connection stays open with nothing sent back, and when the execution finishes it gets **one** `application/json` response with the final answer. No step events, no SSE.
+>
+> This is for callers who don't want streaming complexity — they just want "run this, give me the result" over plain HTTP.
+>
+> ## This needs NO executor change and NO AG-UI topic
+>
+> Unlike the `/stream` family, `/sync` never looks at AG-UI events. It only needs to know when `AGENT_EXECUTION_FINAL_RESPONSE` lands on the **existing** internal topic (`internal_kafka_agentic_events_topic`) — which already happens today for every execution, async or not. Do not touch `excutor/service/agui_kafka_stream_service.py` or add `ag_ui_streaming` to the payload for this task; that belongs to a separate later task building `/stream`.
+>
+> ## What to build
+>
+> **1. `orchestration/service/agui_stream_registry.py` (new, or extend if `/stream` already exists in this workspace)**
+>
+> A per-process `dict[x_correlation_id, asyncio.Future]`. `register_wait(x_correlation_id) -> Future`, `resolve(x_correlation_id, payload)`, `unregister(x_correlation_id)`. This is deliberately a **Future**, not a Queue — `/sync` only ever needs one value, not a stream of them. If a `/stream` registry (queue-based) already exists in this codebase, add this as a second registration kind in the same module rather than a new file — they are closely related and both new, so sharing is fine.
+>
+> **2. `orchestration/service/internal_topic_watcher.py` (new, or reuse if `/stream`'s Consumer B already exists)**
+>
+> An `AIOKafkaConsumer` on the internal topic, `assign()` at `OFFSET_END` with **no `group_id`** — every pod tails every partition and filters locally by message key. On seeing a message with `event_type == AGENT_EXECUTION_FINAL_RESPONSE` (or the failure equivalent) whose key matches a registered `x_correlation_id`, resolve that future with the payload. Never commit offsets; this is a live tail, not a durable subscription. Do not reuse the existing `agentic_internal_planner_group_{topic}` consumer group — a shared group would shard partitions across pods.
+>
+> **3. `orchestration/main.py`** — start/stop this consumer inside the **existing** `lifespan` context manager. Do not convert the app away from `lifespan` or add `@app.on_event` handlers.
+>
+> **4. `orchestration/api/sync_routes.py` (new) — the four routes**
+>
+> Each mirrors its async twin: same request model imported unchanged, same `Depends(JWTBearer())`, same headers. Handler order:
+>
+> 1. authenticate
+> 2. `registry.register_wait(x_correlation_id)` — **before** the Kafka produce, same reasoning as `/stream`: register first or the terminal event can arrive before anyone is listening
+> 3. dispatch with a **copy** of the async twin's dispatch logic — byte-identical payload, `ag_ui_streaming` NOT set (leave it absent/false; this path doesn't need it)
+> 4. `await asyncio.wait_for(future, timeout=SYNC_WAIT_SECONDS)`
+> 5. on success: return the resolved payload as `200 application/json`
+> 6. on `asyncio.TimeoutError`: return `202` with `{"x_correlation_id": ..., "status": "IN_PROGRESS", "status_url": "/api/v1/agentic-orchestration/execution-status?x_correlation_id=..."}` — reuse the existing status endpoint's path, don't invent a new one
+> 7. `registry.unregister()` in a `finally` regardless of outcome
+>
+> **5. `orchestration/config/environment.py`** — new keys only: `SYNC_ENABLED` (default `False`), `SYNC_WAIT_SECONDS` (default `25`, hard cap `60` — reject a client-supplied `?wait=` above the cap rather than honoring it).
+>
+> ## Why the wait budget is short, and must stay short
+>
+> This is a plain blocking HTTP call — no bytes are sent while waiting, unlike an SSE stream's periodic keepalive. To any proxy or gateway doing idle-timeout detection, a silent 60+ second connection looks exactly like a hung one, and many intermediaries default to well under that. **Do not** give this endpoint anything close to the 870s budget `/stream` uses. Keep the default at 25s and the hard cap at 60s regardless of what a caller requests.
+>
+> ## Constraints
+> - The executor repository does not change for this task.
+> - No database access — no session, no query, no table.
+> - No new Kafka topic — this reads the existing internal topic only.
+> - No new dependencies.
+> - Write the OpenAPI snapshot test first: capture `/openapi.json` filtered to the seven existing paths and assert this work leaves it unchanged.
+>
+> ## Done when
+> - `pytest` passes: OpenAPI snapshot, register-before-produce ordering, timeout produces the `202` shape, unregister happens on every path including timeout and exception.
+> - With `SYNC_ENABLED=false`, the four routes are absent from `/openapi.json`.
+> - With `SYNC_ENABLED=true`, `curl -X POST .../task-executor/sync -H "X-Correlation-ID: <uuid>" -H "X-Authorization-Coin: <jwt>" -d '{...}'` blocks and returns one JSON body — and the same request to `/task-executor` still behaves exactly as before.
+> - A deliberately slow execution (or a mocked delay) returns `202` at the configured wait budget, not earlier or later, and the execution is confirmed still running afterward via `GET /execution-status`.
 
 ---
 
@@ -278,3 +349,6 @@ This is the whole build.
 | Deserialises AG-UI events into a new Pydantic model, or converts keys to snake_case | "Forward the payload verbatim. It is already correct AG-UI camelCase wire format; re-serialising breaks standard AG-UI clients." |
 | Adds a sequence number to events | "There is no sequence number in AG-UI and none is needed — Kafka partition order is the ordering guarantee, since messages are keyed by correlation id." |
 | Modifies an existing handler or extracts a shared helper from one | "Revert. Copy the dispatch logic into the new module. The seven existing routes must stay byte-identical, including their OpenAPI schema." |
+| Wires `/sync` into the AG-UI topic, or sets `ag_ui_streaming=true` on its payload | "Revert. `/sync` only needs `AGENT_EXECUTION_FINAL_RESPONSE` on the existing internal topic — it has no reason to touch AG-UI events at all." |
+| Gives `/sync` the same 870s timeout as `/stream` | "Revert. `/sync` sends no bytes while waiting, unlike SSE's keepalives, so a long silent connection looks hung to any idle-timeout proxy. Keep the default at 25s, hard cap 60s, and degrade to a 202 + status_url instead of waiting longer." |
+| Uses a Queue for `/sync`'s registration instead of a Future | "`/sync` only ever needs one value, not a stream of them. Use `register_wait() -> Future`, resolved once by the internal-topic consumer." |
