@@ -1,0 +1,54 @@
+Review the completed Option A implementation across both repositories.
+
+Do not add new user-facing features.
+
+Verify these items against the actual code:
+
+1. Confirm ASYNC_KAFKA and SYNC_DIRECT semaphores wrap the complete expensive step execution and prove sync saturation cannot consume async reserved capacity.
+
+2. Confirm terminal FAILED persistence is correctly written to agent_execution. State whether the write is awaited or fire-and-forget and document the consistency implications.
+
+3. Confirm finalization_service contains only business finalization and does not perform Kafka/webhook delivery. Show the async and sync call paths.
+
+4. Confirm SYNC_DIRECT never publishes:
+   - AGENT_EXECUTION_REQUEST
+   - AGENT_EXECUTION_FINAL_RESPONSE
+   while ASYNC_KAFKA behavior remains unchanged.
+
+5. Verify timeout calculation:
+   effective_step_timeout =
+   min(configured_step_timeout,
+       remaining_overall_time - safety_margin)
+
+6. Verify client-disconnect handling while an Executor call is active and document what happens to the already-running Executor task after disconnect.
+
+7. Inventory every new environment variable in both repositories and identify which Helm values/deployment templates still need wiring.
+
+8. Inspect Helm/OpenShift configuration and identify exactly what must change for:
+   - internal Executor service URL
+   - private endpoint exposure
+   - NetworkPolicy/security
+   - readiness during drain
+   - terminationGracePeriodSeconds
+
+9. Inventory missing observability:
+   - sync/async active execution count
+   - duration
+   - sync rejection
+   - Kafka lag
+   - DB pool usage/wait
+   - timeout
+   - disconnect
+   - Executor HTTP errors
+
+10. Create a concrete staging test plan for concurrent async Kafka + sync HTTP load.
+
+Update OPTION-A-IMPLEMENTATION-STATUS.md with:
+- VERIFIED
+- NEEDS FIX
+- NOT TESTED
+
+for each item.
+
+Do not assume something works merely because unit tests pass.
+Show file/function evidence for every VERIFIED item.
