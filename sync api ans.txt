@@ -1,0 +1,63 @@
+We are preparing Option A: a new fully synchronous execution path.
+
+Both Orchestration and Executor repositories are open in this workspace.
+
+DO NOT CHANGE CODE YET.
+
+Please inspect both repositories and create:
+
+OPTION-A-PHASE-0-DISCOVERY.md
+
+For every conclusion, include the file path and function/class name.
+
+Answer only these 3 questions:
+
+1. agent_execution finalization
+- Where are agent_execution rows created and updated?
+- Who writes IN_PROGRESS, COMPLETED, and FAILED?
+- What happens today when AGENT_EXECUTION_FINAL_RESPONSE is consumed?
+- If the sync path returns directly through FastAPI and does not publish/consume that final Kafka event, what finalization logic would be skipped?
+- Recommend what logic should be shared by async and sync paths.
+
+2. X-Correlation-ID
+The caller always sends a UUID.
+- Where is X-Correlation-ID read and stored?
+- Is UUID format validated?
+- Are there DB uniqueness constraints or in-memory assumptions around it?
+- Confirm whether this contract is safe:
+  * caller sends a unique UUID for each new execution
+  * UUID is used for correlation/tracing
+  * it is NOT an idempotency guarantee
+  * automatic retry after uncertain execution remains disabled
+
+3. Sync vs async response equivalence
+Trace how the current async final answer is created:
+agent outputs
+→ optional output generator
+→ AGENT_EXECUTION_FINAL_RESPONSE
+→ orchestration consumer
+→ ResponseService
+→ caller
+
+Identify:
+- where the final assembled answer is created
+- what transformations happen afterwards
+- which functions the sync path must reuse
+- which fields MUST match between async and sync
+- which transport-only fields may differ
+
+Also propose golden test scenarios for:
+- single-agent
+- multi-agent
+- output-generator
+- tool execution
+- failure
+- conversational execution
+
+At the end include:
+- current async call graph
+- recommended shared-code extraction points
+- blocking unknowns
+- GO / NO-GO checklist
+
+Discovery only. Do not implement or refactor yet.
