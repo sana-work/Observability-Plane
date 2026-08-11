@@ -1,54 +1,55 @@
-Review the completed Option A implementation across both repositories.
+Option A core execution is now verified.
 
-Do not add new user-facing features.
+Do not modify the core sync orchestration or agent execution behavior unless required by a discovered defect.
 
-Verify these items against the actual code:
+Implement the next production-hardening increment across both repositories.
 
-1. Confirm ASYNC_KAFKA and SYNC_DIRECT semaphores wrap the complete expensive step execution and prove sync saturation cannot consume async reserved capacity.
+Priority 1 — Helm/environment wiring
+- Wire every Option A environment variable already defined in code into the appropriate Helm values and deployment templates.
+- Follow existing Helm conventions.
+- Do not hard-code environment-specific URLs.
+- Add documented defaults.
+- SYNC_EXECUTOR_BASE_URL must use the internal Kubernetes/OpenShift service DNS pattern.
 
-2. Confirm terminal FAILED persistence is correctly written to agent_execution. State whether the write is awaited or fire-and-forget and document the consistency implications.
+Priority 2 — Private Executor endpoint protection
+- Inspect the existing Service and Route resources.
+- Ensure POST /internal/v1/agent-step cannot be reached from the external Route.
+- Propose and implement the smallest platform-compatible isolation mechanism.
+- Add NetworkPolicy if supported by the current deployment model so Orchestration can reach Executor but untrusted workloads cannot.
+- Do not break existing Executor traffic.
 
-3. Confirm finalization_service contains only business finalization and does not perform Kafka/webhook delivery. Show the async and sync call paths.
+Priority 3 — Graceful drain
+- Add a drain state to Orchestration and Executor.
+- /ready must return not-ready once drain begins.
+- New sync work must be rejected while draining.
+- Existing work should be allowed to finish.
+- Parameterize terminationGracePeriodSeconds.
+- Ensure it is configured greater than:
+  max sync deadline + preStop/drain allowance + shutdown allowance.
 
-4. Confirm SYNC_DIRECT never publishes:
-   - AGENT_EXECUTION_REQUEST
-   - AGENT_EXECUTION_FINAL_RESPONSE
-   while ASYNC_KAFKA behavior remains unchanged.
+Priority 4 — Observability
+Add metrics for:
+- active steps by execution_mode
+- step duration by execution_mode
+- sync capacity rejection
+- sync request duration
+- sync timeout
+- client disconnect
+- Executor HTTP failures
+- DB pool usage/wait where available
+- Kafka consumer lag where available
 
-5. Verify timeout calculation:
-   effective_step_timeout =
-   min(configured_step_timeout,
-       remaining_overall_time - safety_margin)
+Reuse the platform's existing metrics/monitoring library if one exists. Do not introduce a new telemetry stack unnecessarily.
 
-6. Verify client-disconnect handling while an Executor call is active and document what happens to the already-running Executor task after disconnect.
+For client disconnect:
+- keep the existing behavior for this increment;
+- classify already-running Executor work as a documented known limitation;
+- do NOT implement distributed cooperative cancellation yet.
 
-7. Inventory every new environment variable in both repositories and identify which Helm values/deployment templates still need wiring.
-
-8. Inspect Helm/OpenShift configuration and identify exactly what must change for:
-   - internal Executor service URL
-   - private endpoint exposure
-   - NetworkPolicy/security
-   - readiness during drain
-   - terminationGracePeriodSeconds
-
-9. Inventory missing observability:
-   - sync/async active execution count
-   - duration
-   - sync rejection
-   - Kafka lag
-   - DB pool usage/wait
-   - timeout
-   - disconnect
-   - Executor HTTP errors
-
-10. Create a concrete staging test plan for concurrent async Kafka + sync HTTP load.
-
-Update OPTION-A-IMPLEMENTATION-STATUS.md with:
-- VERIFIED
-- NEEDS FIX
-- NOT TESTED
-
-for each item.
-
-Do not assume something works merely because unit tests pass.
-Show file/function evidence for every VERIFIED item.
+After implementation:
+1. run both unit suites;
+2. update OPTION-A-IMPLEMENTATION-STATUS.md;
+3. classify each production-hardening item as VERIFIED / NEEDS FIX / NOT TESTED;
+4. list exact files/functions changed;
+5. produce a staging deployment checklist;
+6. do not claim production readiness until mixed async+sync load testing has been executed.
