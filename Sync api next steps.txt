@@ -1,55 +1,128 @@
-Option A core execution is now verified.
+Both Orchestration and Executor repositories are open in this workspace.
 
-Do not modify the core sync orchestration or agent execution behavior unless required by a discovered defect.
+The synchronous API implementation is now complete and has evolved beyond the original plan, including multiple sync endpoints and additional production-hardening changes.
 
-Implement the next production-hardening increment across both repositories.
+Please inspect the **current code in both repositories** and create two professional Word documents.
 
-Priority 1 — Helm/environment wiring
-- Wire every Option A environment variable already defined in code into the appropriate Helm values and deployment templates.
-- Follow existing Helm conventions.
-- Do not hard-code environment-specific URLs.
-- Add documented defaults.
-- SYNC_EXECUTOR_BASE_URL must use the internal Kubernetes/OpenShift service DNS pattern.
+Do not assume the old design documents are fully current. Treat the current code, Helm configuration, tests, and environment settings as the source of truth.
 
-Priority 2 — Private Executor endpoint protection
-- Inspect the existing Service and Route resources.
-- Ensure POST /internal/v1/agent-step cannot be reached from the external Route.
-- Propose and implement the smallest platform-compatible isolation mechanism.
-- Add NetworkPolicy if supported by the current deployment model so Orchestration can reach Executor but untrusted workloads cannot.
-- Do not break existing Executor traffic.
+## Document 1
 
-Priority 3 — Graceful drain
-- Add a drain state to Orchestration and Executor.
-- /ready must return not-ready once drain begins.
-- New sync work must be rejected while draining.
-- Existing work should be allowed to finish.
-- Parameterize terminationGracePeriodSeconds.
-- Ensure it is configured greater than:
-  max sync deadline + preStop/drain allowance + shutdown allowance.
+Create:
 
-Priority 4 — Observability
-Add metrics for:
-- active steps by execution_mode
-- step duration by execution_mode
-- sync capacity rejection
-- sync request duration
-- sync timeout
-- client disconnect
-- Executor HTTP failures
-- DB pool usage/wait where available
-- Kafka consumer lag where available
+`SYNC-API-ARCHITECTURE-AND-CHANGES.docx`
 
-Reuse the platform's existing metrics/monitoring library if one exists. Do not introduce a new telemetry stack unnecessarily.
+This should be an architecture and implementation overview that is easy to present to the team.
 
-For client disconnect:
-- keep the existing behavior for this increment;
-- classify already-running Executor work as a documented known limitation;
-- do NOT implement distributed cooperative cancellation yet.
+Include:
 
-After implementation:
-1. run both unit suites;
-2. update OPTION-A-IMPLEMENTATION-STATUS.md;
-3. classify each production-hardening item as VERIFIED / NEEDS FIX / NOT TESTED;
-4. list exact files/functions changed;
-5. produce a staging deployment checklist;
-6. do not claim production readiness until mixed async+sync load testing has been executed.
+* previous asynchronous architecture and flow;
+* current architecture supporting async and sync APIs;
+* all sync endpoints currently implemented;
+* what changed in Orchestration;
+* what changed in Executor;
+* how sync and async execution differ;
+* what code/runtime is shared between both;
+* how multi-step sync orchestration works;
+* final-response handling;
+* `agent_execution` status flow;
+* sync/async capacity isolation;
+* internal Orchestration-to-Executor HTTP communication;
+* authentication/security of the internal endpoint;
+* timeout and disconnect handling;
+* drain/readiness behavior;
+* observability/metrics;
+* Helm/OpenShift/deployment changes;
+* important configuration/environment variables;
+* unsupported or deferred functionality;
+* remaining known limitations or production-validation items.
+
+Create simple diagrams for:
+
+1. previous async flow;
+2. current sync flow;
+3. combined sync + async architecture.
+
+Keep this document architecture-focused and understandable without reading the source code.
+
+---
+
+## Document 2
+
+Create:
+
+`SYNC-API-DETAILED-CODE-IMPLEMENTATION.docx`
+
+This should be a deep technical walkthrough of the actual implementation.
+
+Starting from each public sync API entry point, trace the complete code execution order until the final HTTP response.
+
+For every important step include:
+
+* repository;
+* file path;
+* class/function;
+* what the code does;
+* important library/framework used;
+* important configuration involved.
+
+Cover at least:
+
+* all currently implemented sync API entry points;
+* authentication and request validation;
+* correlation-ID handling;
+* planning;
+* `agent_execution` creation;
+* Sync Coordinator;
+* internal HTTP client;
+* Executor internal step API;
+* `SYNC_DIRECT` and `ASYNC_KAFKA` modes;
+* semaphore/capacity handling;
+* shared one-step agent execution;
+* AgentExecutionService / AgentFactory / session/tool/LLM flow;
+* step status DB updates;
+* next-step decision and multi-agent looping;
+* shared finalization service;
+* output-generator flow;
+* error flow;
+* final HTTP response;
+* timeout flow;
+* disconnect flow;
+* drain flow;
+* metrics;
+* configuration and Helm wiring.
+
+Also explain how the existing Kafka async path works **after the refactoring**, and clearly identify which code is:
+
+* shared by sync and async;
+* sync-only;
+* async-only.
+
+Include one detailed successful multi-agent call graph and one failure call graph.
+
+Add a debugging section explaining where an engineer should look when a sync request fails.
+
+---
+
+## Important instructions
+
+Before writing:
+
+1. scan both repositories completely for the sync implementation;
+2. identify all sync routes currently present — do not assume there is only `/task-executor/sync`;
+3. inspect the latest code changes, tests, Helm files, environment configuration, security, drain and metrics implementation;
+4. verify every flow from actual code;
+5. use existing Markdown documents only as supporting context;
+6. if documentation and code disagree, use the current code and mention the discrepancy;
+7. do not modify production code.
+
+Make Document 1 concise and presentation-friendly.
+
+Make Document 2 detailed enough that a new engineer can understand, debug and maintain the implementation without first reverse-engineering both repositories.
+
+Create exactly:
+
+* `SYNC-API-ARCHITECTURE-AND-CHANGES.docx`
+* `SYNC-API-DETAILED-CODE-IMPLEMENTATION.docx`
+
+After generating them, report any important implementation gaps or inconsistencies you discovered while reviewing the code.
