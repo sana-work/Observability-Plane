@@ -4,37 +4,61 @@ build-backend = "hatchling.build"
 
 [project]
 name = "ai-observability-sdk"
-version = "0.1.0"
+dynamic = ["version"]
 description = "Shared observability SDK for the 8 AI Platform services — Kafka event emission, OTEL tracing, structured logging, prompt registry client."
 readme = "README.md"
 requires-python = ">=3.11"
-dependencies = [
-    "pydantic>=2.6",
-    "pydantic-settings>=2.2",
-    "confluent-kafka>=2.3",
-    "structlog>=24.1",
-    "opentelemetry-api>=1.24",
-    "opentelemetry-sdk>=1.24",
-    "opentelemetry-exporter-otlp-proto-grpc>=1.24",
-    "opentelemetry-instrumentation-fastapi>=0.45b0",
-    "opentelemetry-instrumentation-httpx>=0.45b0",
-    "opentelemetry-instrumentation-asyncpg>=0.45b0",
-    "prometheus-fastapi-instrumentator>=7.0",
-    "httpx>=0.27",
+# PEP 639 requires a valid SPDX expression; LicenseRef-* is the custom form.
+license = "LicenseRef-Proprietary"
+classifiers = [
+    # Hard stop: makes public PyPI reject the upload if the repository URL is ever mistargeted.
+    "Private :: Do Not Upload",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3.11",
 ]
+# Upper bounds are deliberate: without them a major release of OTEL or pydantic
+# breaks every consumer's fresh install with no change on our side.
+dependencies = [
+    "pydantic>=2.6,<3",
+    "pydantic-settings>=2.2,<3",
+    "confluent-kafka>=2.3,<3",
+    "structlog>=24.1,<26",
+    # Direct import in middleware.py; previously satisfied only transitively
+    # via prometheus-fastapi-instrumentator.
+    "starlette>=0.36,<2",
+    "opentelemetry-api>=1.24,<2",
+    "opentelemetry-sdk>=1.24,<2",
+    "opentelemetry-exporter-otlp-proto-grpc>=1.24,<2",
+    "opentelemetry-instrumentation-fastapi>=0.45b0,<1",
+    "opentelemetry-instrumentation-httpx>=0.45b0,<1",
+    "opentelemetry-instrumentation-asyncpg>=0.45b0,<1",
+    "prometheus-fastapi-instrumentator>=7.0,<9",
+    "httpx>=0.27,<1",
+]
+
+[project.urls]
+Homepage = "https://github.com/sana-work/Observability-Plane/tree/main/ai-observability-sdk"
+Changelog = "https://github.com/sana-work/Observability-Plane/blob/main/ai-observability-sdk/CHANGELOG.md"
 
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.23",
     "fastapi>=0.110",
-    "starlette>=0.36",
     "ruff>=0.4",
     "mypy>=1.9",
+    "build>=1.2",
+    "twine>=5.0",
 ]
+
+# Single source of truth for the version: ai_obs_sdk/__init__.py.
+# The release job asserts the git tag matches it.
+[tool.hatch.version]
+path = "ai_obs_sdk/__init__.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["ai_obs_sdk"]
+exclude = ["**/*.txt", "**/__pycache__", "**/.DS_Store"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

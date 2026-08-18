@@ -1,0 +1,16 @@
+# Build artifacts — `python -m build` writes here; releases come from CI, never from a commit.
+dist/
+build/
+*.egg-info/
+
+# Python bytecode / tooling caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.benchmarks/
+.venv/
+
+.env
+.DS_Store

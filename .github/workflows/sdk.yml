@@ -1,0 +1,92 @@
+# CI + release for ai-observability-sdk.
+#   * PRs touching the SDK        -> lint, contract gate, unit tests
+#   * push to main               -> same
+#   * push of an `sdk-v*` tag    -> same, then build + upload to the internal index
+# The contract tests are the merge gate. Tags are namespaced `sdk-v` because
+# this monorepo holds several deployable components.
+name: ai-observability-sdk
+
+on:
+  pull_request:
+    paths: ["ai-observability-sdk/**"]
+  push:
+    branches: [main]
+    tags: ["sdk-v*"]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ai-observability-sdk
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -e ".[dev]"
+      - name: Lint
+        run: ruff check ai_obs_sdk tests
+      - name: Contract gate — schema must match observability-iac
+        run: pytest tests/test_contract.py -v
+      - name: Unit tests
+        run: pytest -v
+      - name: Contract drift check
+        # Fails if the vendored contract diverges from the IaC source of truth.
+        run: |
+          for f in event_schema.py event_types.py service_names.py; do
+            diff ai_obs_sdk/contracts/$f ../observability-iac/contracts/$f \
+              || { echo "::error::vendored contract $f drifted from observability-iac"; exit 1; }
+          done
+
+  publish:
+    # Only on an sdk-v* tag, and only if the full test job passed.
+    needs: test
+    if: startsWith(github.ref, 'refs/tags/sdk-v')
+    runs-on: ubuntu-latest
+    environment: sdk-release
+    defaults:
+      run:
+        working-directory: ai-observability-sdk
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Tag must match __version__
+        # An index accepts a given version exactly once, so a mislabeled wheel
+        # cannot be corrected in place — catch the mismatch before upload.
+        run: |
+          PKG=$(grep -oP '__version__ = "\K[^"]+' ai_obs_sdk/__init__.py)
+          TAG="${GITHUB_REF_NAME#sdk-v}"
+          echo "package=$PKG tag=$TAG"
+          [ "$PKG" = "$TAG" ] || { echo "::error::tag $TAG does not match __version__ $PKG"; exit 1; }
+
+      - run: pip install build twine
+
+      - name: Build sdist + wheel
+        run: python -m build
+
+      - name: Validate metadata
+        run: python -m twine check dist/*
+
+      - name: Smoke test the built wheel in a clean env
+        # Catches undeclared imports that only resolve in the editable dev install.
+        run: |
+          python -m venv /tmp/verify
+          /tmp/verify/bin/pip install --quiet dist/*.whl
+          /tmp/verify/bin/python -c "import ai_obs_sdk; print('import OK', ai_obs_sdk.__version__)"
+
+      - name: Upload to internal index
+        run: python -m twine upload --non-interactive dist/*
+        env:
+          TWINE_REPOSITORY_URL: ${{ vars.PYPI_UPLOAD_URL }}
+          TWINE_USERNAME: ${{ secrets.PYPI_USER }}
+          TWINE_PASSWORD: ${{ secrets.PYPI_TOKEN }}
+
+      - name: Attach artifacts to the run
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-observability-sdk-${{ github.ref_name }}
+          path: ai-observability-sdk/dist/*
