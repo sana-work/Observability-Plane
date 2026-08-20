@@ -1,0 +1,420 @@
+Looking at your current `/resume` implementation, **do not rewrite the whole thing**. Your existing `/resume` already contains the required validation and persistence logic. We only need to **extract the common part** and reuse it for `/sync/resume`.
+
+Current file:
+
+```
+181229.genaiservices.agentic-orchestration
+└── orchestration
+    └── api
+        └── api.py
+```
+
+Current method:
+
+```
+async def resume()
+```
+
+Approx lines:
+
+```
+664 - 739
+```
+
+---
+
+## Step 1 — Extract common logic
+
+Create a helper **above `/resume` endpoint**.
+
+Location:
+
+```
+orchestration/api/api.py
+```
+
+Add before:
+
+```python
+@api_router.post(
+    "/resume",
+```
+
+Add:
+
+```python
+async def _prepare_resume_runtime_state(
+    request: ToolInterruptionResponse | AgentInterruptionResponse,
+    usecase_id: str,
+    x_application_id: str,
+    x_soeid: str | None,
+    token_claims: dict,
+    runtime_service: RuntimeService,
+) -> RuntimeState:
+
+    consumer_coin = get_consumer_coin(token_claims)
+
+    usecase_config = AgenticUsecaseConfigManager.get_use_case(
+        usecase_id,
+        consumer_coin,
+    )
+
+    if usecase_config is None:
+        logger.error(
+            f"Use case configuration missing for usecase_id: {usecase_id}, "
+            f"consumer_coin: {consumer_coin}"
+        )
+
+        raise GenaiCommonException(
+            error_code=ErrorCodes.GR004,
+            message=(
+                f"Use case configuration missing for config_id: {usecase_id}, "
+                f"consumer_coin: {consumer_coin}"
+            ),
+            original_exception=ValueError(
+                ErrorCodes.GR004.get_description()
+            ),
+        )
+
+
+    db_name = (
+        usecase_config.metadata.database_parameters.db_name
+        if (
+            usecase_config.metadata
+            and usecase_config.metadata.database_parameters
+        )
+        else None
+    )
+
+    db_schema = (
+        usecase_config.metadata.database_parameters.db_schema
+        if (
+            usecase_config.metadata
+            and usecase_config.metadata.database_parameters
+        )
+        else None
+    )
+
+
+    runtime_state = await runtime_service.get(
+        request.interruption_id,
+        db_name=db_name,
+        db_schema=db_schema,
+    )
+
+
+    if runtime_state is None:
+        raise ValueError(
+            f"[Resumibility Error] No workflow found "
+            f"for interruption_id {request.interruption_id}"
+        )
+
+
+    if runtime_state.x_soeid != x_soeid:
+        raise ValueError(
+            "[Resumibility Error] User does not match original user"
+        )
+
+
+    if runtime_state.x_application_id != x_application_id:
+        raise ValueError(
+            "[Resumibility Error] Application does not match original application"
+        )
+
+
+    if isinstance(request, ToolInterruptionResponse):
+
+        interruption_cursor = (
+            runtime_state.interruption.interruption_cursor
+        )
+
+        pending_tool_confirmations = getattr(
+            interruption_cursor,
+            "requested_tool_confirmations",
+            {},
+        )
+
+
+        responded_tool_confirmations = (
+            request.responded_tool_confirmations
+        )
+
+
+        if (
+            not responded_tool_confirmations
+            or set(responded_tool_confirmations.keys())
+            != set(pending_tool_confirmations.keys())
+        ):
+            raise GenaiCommonException(
+                error_code=ErrorCodes.AP011,
+                message=ErrorCodes.AP011.get_description(),
+            )
+
+
+    runtime_state.interruption.interruption_response = request
+
+    return runtime_state
+```
+
+---
+
+# Step 2 — Remove duplicated code from `/resume`
+
+Now inside your current:
+
+```python
+async def resume()
+```
+
+Remove everything from:
+
+```python
+consumer_coin = get_consumer_coin(token_claims)
+```
+
+until:
+
+```python
+runtime_state.interruption.interruption_response = request
+```
+
+Your current lines:
+
+```
+680 - 736
+```
+
+will be deleted.
+
+---
+
+# Step 3 — Replace with helper call
+
+Inside `/resume`, put:
+
+```python
+runtime_state = await _prepare_resume_runtime_state(
+    request=request,
+    usecase_id=usecase_id,
+    x_application_id=x_application_id,
+    x_soeid=x_soeid,
+    token_claims=token_claims,
+    runtime_service=runtime_service,
+)
+```
+
+Then keep your existing lines:
+
+```python
+runtime_state = await runtime_service.update(runtime_state)
+
+return await interruption_service.resume(runtime_state)
+```
+
+So your final `/resume` becomes:
+
+```python
+async def resume(
+    request: ToolInterruptionResponse | AgentInterruptionResponse,
+    usecase_id: Annotated[str, Header(alias="Config-ID")],
+    x_application_id: Annotated[str, Header(alias="X-Application-ID")],
+    x_soeid: Annotated[str | None, Header()],
+    token_claims: dict = Depends(JWTBearer()),
+    interruption_service: InterruptionService = Depends(
+        lambda: InterruptionService()
+    ),
+    runtime_service: RuntimeService = Depends(
+        lambda: RuntimeService()
+    ),
+):
+
+    runtime_state = await _prepare_resume_runtime_state(
+        request=request,
+        usecase_id=usecase_id,
+        x_application_id=x_application_id,
+        x_soeid=x_soeid,
+        token_claims=token_claims,
+        runtime_service=runtime_service,
+    )
+
+    runtime_state = await runtime_service.update(runtime_state)
+
+    return await interruption_service.resume(runtime_state)
+```
+
+---
+
+# Step 4 — Add new `/sync/resume`
+
+Same file:
+
+```
+orchestration/api/api.py
+```
+
+Add **below `/resume`**.
+
+```python
+@api_router.post(
+    "/sync/resume",
+    summary="Resume a paused synchronous agentic task",
+    tags=["Task Execution"],
+)
+async def sync_resume(
+    request: ToolInterruptionResponse | AgentInterruptionResponse,
+
+    usecase_id: Annotated[
+        str,
+        Header(alias="Config-ID")
+    ],
+
+    x_application_id: Annotated[
+        str,
+        Header(alias="X-Application-ID")
+    ],
+
+    x_soeid: Annotated[
+        str | None,
+        Header()
+    ],
+
+    token_claims: dict = Depends(JWTBearer()),
+
+    runtime_service: RuntimeService = Depends(
+        lambda: RuntimeService()
+    ),
+):
+
+    runtime_state = await _prepare_resume_runtime_state(
+        request=request,
+        usecase_id=usecase_id,
+        x_application_id=x_application_id,
+        x_soeid=x_soeid,
+        token_claims=token_claims,
+        runtime_service=runtime_service,
+    )
+
+
+    runtime_state.event_type = INTERRUPTION_RESPONSE
+
+
+    runtime_state = await runtime_service.update(
+        runtime_state
+    )
+
+
+    coordinator = SyncExecutionCoordinator(
+        runtime_service=runtime_service
+    )
+
+
+    return await coordinator.execute(
+        runtime_state
+    )
+```
+
+---
+
+# Summary of exact changes
+
+## File
+
+```
+orchestration/api/api.py
+```
+
+### Add
+
+```
+_new function:
+
+_prepare_resume_runtime_state()
+```
+
+Location:
+
+```
+before line 664
+```
+
+---
+
+### Modify
+
+```
+async def resume()
+```
+
+Remove:
+
+```
+680 - 736
+```
+
+Replace with:
+
+```
+runtime_state = await _prepare_resume_runtime_state(...)
+```
+
+---
+
+### Add
+
+New API:
+
+```
+POST /sync/resume
+```
+
+Location:
+
+```
+after existing /resume endpoint
+```
+
+---
+
+## Do NOT change
+
+Keep:
+
+```
+orchestration/service/interruption_service.py
+```
+
+because this remains Kafka based for async.
+
+Keep:
+
+```
+/resume
+```
+
+behavior unchanged.
+
+New flow:
+
+```
+/resume
+      |
+      v
+Kafka
+      |
+      v
+Executor
+
+
+/sync/resume
+      |
+      v
+RuntimeService
+      |
+      v
+SyncExecutionCoordinator
+      |
+      v
+Executor HTTP
+```
+
+This is the clean separation we want.
