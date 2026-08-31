@@ -429,11 +429,11 @@ flowchart TD
     G -->|SYNC| J[Reject normal async route]
     C --> K[Direct SyncExecutionCoordinator]
     F --> H
-    H --> L[/resume for interruption]
+    H --> L["/resume for interruption"]
     I --> M[Use documented hybrid behavior]
     M --> N[Resume route depends on selected transport]
     K --> O[Direct executor HTTP calls]
-    O --> P[/sync/resume for interruption]
+    O --> P["/sync/resume for interruption"]
 ```
 
 ## 8. API Changes From Previous to Current Flow
